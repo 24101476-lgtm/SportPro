@@ -1,14 +1,19 @@
 package com.esan.sportpro.ui.cuentas
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -27,7 +32,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.navigation.UserRole
 
 /** Pantalla de registro con selección de rol (US-001). */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
@@ -69,24 +73,30 @@ fun RegisterScreen(
                     .padding(top = 8.dp),
             )
 
-            ExposedDropdownMenuBox(
-                expanded = roleMenuExpanded,
-                onExpandedChange = { roleMenuExpanded = it },
-                modifier = Modifier.padding(top = 8.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
             ) {
                 OutlinedTextField(
                     value = state.selectedRole.name,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Rol") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = roleMenuExpanded) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(),
+                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                androidx.compose.material3.ExposedDropdownMenu(
+                // Capa invisible sobre el campo: como es readOnly, el click debe capturarse
+                // aquí para abrir el menú (el propio TextField no expone onClick).
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { roleMenuExpanded = true },
+                )
+                DropdownMenu(
                     expanded = roleMenuExpanded,
                     onDismissRequest = { roleMenuExpanded = false },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     UserRole.entries.forEach { role ->
                         DropdownMenuItem(

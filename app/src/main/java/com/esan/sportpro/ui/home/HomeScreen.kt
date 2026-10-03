@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Groups2
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Newspaper
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SportsSoccer
@@ -28,13 +29,17 @@ import com.esan.sportpro.ui.comunidad.ComunidadScreen
 import com.esan.sportpro.ui.entrenamientos.EntrenamientosScreen
 import com.esan.sportpro.ui.ia.IaScreen
 import com.esan.sportpro.ui.jugadores.JugadoresScreen
+import com.esan.sportpro.ui.mensualidades.MensualidadesEntryScreen
 import com.esan.sportpro.ui.partido.PartidoScreen
 
 /**
  * Punto de entrada tras el login (US-003: navegación principal diferenciada por rol).
- * Por ahora los 6 módulos son visibles para todos los roles; cada equipo puede restringir
+ * Por ahora los módulos son visibles para todos los roles; cada equipo puede restringir
  * los items de [HomeModule] según [com.esan.sportpro.navigation.UserRole] cuando el perfil
  * del usuario autenticado esté disponible (módulo `cuentas`).
+ *
+ * `MENSUALIDADES` (US-008) se agregó como pestaña propia en vez de anidarla dentro de
+ * `JUGADORES` para no pisar el trabajo en curso de ese módulo — ver [MensualidadesEntryScreen].
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +84,12 @@ fun HomeScreen(onLogout: () -> Unit) {
                     label = { Text(HomeModule.PARTIDO.label) },
                 )
                 NavigationBarItem(
+                    selected = selectedModule == HomeModule.MENSUALIDADES,
+                    onClick = { selectedModule = HomeModule.MENSUALIDADES },
+                    icon = { Icon(Icons.Default.Payments, contentDescription = null) },
+                    label = { Text(HomeModule.MENSUALIDADES.label) },
+                )
+                NavigationBarItem(
                     selected = selectedModule == HomeModule.COMUNIDAD,
                     onClick = { selectedModule = HomeModule.COMUNIDAD },
                     icon = { Icon(Icons.Default.Newspaper, contentDescription = null) },
@@ -99,6 +110,7 @@ fun HomeScreen(onLogout: () -> Unit) {
             HomeModule.JUGADORES -> JugadoresScreen(contentModifier)
             HomeModule.ENTRENAMIENTOS -> EntrenamientosScreen(contentModifier)
             HomeModule.PARTIDO -> PartidoScreen(contentModifier)
+            HomeModule.MENSUALIDADES -> MensualidadesEntryScreen(modifier = contentModifier)
             HomeModule.COMUNIDAD -> ComunidadScreen(contentModifier)
             HomeModule.IA -> IaScreen(contentModifier)
         }

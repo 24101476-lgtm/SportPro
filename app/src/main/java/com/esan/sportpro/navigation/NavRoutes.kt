@@ -13,6 +13,8 @@ enum class HomeModule(val label: String) {
     JUGADORES("Jugadores"),
     ENTRENAMIENTOS("Entrenamientos"),
     PARTIDO("Partido"),
+    // MENSUALIDADES (US-008) agregado por Flavia Ojeda — módulo propio, no reemplaza Jugadores.
+    MENSUALIDADES("Mensualidades"),
     COMUNIDAD("Comunidad"),
     IA("Resumen IA"),
 }

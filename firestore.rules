@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// Reglas de seguridad de SportPro.
+// Copiar en Firebase Console > Firestore Database > Reglas y pulsar "Publicar".
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function rol() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol;
+    }
+
+    function esAdmin() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && rol() == 'ADMINISTRADOR';
+    }
+
+    // Perfil de cada usuario.
+    match /usuarios/{uid} {
+      allow read: if autenticado();
+      allow write: if autenticado() && request.auth.uid == uid;
+    }
+
+    // Catálogo configurable de eventos: todos lo leen; la configuración es del administrador.
+    // Se permite crear el catálogo base la primera vez desde la app.
+    match /catalogoEventos/{tipoId} {
+      allow read: if autenticado();
+      allow create: if autenticado();
+      allow update, delete: if esAdmin();
+    }
+
+    match /partidos/{partidoId} {
+      // getAfter: permite validar escrituras hechas en el mismo lote que crea o actualiza el partido.
+      function partido() {
+        return getAfter(/databases/$(database)/documents/partidos/$(partidoId)).data;
+      }
+
+      // Operador asignado, entrenador responsable, creador del partido o administrador.
+      function puedeOperarCon(datos) {
+        return autenticado() && (
+          esAdmin()
+          || request.auth.uid == datos.get('operadorUid', '')
+          || request.auth.uid == datos.get('entrenadorUid', '')
+          || request.auth.uid == datos.get('creadoPor', '')
+        );
+      }
+
+      function puedeOperar() {
+        return puedeOperarCon(partido());
+      }
+
+      allow read: if autenticado();
+      allow create: if autenticado() && request.resource.data.creadoPor == request.auth.uid;
+      allow update: if puedeOperarCon(resource.data) && resource.data.estado != 'ACTA_CERRADA';
+      allow delete: if esAdmin();
+
+      match /convocados/{jugadorId} {
+        allow read: if autenticado();
+        allow write: if puedeOperar();
+      }
+
+      // Eventos del partido: nunca se eliminan físicamente.
+      match /eventos/{eventoId} {
+        allow read: if autenticado();
+
+        allow create: if puedeOperar()
+          && get(/databases/$(database)/documents/partidos/$(partidoId)).data.estado != 'ACTA_CERRADA'
+          && request.resource.data.operadorUid == request.auth.uid
+          && request.resource.data.estado == 'VIGENTE'
+          && request.resource.data.minuto is int
+          && request.resource.data.minuto >= 0
+          && request.resource.data.minuto <= 130;
+
+        // Solo se permite cambiar el estado (Reemplazado / Anulado) y sus datos de trazabilidad;
+        // el contenido original del evento no se puede sobrescribir.
+        allow update: if puedeOperar()
+          && partido().estado != 'ACTA_CERRADA'
+          && resource.data.estado == 'VIGENTE'
+          && request.resource.data.estado in ['REEMPLAZADO', 'ANULADO']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'estado', 'reemplazadoPor', 'reemplazadoPorUid', 'reemplazadoEn',
+               'motivoAnulacion', 'anuladoPor', 'anuladoPorNombre', 'anuladoEn'
+             ]);
+
+        allow delete: if false;
+      }
+    }
+  }
+}

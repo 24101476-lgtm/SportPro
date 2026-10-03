@@ -13,6 +13,9 @@ enum class HomeModule(val label: String) {
     JUGADORES("Jugadores"),
     ENTRENAMIENTOS("Entrenamientos"),
     PARTIDO("Partido"),
+    // ESTADISTICAS (US-026, US-027) agregado por Flavia Ojeda — agrupa Estadísticas y Anuncios
+    // ("Página 12" del backlog) en un mismo tab con pestañas internas.
+    ESTADISTICAS("Estadísticas"),
     COMUNIDAD("Comunidad"),
     IA("Resumen IA"),
 }

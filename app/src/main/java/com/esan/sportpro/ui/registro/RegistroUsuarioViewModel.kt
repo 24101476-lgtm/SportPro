@@ -9,6 +9,7 @@ import com.esan.sportpro.domain.cuentas.Usuario
 import com.esan.sportpro.domain.cuentas.UsuarioRepository
 import com.esan.sportpro.navigation.UserRole
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -126,7 +127,13 @@ class RegistroUsuarioViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        // Red de seguridad: cualquier error no previsto (reglas, red, SDK) se muestra como mensaje
+        // y no cierra la app.
+        val alFallar = CoroutineExceptionHandler { _, _ ->
+            setState { copy(isLoading = false) }
+            sendEvent(RegistroEvent.Snackbar("No se pudo completar el registro. Inténtalo nuevamente"))
+        }
+        viewModelScope.launch(alFallar) {
             setState { copy(isLoading = true, errores = emptyMap(), errorGeneral = null) }
 
             // Sin conexión no se intenta nada: se avisa y el formulario conserva lo escrito.

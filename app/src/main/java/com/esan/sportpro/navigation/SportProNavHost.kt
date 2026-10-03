@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import com.esan.sportpro.ui.cuentas.LoginScreen
 import com.esan.sportpro.ui.cuentas.RegisterScreen
 import com.esan.sportpro.ui.home.HomeScreen
+import com.esan.sportpro.ui.registro.RegistroUsuarioScreen
 
 /**
  * Grafo de navegación raíz de la app. Autenticación (US-001/US-002) vive fuera de [NavRoutes.Home];
@@ -34,6 +35,16 @@ fun SportProNavHost(navController: NavHostController = rememberNavController()) 
                     }
                 },
                 onNavigateBack = { navController.popBackStack() },
+            )
+        }
+        composable(NavRoutes.RegistroUsuario.route) {
+            RegistroUsuarioScreen(
+                // US-001: la cuenta se crea y se pide verificar el correo, así que se vuelve al login.
+                onCuentaCreada = {
+                    navController.navigate(NavRoutes.Login.route) {
+                        popUpTo(NavRoutes.RegistroUsuario.route) { inclusive = true }
+                    }
+                },
             )
         }
         composable(NavRoutes.Home.route) {

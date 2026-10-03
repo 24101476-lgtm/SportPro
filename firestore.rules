@@ -33,6 +33,31 @@ service cloud.firestore {
       allow update, delete: if esAdmin();
     }
 
+    // US-001/US-004: códigos de invitación de 8 caracteres para crear cuentas de Administrador.
+    // El ID del documento es el propio código.
+    match /codigosInvitacion/{codigo} {
+      // Durante el registro la app solo hace `get` del código: la cuenta de Firebase Auth ya
+      // existe (el usuario queda autenticado) pero todavía no tiene documento en `usuarios`.
+      allow get: if autenticado();
+      // Recorrer el listado de códigos es una operación del administrador de una academia.
+      allow list: if esAdmin();
+
+      allow create: if esAdmin();
+
+      // Marcar el código como usado: lo hace el propio usuario que se registra, y solo puede
+      // escribir esos tres campos sobre un código que todavía no fue usado.
+      allow update: if esAdmin()
+        || (autenticado()
+            && resource.data.get('usadoPorUid', null) == null
+            && request.resource.data.usado == true
+            && request.resource.data.usadoPorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'usado', 'usadoPorUid', 'usadoEn'
+               ]));
+
+      allow delete: if esAdmin();
+    }
+
     match /partidos/{partidoId} {
       // getAfter: permite validar escrituras hechas en el mismo lote que crea o actualiza el partido.
       function partido() {

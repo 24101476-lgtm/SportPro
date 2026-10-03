@@ -36,9 +36,18 @@ class FirestoreUsuarioRepository @Inject constructor(
     private val usuarios get() = firestore.collection(COL_USUARIOS)
     private val codigos get() = firestore.collection(COL_CODIGOS_INVITACION)
 
+    /**
+     * Comprobación previa y opcional de correo duplicado. Se ejecuta antes de crear la cuenta, es
+     * decir sin sesión, y `firestore.rules` no permite leer `usuarios` a quien no está autenticado
+     * (hacerlo expondría todos los perfiles). Por eso un rechazo o un fallo de red se interpreta
+     * como "no se pudo comprobar": el duplicado lo detecta igualmente Firebase Auth al crear la
+     * cuenta ([ResultadoAuth.CorreoYaRegistrado]).
+     */
     override suspend fun correoYaRegistrado(correo: String): Boolean = withContext(Dispatchers.IO) {
         val destino = correo.trim().lowercase()
-        usuarios.whereEqualTo(CAMPO_CORREO, destino).limit(1).get().await().documents.isNotEmpty()
+        runCatching {
+            usuarios.whereEqualTo(CAMPO_CORREO, destino).limit(1).get().await().documents.isNotEmpty()
+        }.getOrDefault(false)
     }
 
     override suspend fun codigoInvitacionValido(codigo: String): Boolean = withContext(Dispatchers.IO) {

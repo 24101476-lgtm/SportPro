@@ -147,6 +147,32 @@ class FirestorePartidoRepository @Inject constructor(
         awaitClose { reg.remove() }
     }
 
+    override fun observarCatalogoCompleto(): Flow<List<TipoEvento>> = callbackFlow {
+        val reg = firestore.collection(COL_CATALOGO).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Log.w(TAG, "observarCatalogoCompleto", error)
+                close(error)
+                return@addSnapshotListener
+            }
+
+            if (snap == null || snap.isEmpty) {
+                if (snap != null && !snap.metadata.isFromCache) {
+                    sembrarCatalogo()
+                }
+                trySend(CatalogoBase.tipos)
+                return@addSnapshotListener
+            }
+
+            val tipos = snap.documents
+                .mapNotNull { it.toTipoEvento() }
+                .sortedBy { it.orden }
+
+            trySend(tipos)
+        }
+
+        awaitClose { reg.remove() }
+    }
+
     override fun observarRolActual(): Flow<String?> = callbackFlow {
         val uid = uidActual
         if (uid == null) {
@@ -161,6 +187,55 @@ class FirestorePartidoRepository @Inject constructor(
     }
 
     // ---------------------------------------------------------------- Escrituras
+
+    override fun crearTipoEvento(tipo: TipoEvento): String {
+        val ref = firestore.collection(COL_CATALOGO).document()
+
+        ref.set(
+            tipo.toMapCatalogo(
+                version = 1,
+                incluirCreacion = true,
+            )
+        ).addOnFailureListener {
+            reportarError("crearTipoEvento", it)
+        }
+
+        return ref.id
+    }
+
+    override fun actualizarTipoEvento(tipo: TipoEvento) {
+        firestore.collection(COL_CATALOGO)
+            .document(tipo.id)
+            .update(
+                tipo.toMapCatalogo(
+                    version = tipo.version + 1,
+                    incluirCreacion = false,
+                )
+            )
+            .addOnFailureListener {
+                reportarError("actualizarTipoEvento", it)
+            }
+    }
+
+    override fun cambiarEstadoTipoEvento(
+        tipoId: String,
+        activo: Boolean,
+        versionActual: Int,
+    ) {
+        firestore.collection(COL_CATALOGO)
+            .document(tipoId)
+            .update(
+                mapOf(
+                    "activo" to activo,
+                    "version" to versionActual + 1,
+                    "actualizadoPor" to uidActual,
+                    "actualizadoEn" to FieldValue.serverTimestamp(),
+                )
+            )
+            .addOnFailureListener {
+                reportarError("cambiarEstadoTipoEvento", it)
+            }
+    }
 
     override fun crearPartidoPractica(
         nombreEquipo: String,
@@ -336,6 +411,7 @@ class FirestorePartidoRepository @Inject constructor(
 
     private fun sembrarCatalogo() {
         val batch = firestore.batch()
+
         CatalogoBase.tipos.forEach { t ->
             batch.set(
                 firestore.collection(COL_CATALOGO).document(t.id),
@@ -343,13 +419,17 @@ class FirestorePartidoRepository @Inject constructor(
                     "nombre" to t.nombre,
                     "ambito" to t.ambito.name,
                     "camposObligatorios" to t.camposObligatorios,
+                    "camposOpcionales" to t.camposOpcionales,
                     "sumaMarcador" to t.sumaMarcador,
                     "orden" to t.orden,
                     "activo" to t.activo,
                     "version" to CatalogoBase.VERSION,
+                    "icono" to t.icono,
+                    "color" to t.color,
                 ),
             )
         }
+
         batch.commitLogged("sembrarCatalogo")
     }
 
@@ -368,6 +448,33 @@ class FirestorePartidoRepository @Inject constructor(
 
     // ---------------------------------------------------------------- Mapeos
 
+    private fun TipoEvento.toMapCatalogo(
+        version: Int,
+        incluirCreacion: Boolean,
+    ): Map<String, Any?> {
+
+        val datos = mutableMapOf<String, Any?>(
+            "nombre" to nombre.trim(),
+            "ambito" to ambito.name,
+            "camposObligatorios" to camposObligatorios,
+            "camposOpcionales" to camposOpcionales,
+            "sumaMarcador" to sumaMarcador,
+            "orden" to orden,
+            "activo" to activo,
+            "version" to version,
+            "icono" to icono,
+            "color" to color,
+            "actualizadoPor" to uidActual,
+            "actualizadoEn" to FieldValue.serverTimestamp(),
+        )
+
+        if (incluirCreacion) {
+            datos["creadoPor"] = uidActual
+            datos["creadoEn"] = FieldValue.serverTimestamp()
+        }
+
+        return datos
+    }
     private fun BorradorEvento.toMap(
         grupoId: String,
         version: Int,
@@ -465,15 +572,29 @@ class FirestorePartidoRepository @Inject constructor(
     @Suppress("UNCHECKED_CAST")
     private fun DocumentSnapshot.toTipoEvento(): TipoEvento? {
         val nombre = getString("nombre") ?: return null
+
         return TipoEvento(
             id = id,
             nombre = nombre,
-            ambito = enumOr(getString("ambito"), AmbitoEvento.JUGADOR),
-            camposObligatorios = (get("camposObligatorios") as? List<String>).orEmpty(),
+            ambito = enumOr(
+                getString("ambito"),
+                AmbitoEvento.JUGADOR
+            ),
+            camposObligatorios =
+                (get("camposObligatorios") as? List<String>).orEmpty(),
+
             sumaMarcador = getBoolean("sumaMarcador") ?: false,
             orden = getLong("orden")?.toInt() ?: 99,
             activo = getBoolean("activo") ?: true,
             version = getLong("version")?.toInt() ?: 1,
+
+            icono = getString("icono") ?: "sports_soccer",
+            color = getString("color") ?: "#2E7D32",
+
+            camposOpcionales =
+                (get("camposOpcionales") as? List<*>)
+                    ?.filterIsInstance<String>()
+                    .orEmpty(),
         )
     }
 

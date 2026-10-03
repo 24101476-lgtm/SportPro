@@ -24,6 +24,17 @@ interface PartidoRepository {
     fun observarConvocados(partidoId: String): Flow<List<JugadorConvocado>>
 
     fun observarCatalogo(): Flow<List<TipoEvento>>
+    fun observarCatalogoCompleto(): Flow<List<TipoEvento>>
+
+    fun crearTipoEvento(tipo: TipoEvento): String
+
+    fun actualizarTipoEvento(tipo: TipoEvento)
+
+    fun cambiarEstadoTipoEvento(
+        tipoId: String,
+        activo: Boolean,
+        versionActual: Int,
+    )
 
     /** Rol guardado en `usuarios/{uid}.rol`, o null si el perfil aún no existe. */
     fun observarRolActual(): Flow<String?>

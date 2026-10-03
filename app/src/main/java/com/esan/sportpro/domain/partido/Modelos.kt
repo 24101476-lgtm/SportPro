@@ -63,8 +63,11 @@ data class TipoEvento(
     val orden: Int,
     val activo: Boolean = true,
     val version: Int = 1,
+    val icono: String = "sports_soccer",
+    val color: String = "#2E7D32",
+    val camposOpcionales: List<String> = emptyList(),
 ) {
-    fun requiere(campo: String): Boolean = campo in camposObligatorios
+    fun requiere(campo: String) = campo in camposObligatorios
 }
 
 /** Jugador convocado al partido (subcolección `convocados`). */

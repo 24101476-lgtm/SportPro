@@ -59,6 +59,7 @@ import com.esan.sportpro.domain.partido.Partido
 @Composable
 fun PartidosListaScreen(
     onAbrirPartido: (String) -> Unit,
+    onAbrirCatalogo: () -> Unit,
     viewModel: PartidosViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -117,6 +118,14 @@ fun PartidosListaScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item { Encabezado(state.partidos) }
+                item {
+                    Button(
+                        onClick = onAbrirCatalogo,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Catálogo de eventos")
+                    }
+                }
                 state.aviso?.let { aviso ->
                     item {
                         Text(aviso, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)

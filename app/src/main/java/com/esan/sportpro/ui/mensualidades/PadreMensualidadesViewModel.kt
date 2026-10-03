@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.mensualidades
 
+import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.mensualidades.MensualidadRepository
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad

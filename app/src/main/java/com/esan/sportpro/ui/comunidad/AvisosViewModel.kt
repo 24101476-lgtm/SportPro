@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.comunidad.AvisoRepository
 import com.esan.sportpro.data.comunidad.ModeracionRepository

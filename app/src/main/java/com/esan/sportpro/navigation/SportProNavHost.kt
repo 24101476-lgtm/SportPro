@@ -1,46 +1,64 @@
 package com.esan.sportpro.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.esan.sportpro.ui.cuentas.LoginScreen
-import com.esan.sportpro.ui.cuentas.RegisterScreen
 import com.esan.sportpro.ui.home.HomeScreen
+import com.esan.sportpro.ui.login.LoginUsuarioScreen
+import com.esan.sportpro.ui.login.RecuperarContrasenaScreen
+import com.esan.sportpro.ui.login.SesionGateViewModel
+import com.esan.sportpro.ui.registro.RegistroUsuarioScreen
 
 /**
  * Grafo de navegación raíz de la app. Autenticación (US-001/US-002) vive fuera de [NavRoutes.Home];
- * una vez autenticado, [HomeScreen] resuelve internamente qué módulos mostrar según el rol.
+ * una vez autenticado, [HomeScreen] lee el perfil del usuario y muestra solo los módulos que
+ * corresponden a su rol (US-003, ver [HomeModule.visiblesPara]).
  */
 @Composable
 fun SportProNavHost(navController: NavHostController = rememberNavController()) {
-    NavHost(navController = navController, startDestination = NavRoutes.Login.route) {
+    val sesionGate: SesionGateViewModel = hiltViewModel()
+    // US-002: si la app se abre con sesión activa se salta el login.
+    val destinoInicial = remember {
+        if (sesionGate.haySesionActiva()) NavRoutes.Home.route else NavRoutes.Login.route
+    }
+    NavHost(navController = navController, startDestination = destinoInicial) {
         composable(NavRoutes.Login.route) {
-            LoginScreen(
-                onLoginSuccess = {
+            LoginUsuarioScreen(
+                onSesionIniciada = {
+                    // US-003: el rol se resuelve en HomeScreen a partir del perfil de Firestore.
                     navController.navigate(NavRoutes.Home.route) {
                         popUpTo(NavRoutes.Login.route) { inclusive = true }
                     }
                 },
-                onNavigateToRegister = { navController.navigate(NavRoutes.Register.route) },
+                onNavigateToRegister = { navController.navigate(NavRoutes.RegistroUsuario.route) },
+                onNavigateToRecuperar = { navController.navigate(NavRoutes.RecuperarContrasena.route) },
             )
         }
-        composable(NavRoutes.Register.route) {
-            RegisterScreen(
-                onRegisterSuccess = {
-                    navController.navigate(NavRoutes.Home.route) {
-                        popUpTo(NavRoutes.Login.route) { inclusive = true }
+        composable(NavRoutes.RecuperarContrasena.route) {
+            RecuperarContrasenaScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(NavRoutes.RegistroUsuario.route) {
+            RegistroUsuarioScreen(
+                // US-001: la cuenta se crea y se pide verificar el correo, así que se vuelve al login.
+                onCuentaCreada = {
+                    navController.navigate(NavRoutes.Login.route) {
+                        popUpTo(NavRoutes.RegistroUsuario.route) { inclusive = true }
                     }
                 },
-                onNavigateBack = { navController.popBackStack() },
             )
         }
         composable(NavRoutes.Home.route) {
             HomeScreen(
                 onLogout = {
-                    navController.navigate(NavRoutes.Login.route) {
-                        popUpTo(NavRoutes.Home.route) { inclusive = true }
+                    // US-002: cerrar la sesión de Firebase Auth, no solo navegar.
+                    sesionGate.cerrarSesion {
+                        navController.navigate(NavRoutes.Login.route) {
+                            popUpTo(navController.graph.id) { inclusive = true }
+                        }
                     }
                 },
             )

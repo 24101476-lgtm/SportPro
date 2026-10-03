@@ -19,6 +19,21 @@ service cloud.firestore {
         && rol() == 'ADMINISTRADOR';
     }
 
+    // Administrador o entrenador: personal que gestiona el plantel.
+    function esStaff() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && rol() in ['ADMINISTRADOR', 'ENTRENADOR'];
+    }
+
+    // Academia del usuario autenticado. Mientras no esté vinculado a un club (clubId nulo)
+    // se usa 'academia-demo', igual que la app (PerfilActual.ACADEMIA_POR_DEFECTO).
+    function academiaPropia() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('clubId', null) == null
+        ? 'academia-demo'
+        : get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.clubId;
+    }
+
     // Perfil de cada usuario.
     match /usuarios/{uid} {
       allow read: if autenticado();
@@ -31,6 +46,84 @@ service cloud.firestore {
       allow read: if autenticado();
       allow create: if autenticado();
       allow update, delete: if esAdmin();
+    }
+
+    // US-001/US-004: códigos de invitación de 8 caracteres para crear cuentas de Administrador.
+    // El ID del documento es el propio código.
+    match /codigosInvitacion/{codigo} {
+      // Durante el registro la app solo hace `get` del código: la cuenta de Firebase Auth ya
+      // existe (el usuario queda autenticado) pero todavía no tiene documento en `usuarios`.
+      allow get: if autenticado();
+      // Recorrer el listado de códigos es una operación del administrador de una academia.
+      allow list: if esAdmin();
+
+      allow create: if esAdmin();
+
+      // Marcar el código como usado: lo hace el propio usuario que se registra, y solo puede
+      // escribir esos tres campos sobre un código que todavía no fue usado.
+      allow update: if esAdmin()
+        || (autenticado()
+            && resource.data.get('usadoPorUid', null) == null
+            && request.resource.data.usado == true
+            && request.resource.data.usadoPorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'usado', 'usadoPorUid', 'usadoEn'
+               ]));
+
+      allow delete: if esAdmin();
+    }
+
+    // US-004/US-005: equipos por categoría. Los lee cualquier usuario autenticado; solo el
+    // administrador de la misma academia los crea o edita. No se borran: se desactivan.
+    match /equipos/{equipoId} {
+      allow read: if autenticado();
+      allow create: if esAdmin()
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoPor == request.auth.uid;
+      allow update: if esAdmin()
+        && resource.data.academiaId == academiaPropia()
+        && request.resource.data.academiaId == resource.data.academiaId;
+      allow delete: if false;
+    }
+
+    // US-006/US-007: perfil del jugador. Incluye datos físicos y de contacto de posibles menores
+    // de edad, por eso solo lo leen y editan el administrador y el entrenador de su academia.
+    match /jugadores/{jugadorId} {
+      allow read: if esStaff() && resource.data.academiaId == academiaPropia();
+      allow create: if esStaff()
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoPor == request.auth.uid;
+      allow update: if esStaff()
+        && resource.data.academiaId == academiaPropia()
+        && request.resource.data.academiaId == resource.data.academiaId;
+      allow delete: if false;
+    }
+
+    // US-009 a US-013: entrenamientos y su asistencia (solo ids y estados, sin datos
+    // personales). Los lee cualquier usuario autenticado; los gestiona el personal.
+    match /entrenamientos/{entrenamientoId} {
+      allow read: if autenticado();
+      allow create: if esStaff()
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoPor == request.auth.uid;
+      allow update: if esStaff()
+        && resource.data.academiaId == academiaPropia()
+        && request.resource.data.academiaId == resource.data.academiaId;
+      allow delete: if false;
+    }
+
+    // Biblioteca reutilizable de ejercicios de la academia.
+    match /ejercicios/{ejercicioId} {
+      allow read: if esStaff();
+      allow create: if esStaff() && request.resource.data.academiaId == academiaPropia();
+      allow update, delete: if false;
+    }
+
+    // Registro por jugador y entrenamiento que consume el módulo de Estadísticas.
+    match /asistencias_entrenamiento/{asistenciaId} {
+      allow read: if autenticado();
+      allow create, update: if esStaff();
+      allow delete: if false;
     }
 
     match /partidos/{partidoId} {

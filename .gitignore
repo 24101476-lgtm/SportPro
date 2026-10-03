@@ -12,3 +12,6 @@
 *.dex
 *.class
 local.properties
+build/
+.kotlin/
+.gradle/

@@ -34,6 +34,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Permite usar java.time.* (LocalDate, YearMonth, etc.) con minSdk 24 — ver
+        // el módulo de Mensualidades (US-008), que depende de esas clases.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -72,4 +75,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(libs.coil.compose)
+
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

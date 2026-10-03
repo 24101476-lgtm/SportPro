@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.home
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Groups2
 import androidx.compose.material.icons.filled.Logout
@@ -27,6 +28,7 @@ import com.esan.sportpro.navigation.HomeModule
 import com.esan.sportpro.ui.academia.AcademiaScreen
 import com.esan.sportpro.ui.comunidad.ComunidadScreen
 import com.esan.sportpro.ui.entrenamientos.EntrenamientosScreen
+import com.esan.sportpro.ui.estadisticas.EstadisticasComunicacionEntryScreen
 import com.esan.sportpro.ui.ia.IaScreen
 import com.esan.sportpro.ui.jugadores.JugadoresScreen
 import com.esan.sportpro.ui.mensualidades.MensualidadesEntryScreen
@@ -40,6 +42,9 @@ import com.esan.sportpro.ui.partido.PartidoScreen
  *
  * `MENSUALIDADES` (US-008) se agregó como pestaña propia en vez de anidarla dentro de
  * `JUGADORES` para no pisar el trabajo en curso de ese módulo — ver [MensualidadesEntryScreen].
+ *
+ * `ESTADISTICAS` (US-026, US-027) se agregó como pestaña propia que agrupa Estadísticas y
+ * Anuncios — ver [EstadisticasComunicacionEntryScreen].
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +95,12 @@ fun HomeScreen(onLogout: () -> Unit) {
                     label = { Text(HomeModule.MENSUALIDADES.label) },
                 )
                 NavigationBarItem(
+                    selected = selectedModule == HomeModule.ESTADISTICAS,
+                    onClick = { selectedModule = HomeModule.ESTADISTICAS },
+                    icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
+                    label = { Text(HomeModule.ESTADISTICAS.label) },
+                )
+                NavigationBarItem(
                     selected = selectedModule == HomeModule.COMUNIDAD,
                     onClick = { selectedModule = HomeModule.COMUNIDAD },
                     icon = { Icon(Icons.Default.Newspaper, contentDescription = null) },
@@ -111,6 +122,7 @@ fun HomeScreen(onLogout: () -> Unit) {
             HomeModule.ENTRENAMIENTOS -> EntrenamientosScreen(contentModifier)
             HomeModule.PARTIDO -> PartidoScreen(contentModifier)
             HomeModule.MENSUALIDADES -> MensualidadesEntryScreen(modifier = contentModifier)
+            HomeModule.ESTADISTICAS -> EstadisticasComunicacionEntryScreen(modifier = contentModifier)
             HomeModule.COMUNIDAD -> ComunidadScreen(contentModifier)
             HomeModule.IA -> IaScreen(contentModifier)
         }

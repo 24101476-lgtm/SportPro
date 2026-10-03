@@ -15,6 +15,9 @@ enum class HomeModule(val label: String) {
     PARTIDO("Partido"),
     // MENSUALIDADES (US-008) agregado por Flavia Ojeda — módulo propio, no reemplaza Jugadores.
     MENSUALIDADES("Mensualidades"),
+    // ESTADISTICAS (US-026, US-027) agregado por Flavia Ojeda — agrupa Estadísticas y Anuncios
+    // ("Página 12" del backlog) en un mismo tab con pestañas internas.
+    ESTADISTICAS("Estadísticas"),
     COMUNIDAD("Comunidad"),
     IA("Resumen IA"),
 }

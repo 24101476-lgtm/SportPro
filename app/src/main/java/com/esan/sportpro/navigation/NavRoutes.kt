@@ -7,6 +7,8 @@ sealed class NavRoutes(val route: String) {
     data object Home : NavRoutes("home")
     // US-001: registro con rol (pantalla propia en `ui/registro`, no reemplaza a `Register`).
     data object RegistroUsuario : NavRoutes("registroUsuario")
+    // US-002: recuperación de contraseña.
+    data object RecuperarContrasena : NavRoutes("recuperarContrasena")
 }
 
 /** Módulos funcionales disponibles desde [com.esan.sportpro.ui.home.HomeScreen]. */

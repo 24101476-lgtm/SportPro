@@ -126,6 +126,60 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ------------------------------------------------------------------------------------
+    // Colecciones de los módulos Mensualidades, Estadísticas/Anuncios y Comunidad.
+    // TEMPORAL: sin una regla explícita Firestore las rechaza y esas pantallas fallan. Estas
+    // reglas permiten el uso a usuarios autenticados; cada responsable de módulo debe
+    // endurecerlas (por rol y por academia) antes de manejar datos reales.
+    // ------------------------------------------------------------------------------------
+
+    // US-008 (simulado, sin cobros reales): todos leen su información; solo el administrador
+    // registra o anula pagos.
+    match /mensualidades/{id} {
+      allow read: if autenticado();
+      allow create, update: if esAdmin();
+      allow delete: if false;
+    }
+
+    // Vínculo padre/madre ↔ jugador.
+    match /vinculaciones/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado();
+    }
+
+    // US-026/US-027: anuncios y preferencias de notificación.
+    match /anuncios/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado();
+    }
+    match /preferencias_notificaciones/{id} {
+      allow read, write: if autenticado();
+    }
+
+    // US-028/US-029/US-030: comunidad, avisos y moderación.
+    match /publicaciones/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado();
+
+      match /comentarios/{comentarioId} {
+        allow read: if autenticado();
+        allow write: if autenticado();
+      }
+    }
+    match /avisos/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado();
+    }
+    match /reportes/{id} {
+      allow read, write: if autenticado();
+    }
+    match /bloqueos/{id} {
+      allow read, write: if autenticado();
+    }
+    match /suspensiones/{id} {
+      allow read, write: if autenticado();
+    }
+
     match /partidos/{partidoId} {
       // getAfter: permite validar escrituras hechas en el mismo lote que crea o actualiza el partido.
       function partido() {

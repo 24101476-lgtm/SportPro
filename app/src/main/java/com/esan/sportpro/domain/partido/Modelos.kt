@@ -98,6 +98,39 @@ data class Partido(
     val fechaMs: Long?,
     val actaCerradaConIncompletos: Int? = null,
     val tienePendientes: Boolean = false,
+    /** Equipo de la academia (colección `equipos`); null en partidos de práctica antiguos. */
+    val equipoId: String? = null,
+    val academiaId: String? = null,
+    /** AMISTOSO, LIGA o TORNEO: el mismo valor que filtra el módulo de Estadísticas. */
+    val tipo: String = TiposPartido.AMISTOSO,
+    val temporada: String? = null,
+    /** Marcador guardado en el documento para Estadísticas y listados (se recalcula de los eventos). */
+    val golesEquipo: Int = 0,
+    val golesRival: Int = 0,
+    /** Marca de tiempo del servidor del fin del 1.er tiempo, para mostrar la duración del descanso. */
+    val finPrimerTiempoMs: Long? = null,
+)
+
+/** Tipos de partido compartidos con Estadísticas (`domain/estadisticas/TipoPartido`). */
+object TiposPartido {
+    const val AMISTOSO = "AMISTOSO"
+    const val LIGA = "LIGA"
+    const val TORNEO = "TORNEO"
+    val todos = listOf(AMISTOSO to "Amistoso", LIGA to "Liga", TORNEO to "Torneo")
+}
+
+/** Datos para crear un partido: con un equipo real de la academia o de práctica. */
+data class NuevoPartido(
+    val equipoId: String?,
+    val academiaId: String?,
+    val nombreEquipo: String,
+    val nombreRival: String,
+    val categoria: String,
+    val tipo: String,
+    val temporada: String,
+    val duracionTiempoMin: Int,
+    val cambiosPermitidos: Int,
+    val convocados: List<JugadorConvocado>,
 )
 
 /**

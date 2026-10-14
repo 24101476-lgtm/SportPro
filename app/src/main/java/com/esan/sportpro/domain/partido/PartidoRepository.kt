@@ -28,13 +28,14 @@ interface PartidoRepository {
     /** Rol guardado en `usuarios/{uid}.rol`, o null si el perfil aún no existe. */
     fun observarRolActual(): Flow<String?>
 
-    /** Crea un partido de práctica con plantel de ejemplo y alineación confirmada. */
-    fun crearPartidoPractica(
-        nombreEquipo: String,
-        nombreRival: String,
-        cambiosPermitidos: Int,
-        duracionTiempoMin: Int,
-    ): String
+    /**
+     * Crea el partido con sus convocados (titulares y suplentes) y la alineación confirmada.
+     * Funciona sin conexión: devuelve el id de inmediato.
+     */
+    fun crearPartido(nuevo: NuevoPartido): String
+
+    /** Guarda en el documento del partido el marcador calculado a partir de los eventos vigentes. */
+    fun actualizarMarcador(partidoId: String, golesEquipo: Int, golesRival: Int)
 
     /**
      * Registra un evento nuevo. Devuelve el id del documento creado.
@@ -63,5 +64,5 @@ interface PartidoRepository {
     /** Marca el evento (y los generados a partir de él) como Anulado. Nunca se borra. */
     fun anularEvento(partidoId: String, evento: EventoPartido, relacionados: List<EventoPartido>, motivo: String)
 
-    fun cerrarActa(partidoId: String, eventosIncompletos: Int)
+    fun cerrarActa(partidoId: String, eventosIncompletos: Int, golesEquipo: Int, golesRival: Int)
 }

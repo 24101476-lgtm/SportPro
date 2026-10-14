@@ -20,6 +20,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -87,6 +88,28 @@ fun EventoBottomSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(tipo.nombre, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+
+            // Los eventos de control del tiempo cambian el estado del partido: se explica qué pasará.
+            val explicacion = when (tipo.id) {
+                TiposEvento.INICIO_PARTIDO -> "El cronómetro empezará a correr en todos los dispositivos."
+                TiposEvento.FIN_PRIMER_TIEMPO -> "El reloj se detiene y comienza el descanso."
+                TiposEvento.INICIO_SEGUNDO_TIEMPO -> "El reloj continúa desde el minuto ${partido?.duracionTiempoMin ?: 45}."
+                TiposEvento.FIN_PARTIDO ->
+                    "El partido pasará a Finalizado. Podrás corregir eventos hasta cerrar el acta."
+                else -> null
+            }
+            if (explicacion != null && hoja.editando == null) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Text(
+                        explicacion,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp),
+                    )
                 }
             }
 
@@ -194,7 +217,13 @@ fun EventoBottomSheet(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp),
-                ) { Text(if (hoja.editando != null) "Guardar corrección" else "Guardar") }
+                ) { Text(
+                        when {
+                            hoja.editando != null -> "Guardar corrección"
+                            explicacion != null -> "Confirmar"
+                            else -> "Guardar"
+                        },
+                    ) }
             }
         }
     }

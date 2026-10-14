@@ -89,7 +89,11 @@ data class RegistroUiState(
     val paleta: List<TipoEvento>
         get() {
             val p = partido ?: return emptyList()
-            if (p.estado != EstadoPartido.EN_CURSO) return emptyList()
+            if (p.estado != EstadoPartido.EN_CURSO || !puedeCorregir) return emptyList()
+            // En el descanso solo tiene sentido registrar cambios, tarjetas y el reinicio.
+            if (p.enDescanso) {
+                return catalogo.filter { it.id in EVENTOS_DESCANSO }
+            }
             return catalogo.filter { it.id != TiposEvento.INICIO_PARTIDO }
                 .filterNot { it.id == TiposEvento.FIN_PRIMER_TIEMPO && (p.enDescanso || p.inicioSegundoTiempoMs != null) }
                 .filterNot { it.id == TiposEvento.INICIO_SEGUNDO_TIEMPO && p.inicioSegundoTiempoMs != null }
@@ -97,6 +101,13 @@ data class RegistroUiState(
 
     companion object {
         const val ROL_ADMIN = "ADMINISTRADOR"
+        private val EVENTOS_DESCANSO = setOf(
+            TiposEvento.INICIO_SEGUNDO_TIEMPO,
+            TiposEvento.FIN_PARTIDO,
+            TiposEvento.CAMBIO,
+            TiposEvento.TARJETA_AMARILLA,
+            TiposEvento.TARJETA_ROJA,
+        )
     }
 }
 
@@ -123,6 +134,7 @@ class RegistroPartidoViewModel @Inject constructor(
                 .catch { e -> setState { copy(cargando = false, error = describirErrorFirestore(e)) } }
                 .collect { p ->
                 setState { copy(partido = p, cargando = false, error = null) }
+                sincronizarMarcador()
                 when (p?.estado) {
                     EstadoPartido.EN_CURSO -> partidoEnCurso.partidoId = partidoId
                     EstadoPartido.FINALIZADO, EstadoPartido.ACTA_CERRADA -> partidoEnCurso.limpiarSi(partidoId)
@@ -136,6 +148,7 @@ class RegistroPartidoViewModel @Inject constructor(
                 .collect { lista ->
                 setState { copy(eventos = lista) }
                 revisarSincronizacion()
+                sincronizarMarcador()
             }
         }
         viewModelScope.launch {
@@ -184,8 +197,8 @@ class RegistroPartidoViewModel @Inject constructor(
     private var finAutomaticoEnviado = false
 
     /**
-     * Al cumplirse el tiempo reglamentario del 2.º tiempo (90' por defecto) el partido se
-     * finaliza automáticamente. Solo lo hace el dispositivo del operador (o del creador si no hay
+     * Respaldo: si nadie registra "Fin de partido" y el 2.º tiempo agota el tiempo añadido
+     * máximo, el partido se finaliza automáticamente. Solo lo hace el dispositivo del operador (o del creador si no hay
      * operador asignado) para no generar eventos duplicados desde varios teléfonos.
      */
     private fun revisarFinReglamentario() {
@@ -199,17 +212,32 @@ class RegistroPartidoViewModel @Inject constructor(
         registrar(
             BorradorEvento(
                 tipo = tipoPorId(TiposEvento.FIN_PARTIDO),
-                minuto = 2 * p.duracionTiempoMin,
+                minuto = st.reloj.minuto,
                 equipo = null,
                 jugadorId = null,
                 jugadorNombre = null,
                 secundarioId = null,
                 secundarioNombre = null,
                 resultadoPenal = null,
-                observacion = "Finalizado automáticamente al cumplirse el tiempo reglamentario",
+                observacion = "Cierre automático: no se registró el final tras ${ReglasPartido.ADICION_MAX} min de tiempo añadido",
             ),
             excedeCambios = false,
         )
+    }
+
+    /**
+     * Mantiene `golesEquipo` / `golesRival` del documento del partido iguales al marcador calculado
+     * con los eventos vigentes. Estadísticas y la lista de partidos leen esos campos, así que una
+     * anulación o corrección de un gol se refleja también fuera de esta pantalla.
+     */
+    private fun sincronizarMarcador() {
+        val st = currentState
+        val p = st.partido ?: return
+        if (!st.puedeCorregir || p.estado == EstadoPartido.PROGRAMADO) return
+        val m = st.marcador
+        if (m.propio != p.golesEquipo || m.rival != p.golesRival) {
+            repo.actualizarMarcador(partidoId, m.propio, m.rival)
+        }
     }
 
     private fun revisarSincronizacion() {
@@ -217,7 +245,7 @@ class RegistroPartidoViewModel @Inject constructor(
         if (!currentState.conectado && pendientes > 0) {
             pendientesSinConexion = maxOf(pendientesSinConexion, pendientes)
         } else if (currentState.conectado && pendientes == 0 && pendientesSinConexion > 0) {
-            sendEvent(RegistroEvento.Mensaje("Sincronización completa. $pendientesSinConexion eventos enviados"))
+            sendEvent(RegistroEvento.Mensaje("Sincronización completa. ${cantidad(pendientesSinConexion, "evento enviado", "eventos enviados")}"))
             pendientesSinConexion = 0
         }
     }
@@ -226,6 +254,10 @@ class RegistroPartidoViewModel @Inject constructor(
 
     fun abrirInicioPartido() {
         val p = currentState.partido ?: return
+        if (!currentState.puedeCorregir) {
+            sendEvent(RegistroEvento.Mensaje("Solo el entrenador u operador del partido puede iniciarlo"))
+            return
+        }
         if (!p.alineacionConfirmada) {
             sendEvent(RegistroEvento.Mensaje("Debes confirmar la alineación antes de iniciar el partido"))
             return
@@ -426,7 +458,14 @@ class RegistroPartidoViewModel @Inject constructor(
         registrar(d.borrador, excedeCambios = false)
     }
 
-    fun pedirAnulacion(evento: EventoPartido) = setState { copy(dialogo = DialogoPartido.Anular(evento)) }
+    fun pedirAnulacion(evento: EventoPartido) {
+        // Anular el inicio o el final de un tiempo dejaría el reloj y el estado del partido incoherentes.
+        if (evento.tipoId in EVENTOS_CONTROL_TIEMPO) {
+            sendEvent(RegistroEvento.Mensaje("Los eventos de control del tiempo no se anulan. Usa Editar para corregir su minuto."))
+            return
+        }
+        setState { copy(dialogo = DialogoPartido.Anular(evento)) }
+    }
 
     fun onMotivoAnulacion(texto: String) {
         val d = currentState.dialogo as? DialogoPartido.Anular ?: return
@@ -503,22 +542,31 @@ class RegistroPartidoViewModel @Inject constructor(
         if (n > 0) {
             setState { copy(dialogo = DialogoPartido.CerrarActa(n)) }
         } else {
-            repo.cerrarActa(partidoId, 0)
+            repo.cerrarActa(partidoId, 0, currentState.marcador.propio, currentState.marcador.rival)
             sendEvent(RegistroEvento.Mensaje("Acta cerrada"))
         }
     }
 
     fun confirmarCierreActa() {
         val d = currentState.dialogo as? DialogoPartido.CerrarActa ?: return
-        repo.cerrarActa(partidoId, d.incompletos)
+        repo.cerrarActa(partidoId, d.incompletos, currentState.marcador.propio, currentState.marcador.rival)
         setState { copy(dialogo = null) }
-        sendEvent(RegistroEvento.Mensaje("Acta cerrada con ${d.incompletos} eventos incompletos"))
+        sendEvent(RegistroEvento.Mensaje("Acta cerrada con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}"))
     }
 
     // ------------------------------------------------------------ Utilidades
 
     private fun tipoPorId(id: String): TipoEvento =
         currentState.catalogo.firstOrNull { it.id == id } ?: checkNotNull(CatalogoBase.porId(id))
+
+    private companion object {
+        val EVENTOS_CONTROL_TIEMPO = setOf(
+            TiposEvento.INICIO_PARTIDO,
+            TiposEvento.FIN_PRIMER_TIEMPO,
+            TiposEvento.INICIO_SEGUNDO_TIEMPO,
+            TiposEvento.FIN_PARTIDO,
+        )
+    }
 
     private fun requiereEquipo(tipo: TipoEvento) =
         tipo.requiere(Campos.EQUIPO) || tipo.requiere(Campos.JUGADOR) || tipo.requiere(Campos.JUGADOR_SALE)

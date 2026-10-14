@@ -117,7 +117,7 @@ fun DialogosPartido(state: RegistroUiState, viewModel: RegistroPartidoViewModel)
             title = { Text("Cerrar acta") },
             text = {
                 Text(
-                    "Se cerrará el acta con ${d.incompletos} eventos incompletos. " +
+                    "Se cerrará el acta con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}. " +
                         "Esta decisión quedará registrada y ya no se podrán corregir eventos.",
                 )
             },

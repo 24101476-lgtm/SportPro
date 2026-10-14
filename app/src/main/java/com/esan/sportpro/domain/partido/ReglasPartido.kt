@@ -97,58 +97,70 @@ object ReglasPartido {
         }
     }
 
-    /** Minutos máximos de tiempo añadido que se cuentan al final del primer tiempo. */
-    const val ADICION_MAX_PRIMER_TIEMPO = 15
+    /** Minutos máximos de tiempo añadido que se cuentan al final de cada tiempo. */
+    const val ADICION_MAX = 15
 
     /** Estado del reloj del partido calculado a partir de las marcas de tiempo del servidor. */
     data class Reloj(
         /** Segundos de juego acumulados (el 2.º tiempo empieza en duración × 60). */
         val segundosJuego: Long,
-        /** Minuto reglamentario que se precarga en los eventos. */
+        /** Minuto que se precarga en los eventos (incluye el tiempo añadido, p. ej. 47). */
         val minuto: Int,
-        /** Minutos de tiempo añadido del 1.er tiempo (0 si no aplica). */
+        /** Minutos de tiempo añadido del tiempo en curso (0 si no aplica). */
         val adicion: Int,
-        /** true cuando el 2.º tiempo llegó al minuto final (2 × duración). */
+        /** true cuando el 2.º tiempo agotó el tiempo añadido máximo: se cierra automáticamente. */
         val tiempoCumplido: Boolean,
         /** Avance del partido entre 0 y 1, para la barra de progreso. */
         val progreso: Float,
-    )
+        /** Segundos transcurridos en el descanso (0 si no hay descanso en curso). */
+        val segundosDescanso: Long = 0,
+    ) {
+        /** true cuando ya pasó la duración reglamentaria del tiempo en curso. */
+        val enTiempoAnadido: Boolean get() = adicion > 0
+    }
 
     /**
      * Calcula el reloj a partir de las marcas de tiempo del servidor, de modo que el
      * cronómetro sigue avanzando aunque la app esté en segundo plano o se haya cerrado.
-     * - 1.er tiempo: corre hasta la duración y luego cuenta tiempo añadido (máx. 15 min).
-     * - Descanso: queda detenido en la duración del primer tiempo.
-     * - 2.º tiempo: corre desde la duración hasta 2 × duración (90' por defecto) y se detiene.
+     * - Cada tiempo corre hasta su duración (45' / 90') y luego cuenta tiempo añadido.
+     *   Lo termina el operador con "Fin de primer tiempo" / "Fin de partido", como el árbitro.
+     * - Descanso: el reloj de juego se detiene y se muestra cuánto lleva el descanso.
+     * - Si nadie registra el final, el 2.º tiempo se cierra solo al agotar [ADICION_MAX].
      */
     fun reloj(partido: Partido, ahoraMs: Long): Reloj {
         val dur = partido.duracionTiempoMin.coerceAtLeast(1)
         val durSeg = dur * 60L
         val total = 2 * durSeg
+        val maxAdicion = ADICION_MAX * 60L
         val inicio1 = partido.inicioPrimerTiempoMs
         return when {
             partido.estado == EstadoPartido.PROGRAMADO || inicio1 == null -> Reloj(0, 0, 0, false, 0f)
             partido.estado != EstadoPartido.EN_CURSO -> Reloj(total, 2 * dur, 0, true, 1f)
-            partido.enDescanso -> Reloj(durSeg, dur, 0, false, 0.5f)
+            partido.enDescanso -> Reloj(
+                segundosJuego = durSeg,
+                minuto = dur,
+                adicion = 0,
+                tiempoCumplido = false,
+                progreso = 0.5f,
+                segundosDescanso = partido.finPrimerTiempoMs?.let { segundosEntre(it, ahoraMs) } ?: 0,
+            )
             partido.inicioSegundoTiempoMs != null -> {
-                val seg = segundosEntre(partido.inicioSegundoTiempoMs, ahoraMs).coerceAtMost(durSeg)
+                val seg = segundosEntre(partido.inicioSegundoTiempoMs, ahoraMs).coerceAtMost(durSeg + maxAdicion)
                 val juego = durSeg + seg
                 Reloj(
                     segundosJuego = juego,
-                    minuto = (juego / 60).toInt().coerceAtMost(2 * dur),
-                    adicion = 0,
-                    tiempoCumplido = seg >= durSeg,
-                    progreso = (juego.toFloat() / total).coerceIn(0f, 1f),
+                    minuto = (juego / 60).toInt(),
+                    adicion = if (seg > durSeg) ((seg - durSeg) / 60).toInt() else 0,
+                    tiempoCumplido = seg >= durSeg + maxAdicion,
+                    progreso = (juego.coerceAtMost(total).toFloat() / total).coerceIn(0f, 1f),
                 )
             }
             else -> {
-                val seg = segundosEntre(inicio1, ahoraMs)
-                    .coerceAtMost(durSeg + ADICION_MAX_PRIMER_TIEMPO * 60L)
-                val adicion = if (seg > durSeg) ((seg - durSeg) / 60).toInt() else 0
+                val seg = segundosEntre(inicio1, ahoraMs).coerceAtMost(durSeg + maxAdicion)
                 Reloj(
                     segundosJuego = seg,
                     minuto = (seg / 60).toInt(),
-                    adicion = adicion,
+                    adicion = if (seg > durSeg) ((seg - durSeg) / 60).toInt() else 0,
                     tiempoCumplido = false,
                     progreso = (seg.coerceAtMost(durSeg).toFloat() / total).coerceIn(0f, 0.5f),
                 )

@@ -200,9 +200,16 @@ service cloud.firestore {
         return puedeOperarCon(partido());
       }
 
+      // Acta cerrada: el estado queda en FINALIZADO (lo consulta Estadísticas) y se marca
+      // actaCerrada = true. Se mantiene 'ACTA_CERRADA' por compatibilidad con partidos antiguos.
+      function actaCerrada(datos) {
+        return datos.get('actaCerrada', false) == true || datos.get('estado', '') == 'ACTA_CERRADA';
+      }
+
       allow read: if autenticado();
-      allow create: if autenticado() && request.resource.data.creadoPor == request.auth.uid;
-      allow update: if puedeOperarCon(resource.data) && resource.data.estado != 'ACTA_CERRADA';
+      // Solo el personal (administrador o entrenador) programa partidos.
+      allow create: if esStaff() && request.resource.data.creadoPor == request.auth.uid;
+      allow update: if puedeOperarCon(resource.data) && !actaCerrada(resource.data);
       allow delete: if esAdmin();
 
       match /convocados/{jugadorId} {
@@ -215,7 +222,7 @@ service cloud.firestore {
         allow read: if autenticado();
 
         allow create: if puedeOperar()
-          && get(/databases/$(database)/documents/partidos/$(partidoId)).data.estado != 'ACTA_CERRADA'
+          && !actaCerrada(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
           && request.resource.data.operadorUid == request.auth.uid
           && request.resource.data.estado == 'VIGENTE'
           && request.resource.data.minuto is int
@@ -225,7 +232,7 @@ service cloud.firestore {
         // Solo se permite cambiar el estado (Reemplazado / Anulado) y sus datos de trazabilidad;
         // el contenido original del evento no se puede sobrescribir.
         allow update: if puedeOperar()
-          && partido().estado != 'ACTA_CERRADA'
+          && !actaCerrada(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
           && resource.data.estado == 'VIGENTE'
           && request.resource.data.estado in ['REEMPLAZADO', 'ANULADO']
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([

@@ -33,8 +33,12 @@ di                PartidoModule (Hilt: PartidoRepository → FirestorePartidoRep
 
 ```
 partidos/{partidoId}
-   nombreEquipo, nombreRival, categoria, fecha
-   estado: PROGRAMADO | EN_CURSO | FINALIZADO | ACTA_CERRADA
+   equipoId, academiaId                     (equipo de la academia que juega el partido)
+   nombreEquipo, nombreRival, rivalNombre, categoria, fecha
+   tipo: AMISTOSO | LIGA | TORNEO, temporada  (filtros de Estadísticas)
+   golesEquipo, golesRival                  (marcador sincronizado desde los eventos vigentes)
+   actaCerrada                              (true al cerrar el acta; el estado queda en FINALIZADO)
+   estado: PROGRAMADO | EN_CURSO | FINALIZADO   (la app muestra "Acta cerrada" si actaCerrada = true)
    alineacionConfirmada, cambiosPermitidos, duracionTiempoMin
    inicioPrimerTiempo, inicioSegundoTiempo  (serverTimestamp)
    enDescanso, finPrimerTiempoMinuto, finPartidoMinuto
@@ -98,7 +102,9 @@ El inicio de cada tiempo se guarda con `FieldValue.serverTimestamp()` y se lee c
 
 - **1.er tiempo:** corre hasta la duración configurada (45' por defecto) y luego cuenta tiempo añadido, como máximo 15 minutos ("45:00 +3'").
 - **Descanso:** el reloj queda detenido.
-- **2.º tiempo:** corre hasta 2 × duración (90'). Al cumplirse, el dispositivo del operador registra automáticamente *Fin de partido*. Solo lo hace un dispositivo, para evitar duplicados.
+- **Descanso:** el reloj de juego se detiene y se muestra cuánto lleva el descanso (desde `finPrimerTiempo`).
+- **2.º tiempo:** corre hasta 2 × duración (90') y luego cuenta tiempo añadido ("90:00 +3'"). El operador registra *Fin de partido*. Si nadie lo hace, al agotar 15 minutos de añadido el dispositivo del operador lo registra automáticamente. Solo lo hace un dispositivo, para evitar duplicados.
+- **Control del tiempo:** no se puede anular el inicio ni el final de un tiempo, porque dejaría el reloj incoherente. Solo se corrige su minuto con *Editar*.
 
 ### Reglas del registro
 
@@ -179,5 +185,15 @@ Cada escenario debe documentarse con captura o video como evidencia. Los escenar
 ## 10. Integración con los demás módulos
 
 - **Catálogo de eventos:** la paleta se construye desde `catalogoEventos`. Si la colección está vacía, la app publica el catálogo base, que el administrador puede editar luego.
-- **Convocatoria y alineación:** se leen de `partidos/{id}/convocados` (campo `titular`) y de `alineacionConfirmada`. Mientras ese módulo se integra, la lista de partidos permite crear un **partido de práctica** con un plantel de ejemplo.
+- **Convocatoria y alineación:** se leen de `partidos/{id}/convocados` (campo `titular`) y de `alineacionConfirmada`. Mientras ese módulo no tenga pantalla propia, la convocatoria y la alineación se arman en *Nuevo partido*.
 - **Seguimiento en vivo, estadísticas y resumen con IA:** deben usar solo los eventos con `estado = VIGENTE` y pueden reutilizar `ReglasPartido` para el marcador y los cálculos.
+
+## 11. Integración con Academia, Jugadores y Estadísticas
+
+- **Creación del partido:** el entrenador o administrador elige un equipo de `equipos` (de su academia) y convoca jugadores activos de `jugadores`. Toca cada jugador para marcarlo como titular, suplente o no convocado. La alineación se guarda en `partidos/{id}/convocados`, con el id del jugador y solo datos deportivos (nombre, dorsal, posición), porque `jugadores` contiene datos de menores que solo puede leer el personal.
+- **Roles:** solo el personal puede crear partidos (regla `esStaff()`). Jugadores y padres ven la lista y el marcador en vivo, pero no la paleta de registro.
+- **Lista por academia:** cada usuario ve los partidos de su academia.
+- **Estadísticas:**
+  - `StatsRepository` lee los partidos con `estado == FINALIZADO`, `golesEquipo` y `golesRival`.
+  - Los goles, asistencias, tarjetas, faltas y minutos jugados se calculan a partir de `partidos/{id}/eventos` (solo eventos vigentes del equipo propio) y de `convocados`.
+  - Los eventos con "Jugador no identificado" aparecen en la fila "Sin asignar".

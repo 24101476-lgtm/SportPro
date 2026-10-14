@@ -159,7 +159,7 @@ fun BannerSinConexion(pendientes: Int) {
             Icon(Icons.Default.WifiOff, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
             Text(
-                "Sin conexión. $pendientes eventos pendientes de sincronizar",
+                "Sin conexión. ${cantidad(pendientes, "evento pendiente", "eventos pendientes")} de sincronizar",
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -276,7 +276,12 @@ fun PuntoEnVivo(color: Color = Color(0xFFFF5252)) {
 fun textoReloj(partido: Partido, reloj: com.esan.sportpro.domain.partido.ReglasPartido.Reloj): String = when {
     partido.estado == EstadoPartido.PROGRAMADO -> "00:00"
     partido.estado != EstadoPartido.EN_CURSO -> "Final"
-    partido.enDescanso -> "Descanso"
+    partido.enDescanso -> if (reloj.segundosDescanso > 0) "Descanso ${formatearCronometro(reloj.segundosDescanso)}" else "Descanso"
+    reloj.adicion > 0 && partido.inicioSegundoTiempoMs != null ->
+        "${partido.duracionTiempoMin * 2}:00 +${reloj.adicion}'"
     reloj.adicion > 0 -> "${partido.duracionTiempoMin}:00 +${reloj.adicion}'"
     else -> formatearCronometro(reloj.segundosJuego)
 }
+
+/** "1 evento" / "3 eventos": evita textos como "1 eventos pendientes". */
+fun cantidad(n: Int, singular: String, plural: String): String = "$n ${if (n == 1) singular else plural}"

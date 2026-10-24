@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.anuncios
 
+import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.anuncios.AnuncioRepository
 import com.esan.sportpro.domain.anuncios.Anuncio

@@ -189,7 +189,7 @@ fun RegistroPartidoScreen(
                 item {
                     TituloSeccion(
                         "Cronología",
-                        if (cronologia.isEmpty()) "Aún no hay eventos registrados" else "${cronologia.size} eventos · más reciente arriba",
+                        if (cronologia.isEmpty()) "Aún no hay eventos registrados" else "${cantidad(cronologia.size, "evento", "eventos")} · el más reciente arriba",
                     )
                 }
                 items(cronologia, key = { it.id }) { evento ->
@@ -340,7 +340,11 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
                 }
                 if (reloj.adicion > 0) {
                     Text(
-                        "Tiempo añadido del 1.er tiempo: registra \"Fin de primer tiempo\" cuando el árbitro pite.",
+                        if (partido.inicioSegundoTiempoMs != null) {
+                            "Tiempo añadido: registra \"Fin de partido\" cuando el árbitro pite el final."
+                        } else {
+                            "Tiempo añadido: registra \"Fin de primer tiempo\" cuando el árbitro pite."
+                        },
                         color = Color(0xFFFFE082),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
@@ -403,17 +407,25 @@ private fun PreInicio(state: RegistroUiState, partido: Partido, onIniciar: () ->
                     }
                 }
             }
-            Button(
-                onClick = onIniciar,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ColoresPartido.Verde),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Iniciar partido", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (state.puedeCorregir) {
+                Button(
+                    onClick = onIniciar,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColoresPartido.Verde),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp),
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Iniciar partido", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text(
+                    "El entrenador u operador del partido lo iniciará. Aquí verás el marcador en vivo.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -494,7 +506,7 @@ private fun AlertaDuplicados(grupos: Int, onRevisar: () -> Unit) {
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Posibles eventos duplicados", color = ColoresPartido.Rojo, fontWeight = FontWeight.Bold)
-                Text("$grupos grupo(s) con mismo tipo, minuto y jugador", style = MaterialTheme.typography.bodyMedium)
+                Text("${cantidad(grupos, "grupo", "grupos")} con el mismo tipo, minuto y jugador", style = MaterialTheme.typography.bodyMedium)
             }
             TextButton(onClick = onRevisar) { Text("Revisar") }
         }
@@ -514,6 +526,8 @@ private fun ControlTiempo(controles: List<TipoEvento>, state: RegistroUiState, p
                     TiposEvento.FIN_PRIMER_TIEMPO -> partido.inicioSegundoTiempoMs == null && !partido.enDescanso &&
                         state.reloj.minuto >= partido.duracionTiempoMin
                     TiposEvento.INICIO_SEGUNDO_TIEMPO -> partido.enDescanso
+                    TiposEvento.FIN_PARTIDO -> partido.inicioSegundoTiempoMs != null &&
+                        state.reloj.minuto >= partido.duracionTiempoMin * 2
                     else -> false
                 }
                 if (recomendado) {
@@ -606,7 +620,7 @@ private fun Finalizado(state: RegistroUiState, partido: Partido, onCerrarActa: (
                 val conIncompletos = partido.actaCerradaConIncompletos ?: 0
                 Text(
                     if (conIncompletos > 0) {
-                        "Se cerró con $conIncompletos eventos incompletos. Ya no se pueden corregir eventos."
+                        "Se cerró con ${cantidad(conIncompletos, "evento incompleto", "eventos incompletos")}. Ya no se pueden corregir eventos."
                     } else {
                         "Ya no se pueden corregir eventos."
                     },

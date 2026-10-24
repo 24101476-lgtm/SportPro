@@ -10,12 +10,14 @@ import com.esan.sportpro.domain.partido.EstadoPartido
 import com.esan.sportpro.domain.partido.EstadoRespuestaConvocatoria
 import com.esan.sportpro.domain.partido.EventoPartido
 import com.esan.sportpro.domain.partido.JugadorConvocado
+import com.esan.sportpro.domain.partido.NuevoPartido
 import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.PartidoRepository
 import com.esan.sportpro.domain.partido.RespuestaConvocatoria
 import com.esan.sportpro.domain.partido.ResultadoPenal
 import com.esan.sportpro.domain.partido.TipoEvento
 import com.esan.sportpro.domain.partido.TiposEvento
+import com.esan.sportpro.domain.partido.TiposPartido
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -1321,55 +1323,29 @@ class FirestorePartidoRepository @Inject constructor(
         duracionTiempoMin: Int,
     ): String {
 
-        val uid =
-            uidActual
-
-        val ref =
-            partidos.document()
-
-        val batch =
-            firestore.batch()
+        val uid = uidActual
+        val ref = partidos.document()
+        val batch = firestore.batch()
 
         batch.set(
             ref,
             mapOf(
-                "nombreEquipo" to
-                        nombreEquipo,
-
-                "nombreRival" to
-                        nombreRival,
-
-                "categoria" to
-                        "Práctica",
-
-                "estado" to
-                        EstadoPartido
-                            .PROGRAMADO.name,
-
-                "alineacionConfirmada" to
-                        true,
-
-                "cambiosPermitidos" to
-                        cambiosPermitidos,
-
-                "duracionTiempoMin" to
-                        duracionTiempoMin,
-
-                "enDescanso" to
-                        false,
-
-                "operadorUid" to
-                        uid,
-
-                "entrenadorUid" to
-                        uid,
-
-                "creadoPor" to
-                        uid,
-
-                "fecha" to
-                        FieldValue
-                            .serverTimestamp(),
+                "nombreEquipo" to nombreEquipo,
+                "nombreRival" to nombreRival,
+                "categoria" to "Práctica",
+                "tipo" to TiposPartido.AMISTOSO,
+                "estado" to EstadoPartido.PROGRAMADO.name,
+                "actaCerrada" to false,
+                "alineacionConfirmada" to true,
+                "cambiosPermitidos" to cambiosPermitidos,
+                "duracionTiempoMin" to duracionTiempoMin,
+                "enDescanso" to false,
+                "golesEquipo" to 0,
+                "golesRival" to 0,
+                "operadorUid" to uid,
+                "entrenadorUid" to uid,
+                "creadoPor" to uid,
+                "fecha" to FieldValue.serverTimestamp(),
             ),
         )
 
@@ -1389,38 +1365,89 @@ class FirestorePartidoRepository @Inject constructor(
             )
 
         (1..16).forEach { dorsal ->
-
             batch.set(
-                ref.collection(
-                    COL_CONVOCADOS
-                ).document(
-                    "j$dorsal"
-                ),
+                ref.collection(COL_CONVOCADOS)
+                    .document("j$dorsal"),
                 mapOf(
-                    "nombre" to
-                            "Jugador $dorsal",
-
-                    "dorsal" to
-                            dorsal,
-
-                    "titular" to
-                            (dorsal <= 11),
-
-                    "posicion" to
-                            posiciones.getOrElse(
-                                dorsal - 1
-                            ) {
-                                "SUP"
-                            },
+                    "nombre" to "Jugador $dorsal",
+                    "dorsal" to dorsal,
+                    "titular" to (dorsal <= 11),
+                    "posicion" to posiciones.getOrElse(dorsal - 1) { "SUP" },
                 ),
             )
         }
 
-        batch.commitLogged(
-            "crearPartidoPractica"
+        batch.commitLogged("crearPartidoPractica")
+        return ref.id
+    }
+
+    override fun crearPartido(
+        nuevo: NuevoPartido
+    ): String {
+        val uid = uidActual
+        val ref = partidos.document()
+        val batch = firestore.batch()
+
+        batch.set(
+            ref,
+            mapOf(
+                "equipoId" to nuevo.equipoId,
+                "academiaId" to nuevo.academiaId,
+                "nombreEquipo" to nuevo.nombreEquipo,
+                "nombreRival" to nuevo.nombreRival,
+                // Nombre de campo que usa el módulo de Estadísticas.
+                "rivalNombre" to nuevo.nombreRival,
+                "categoria" to nuevo.categoria,
+                "tipo" to nuevo.tipo,
+                "temporada" to nuevo.temporada,
+                "estado" to EstadoPartido.PROGRAMADO.name,
+                "actaCerrada" to false,
+                "alineacionConfirmada" to nuevo.convocados.any { it.titular },
+                "cambiosPermitidos" to nuevo.cambiosPermitidos,
+                "duracionTiempoMin" to nuevo.duracionTiempoMin,
+                "enDescanso" to false,
+                "golesEquipo" to 0,
+                "golesRival" to 0,
+                "operadorUid" to uid,
+                "entrenadorUid" to uid,
+                "creadoPor" to uid,
+                "fecha" to FieldValue.serverTimestamp(),
+            ),
         )
 
+        // Solo se copian datos deportivos: los convocados los ve cualquier
+        // usuario autenticado, mientras que `jugadores` solo lo lee el personal de la academia.
+        nuevo.convocados.forEach { jugador ->
+            batch.set(
+                ref.collection(COL_CONVOCADOS).document(jugador.id),
+                mapOf(
+                    "nombre" to jugador.nombre,
+                    "dorsal" to jugador.dorsal,
+                    "titular" to jugador.titular,
+                    "posicion" to jugador.posicion,
+                ),
+            )
+        }
+
+        batch.commitLogged("crearPartido")
         return ref.id
+    }
+
+    override fun actualizarMarcador(
+        partidoId: String,
+        golesEquipo: Int,
+        golesRival: Int,
+    ) {
+        partidos.document(partidoId)
+            .update(
+                mapOf(
+                    "golesEquipo" to golesEquipo,
+                    "golesRival" to golesRival,
+                )
+            )
+            .addOnFailureListener {
+                reportarError("actualizarMarcador", it)
+            }
     }
 
     // ---------------------------------------------------------------- Registro eventos
@@ -1446,148 +1473,86 @@ class FirestorePartidoRepository @Inject constructor(
         batch.set(
             ref,
             borrador.toMap(
-                grupoId =
-                    ref.id,
-
-                version =
-                    1,
-
-                incompleto =
-                    incompleto,
-
-                fueraDeOrden =
-                    fueraDeOrden,
-
-                excedeCambios =
-                    excedeCambios,
-
-                eventoOrigenId =
-                    null,
+                partidoId = partidoId,
+                grupoId = ref.id,
+                version = 1,
+                incompleto = incompleto,
+                fueraDeOrden = fueraDeOrden,
+                excedeCambios = excedeCambios,
+                eventoOrigenId = null,
             ),
         )
 
-        eventosRelacionados
-            .forEach { relacionado ->
+        eventosRelacionados.forEach { relacionado ->
+            val relRef = eventosRef(partidoId).document()
 
-                val relRef =
-                    eventosRef(
-                        partidoId
-                    ).document()
-
-                batch.set(
-                    relRef,
-                    relacionado.toMap(
-                        grupoId =
-                            relRef.id,
-
-                        version =
-                            1,
-
-                        incompleto =
-                            incompleto,
-
-                        fueraDeOrden =
-                            fueraDeOrden,
-
-                        excedeCambios =
-                            false,
-
-                        eventoOrigenId =
-                            ref.id,
-                    ),
-                )
-            }
+            batch.set(
+                relRef,
+                relacionado.toMap(
+                    partidoId = partidoId,
+                    grupoId = relRef.id,
+                    version = 1,
+                    incompleto = incompleto,
+                    fueraDeOrden = fueraDeOrden,
+                    excedeCambios = false,
+                    eventoOrigenId = ref.id,
+                ),
+            )
+        }
 
         actualizarEstadoPartido(
-            batch =
-                batch,
-
-            partidoId =
-                partidoId,
-
-            tipoId =
-                borrador.tipo.id,
-
-            minuto =
-                borrador.minuto,
+            batch = batch,
+            partidoId = partidoId,
+            tipoId = borrador.tipo.id,
+            minuto = borrador.minuto,
         )
 
-        batch.commitLogged(
-            "registrarEvento"
-        )
-
+        batch.commitLogged("registrarEvento")
         return ref.id
     }
 
-    /**
-     * Los eventos de ámbito partido
-     * mueven el estado y el cronómetro.
-     */
+    /** Los eventos de ámbito partido mueven el estado y el cronómetro. */
     private fun actualizarEstadoPartido(
         batch: WriteBatch,
         partidoId: String,
         tipoId: String,
         minuto: Int,
     ) {
-        val cambios:
-                Map<String, Any?> =
+        val cambios: Map<String, Any?> =
             when (tipoId) {
-
                 TiposEvento.INICIO_PARTIDO ->
                     mapOf(
-                        "estado" to
-                                EstadoPartido
-                                    .EN_CURSO.name,
-
-                        "inicioPrimerTiempo" to
-                                FieldValue
-                                    .serverTimestamp(),
-
-                        "enDescanso" to
-                                false,
-
-                        "operadorUid" to
-                                uidActual,
+                        "estado" to EstadoPartido.EN_CURSO.name,
+                        "inicioPrimerTiempo" to FieldValue.serverTimestamp(),
+                        "enDescanso" to false,
+                        "operadorUid" to uidActual,
                     )
 
                 TiposEvento.FIN_PRIMER_TIEMPO ->
                     mapOf(
-                        "enDescanso" to
-                                true,
-
-                        "finPrimerTiempoMinuto" to
-                                minuto,
+                        "enDescanso" to true,
+                        "finPrimerTiempoMinuto" to minuto,
+                        "finPrimerTiempo" to FieldValue.serverTimestamp(),
                     )
 
                 TiposEvento.INICIO_SEGUNDO_TIEMPO ->
                     mapOf(
-                        "enDescanso" to
-                                false,
-
-                        "inicioSegundoTiempo" to
-                                FieldValue
-                                    .serverTimestamp(),
+                        "enDescanso" to false,
+                        "inicioSegundoTiempo" to FieldValue.serverTimestamp(),
                     )
 
                 TiposEvento.FIN_PARTIDO ->
                     mapOf(
-                        "estado" to
-                                EstadoPartido
-                                    .FINALIZADO.name,
-
-                        "finPartidoMinuto" to
-                                minuto,
+                        "estado" to EstadoPartido.FINALIZADO.name,
+                        "finPartidoMinuto" to minuto,
                     )
 
-                else ->
-                    return
+                else -> return
             }
 
         batch.update(
-            partidos.document(
-                partidoId
-            ),
-            cambios
+            partidos.document(partidoId),
+            cambios,
         )
     }
 
@@ -1600,49 +1565,28 @@ class FirestorePartidoRepository @Inject constructor(
         List<String>,
         incompleto: Boolean,
     ) {
-        val batch =
-            firestore.batch()
-
-        val nuevaRef =
-            eventosRef(
-                partidoId
-            ).document()
+        val batch = firestore.batch()
+        val nuevaRef = eventosRef(partidoId).document()
 
         val datos =
             borrador.toMap(
-                grupoId =
-                    original.grupoId,
-
-                version =
-                    original.version + 1,
-
-                incompleto =
-                    incompleto,
-
-                fueraDeOrden =
-                    original.fueraDeOrden,
-
-                excedeCambios =
-                    original.excedeCambios,
-
-                eventoOrigenId =
-                    original.eventoOrigenId,
+                partidoId = partidoId,
+                grupoId = original.grupoId,
+                version = original.version + 1,
+                incompleto = incompleto,
+                fueraDeOrden = original.fueraDeOrden,
+                excedeCambios = original.excedeCambios,
+                eventoOrigenId = original.eventoOrigenId,
             ).toMutableMap()
 
-        datos["motivo"] =
-            motivo.trim()
-
-        datos["camposModificados"] =
-            camposModificados
-
-        datos["versionAnteriorId"] =
-            original.id
+        datos["motivo"] = motivo.trim()
+        datos["camposModificados"] = camposModificados
+        datos["versionAnteriorId"] = original.id
 
         batch.set(
             nuevaRef,
-            datos
+            datos,
         )
-
         batch.update(
             eventosRef(
                 partidoId
@@ -1722,30 +1666,43 @@ class FirestorePartidoRepository @Inject constructor(
         partidoId: String,
         eventosIncompletos: Int,
     ) {
-        partidos
-            .document(partidoId)
+        partidos.document(partidoId)
             .update(
                 mapOf(
-                    "estado" to
-                            EstadoPartido
-                                .ACTA_CERRADA.name,
-
-                    "actaCerradaPor" to
-                            uidActual,
-
-                    "actaCerradaEn" to
-                            FieldValue
-                                .serverTimestamp(),
-
-                    "actaCerradaConIncompletos" to
-                            eventosIncompletos,
+                    // Estadísticas consulta FINALIZADO; la UI interpreta actaCerrada=true
+                    // como EstadoPartido.ACTA_CERRADA.
+                    "estado" to EstadoPartido.FINALIZADO.name,
+                    "actaCerrada" to true,
+                    "actaCerradaPor" to uidActual,
+                    "actaCerradaEn" to FieldValue.serverTimestamp(),
+                    "actaCerradaConIncompletos" to eventosIncompletos,
                 ),
             )
             .addOnFailureListener {
-                reportarError(
-                    "cerrarActa",
-                    it
-                )
+                reportarError("cerrarActa", it)
+            }
+    }
+
+    override fun cerrarActa(
+        partidoId: String,
+        eventosIncompletos: Int,
+        golesEquipo: Int,
+        golesRival: Int,
+    ) {
+        partidos.document(partidoId)
+            .update(
+                mapOf(
+                    "estado" to EstadoPartido.FINALIZADO.name,
+                    "actaCerrada" to true,
+                    "golesEquipo" to golesEquipo,
+                    "golesRival" to golesRival,
+                    "actaCerradaPor" to uidActual,
+                    "actaCerradaEn" to FieldValue.serverTimestamp(),
+                    "actaCerradaConIncompletos" to eventosIncompletos,
+                ),
+            )
+            .addOnFailureListener {
+                reportarError("cerrarActa", it)
             }
     }
 
@@ -1905,6 +1862,7 @@ class FirestorePartidoRepository @Inject constructor(
     // ---------------------------------------------------------------- Mapeos eventos
 
     private fun BorradorEvento.toMap(
+        partidoId: String,
         grupoId: String,
         version: Int,
         incompleto: Boolean,
@@ -1913,73 +1871,28 @@ class FirestorePartidoRepository @Inject constructor(
         eventoOrigenId: String?,
     ): Map<String, Any?> =
         mapOf(
-            "grupoId" to
-                    grupoId,
-
-            "version" to
-                    version,
-
-            "tipo" to
-                    tipo.id,
-
-            "tipoNombre" to
-                    tipo.nombre,
-
-            "minuto" to
-                    minuto,
-
-            "equipo" to
-                    equipo?.name,
-
-            "jugadorId" to
-                    jugadorId,
-
-            "jugadorNombre" to
-                    jugadorNombre,
-
-            "jugadorSecundarioId" to
-                    secundarioId,
-
-            "jugadorSecundarioNombre" to
-                    secundarioNombre,
-
-            "resultadoPenal" to
-                    resultadoPenal?.name,
-
-            "observacion" to
-                    observacion
-                        ?.takeIf {
-                            it.isNotBlank()
-                        },
-
-            "operadorUid" to
-                    uidActual,
-
-            "operadorNombre" to
-                    nombreActual,
-
-            "registradoEn" to
-                    FieldValue
-                        .serverTimestamp(),
-
-            "estado" to
-                    EstadoEvento
-                        .VIGENTE.name,
-
-            "versionCatalogo" to
-                    tipo.version,
-
-            "incompleto" to
-                    incompleto,
-
-            "fueraDeOrden" to
-                    fueraDeOrden,
-
-            "excedeCambios" to
-                    excedeCambios,
-
-            "eventoOrigenId" to
-                    eventoOrigenId,
+            "partidoId" to partidoId,
+            "grupoId" to grupoId,
+            "version" to version,
+            "tipo" to tipo.id,
+            "tipoNombre" to tipo.nombre,
+            "minuto" to minuto,
+            "equipo" to equipo?.name,
+            "jugadorId" to jugadorId,
+            "jugadorNombre" to jugadorNombre,
+            "jugadorSecundarioId" to secundarioId,
+            "jugadorSecundarioNombre" to secundarioNombre,
+            "resultadoPenal" to resultadoPenal?.name,
+            "observacion" to observacion?.takeIf { it.isNotBlank() },
+            "operadorUid" to uidActual,
+            "operadorNombre" to nombreActual,
+            "registradoEn" to FieldValue.serverTimestamp(),
+            "estado" to EstadoEvento.VIGENTE.name,
+            "versionCatalogo" to tipo.version,
+            "incompleto" to incompleto,
+            "fueraDeOrden" to fueraDeOrden,
+            "excedeCambios" to excedeCambios,
+            "eventoOrigenId" to eventoOrigenId,
         )
 
     // ---------------------------------------------------------------- Helpers de fechas
@@ -2006,121 +1919,94 @@ class FirestorePartidoRepository @Inject constructor(
         }
 
         return Partido(
-            id =
-                id,
-
-            nombreEquipo =
-                getString(
-                    "nombreEquipo"
-                ) ?: "Mi equipo",
-
-            nombreRival =
-                getString(
-                    "nombreRival"
-                ) ?: "Rival",
-
-            categoria =
-                getString(
-                    "categoria"
-                ),
+            id = id,
+            nombreEquipo = getString("nombreEquipo") ?: "Mi equipo",
+            nombreRival = getString("nombreRival") ?: "Rival",
+            categoria = getString("categoria"),
 
             estado =
-                enumOr(
-                    getString(
-                        "estado"
-                    ),
-                    EstadoPartido
-                        .PROGRAMADO
-                ),
+                if (getBoolean("actaCerrada") == true) {
+                    EstadoPartido.ACTA_CERRADA
+                } else {
+                    enumOr(
+                        getString("estado"),
+                        EstadoPartido.PROGRAMADO,
+                    )
+                },
 
             alineacionConfirmada =
-                getBoolean(
-                    "alineacionConfirmada"
-                ) ?: false,
+                getBoolean("alineacionConfirmada") ?: false,
 
             cambiosPermitidos =
-                getLong(
-                    "cambiosPermitidos"
-                )?.toInt()
-                    ?: 5,
+                getLong("cambiosPermitidos")?.toInt() ?: 5,
 
             duracionTiempoMin =
-                getLong(
-                    "duracionTiempoMin"
-                )?.toInt()
-                    ?: 45,
+                getLong("duracionTiempoMin")?.toInt() ?: 45,
 
             inicioPrimerTiempoMs =
-                millis(
-                    "inicioPrimerTiempo"
-                ),
+                millis("inicioPrimerTiempo"),
 
             inicioSegundoTiempoMs =
-                millis(
-                    "inicioSegundoTiempo"
-                ),
+                millis("inicioSegundoTiempo"),
 
             enDescanso =
-                getBoolean(
-                    "enDescanso"
-                ) ?: false,
+                getBoolean("enDescanso") ?: false,
 
             operadorUid =
-                getString(
-                    "operadorUid"
-                ),
+                getString("operadorUid"),
 
             entrenadorUid =
-                getString(
-                    "entrenadorUid"
-                ),
+                getString("entrenadorUid"),
 
             creadoPor =
-                getString(
-                    "creadoPor"
-                ),
+                getString("creadoPor"),
 
             fechaMs =
-                millis(
-                    "fecha"
-                ),
+                millis("fecha"),
 
             actaCerradaConIncompletos =
-                getLong(
-                    "actaCerradaConIncompletos"
-                )?.toInt(),
+                getLong("actaCerradaConIncompletos")?.toInt(),
 
             tienePendientes =
-                metadata
-                    .hasPendingWrites(),
+                metadata.hasPendingWrites(),
 
-            // ---------------- US-014
-
+            // US-014
             hora =
-                getString(
-                    "hora"
-                ),
+                getString("hora"),
 
             lugar =
-                getString(
-                    "lugar"
-                ),
+                getString("lugar"),
 
             tipoPartido =
-                getString(
-                    "tipoPartido"
-                ),
+                getString("tipoPartido"),
 
             maxConvocados =
-                getLong(
-                    "maxConvocados"
-                )?.toInt()
-                    ?: 23,
+                getLong("maxConvocados")?.toInt() ?: 23,
 
             fechaLimiteRespuestaMs =
-                millis(
-                    "fechaLimiteRespuesta"
-                ),
+                millis("fechaLimiteRespuesta"),
+
+            // Campos incorporados desde main
+            equipoId =
+                getString("equipoId"),
+
+            academiaId =
+                getString("academiaId"),
+
+            tipo =
+                getString("tipo") ?: TiposPartido.AMISTOSO,
+
+            temporada =
+                getString("temporada"),
+
+            golesEquipo =
+                getLong("golesEquipo")?.toInt() ?: 0,
+
+            golesRival =
+                getLong("golesRival")?.toInt() ?: 0,
+
+            finPrimerTiempoMs =
+                millis("finPrimerTiempo"),
         )
     }
 

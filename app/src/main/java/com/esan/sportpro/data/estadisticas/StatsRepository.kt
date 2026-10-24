@@ -26,9 +26,9 @@ import javax.inject.Singleton
  *
  * - `partidos`: equipoId, temporada, tipo (AMISTOSO|LIGA|TORNEO), estado (FINALIZADO|EN_CURSO|
  *   PROGRAMADO), fecha (Timestamp), rivalNombre, golesEquipo, golesRival.
- * - `eventos`: partidoId, equipoId, jugadorId (nulo = "Jugador no identificado"), tipo (GOL|
- *   ASISTENCIA|TARJETA_AMARILLA|TARJETA_ROJA|FALTA), minutosJugados, vigente (los anulados tienen
- *   vigente = false y se excluyen del cálculo, criterio de aceptación 1).
+ * - `partidos/{id}/eventos` y `partidos/{id}/convocados`: los escribe el módulo de Partido en
+ *   vivo; ver [eventosVigentesDe] para la traducción a goles, asistencias, tarjetas, faltas y minutos.
+ *   El marcador final (golesEquipo / golesRival) lo mantiene ese mismo módulo en el partido.
  * - `asistencias_entrenamiento`: equipoId, jugadorId, presente (Boolean), fecha.
  * - `jugadores`: nombre, equipoId.
  *
@@ -223,7 +223,7 @@ class StatsRepository @Inject constructor(
                 PartidoFinalizado(
                     id = doc.id,
                     fecha = fecha,
-                    rivalNombre = doc.getString("rivalNombre") ?: "Rival",
+                    rivalNombre = doc.getString("rivalNombre") ?: doc.getString("nombreRival") ?: "Rival",
                     golesEquipo = (doc.getLong("golesEquipo") ?: 0L).toInt(),
                     golesRival = (doc.getLong("golesRival") ?: 0L).toInt(),
                 )
@@ -231,39 +231,91 @@ class StatsRepository @Inject constructor(
         }.getOrDefault(emptyList())
     }
 
-    /** Firestore limita `whereIn` a 30 valores, por eso se consulta en bloques (chunks). */
+    /**
+     * Eventos vigentes de cada partido, leídos de la subcolección `partidos/{id}/eventos` que
+     * escribe el módulo de Partido en vivo, y traducidos al formato de esta pantalla:
+     * - Solo cuentan eventos de nuestro equipo (`equipo == PROPIO`) en estado `VIGENTE`
+     *   (los anulados y las versiones reemplazadas se excluyen, criterio 1).
+     * - "Jugador no identificado" se convierte en `jugadorId = null` (fila "Sin asignar").
+     * - La asistencia de un gol es `jugadorSecundarioId`.
+     * - Los minutos jugados se calculan con la alineación (`convocados`), los cambios y las rojas.
+     */
     private suspend fun eventosVigentesDe(partidoIds: List<String>): List<EventoPartido> {
-        if (partidoIds.isEmpty()) return emptyList()
         val resultados = mutableListOf<EventoPartido>()
-        partidoIds.chunked(30).forEach { bloque ->
-            val docs = runCatching {
-                firestore.collection("eventos")
-                    .whereIn("partidoId", bloque)
-                    .whereEqualTo("vigente", true)
-                    .get()
-                    .await()
-                    .documents
-            }.getOrDefault(emptyList())
-            docs.forEach { doc ->
-                resultados += EventoPartido(
-                    partidoId = doc.getString("partidoId") ?: return@forEach,
-                    jugadorId = doc.getString("jugadorId"),
-                    tipo = doc.getString("tipo") ?: return@forEach,
-                    minutosJugados = (doc.getLong("minutosJugados") ?: 0L).toInt(),
-                )
+        nombresConvocados = emptyMap()
+        partidoIds.forEach { partidoId ->
+            val ref = firestore.collection("partidos").document(partidoId)
+            val partido = runCatching { ref.get().await() }.getOrNull() ?: return@forEach
+            val eventos = runCatching { ref.collection("eventos").get().await().documents }
+                .getOrDefault(emptyList())
+                .filter { it.getString("estado") == "VIGENTE" && it.getString("equipo") == "PROPIO" }
+            val convocados = runCatching { ref.collection("convocados").get().await().documents }
+                .getOrDefault(emptyList())
+            nombresConvocados = nombresConvocados + convocados.associate {
+                it.id to (it.getString("nombre") ?: "Jugador sin nombre")
+            }
+
+            fun jugador(id: String?): String? = id?.takeUnless { it == "NO_IDENTIFICADO" || it == "RIVAL" }
+
+            eventos.forEach { doc ->
+                val tipo = doc.getString("tipo") ?: return@forEach
+                val principal = jugador(doc.getString("jugadorId"))
+                when (tipo) {
+                    "gol" -> {
+                        resultados += EventoPartido(partidoId, principal, "GOL", 0)
+                        jugador(doc.getString("jugadorSecundarioId"))?.let {
+                            resultados += EventoPartido(partidoId, it, "ASISTENCIA", 0)
+                        }
+                    }
+                    "tarjeta_amarilla" -> resultados += EventoPartido(partidoId, principal, "TARJETA_AMARILLA", 0)
+                    "tarjeta_roja" -> resultados += EventoPartido(partidoId, principal, "TARJETA_ROJA", 0)
+                    "falta" -> resultados += EventoPartido(partidoId, principal, "FALTA", 0)
+                }
+            }
+
+            // Minutos jugados: titulares desde el 0', suplentes desde que entran; hasta que salen,
+            // son expulsados o termina el partido.
+            val duracion = (partido.getLong("duracionTiempoMin") ?: 45L).toInt()
+            val fin = (partido.getLong("finPartidoMinuto") ?: (2L * duracion)).toInt()
+            val entradas = mutableMapOf<String, Int>()
+            val salidas = mutableMapOf<String, Int>()
+            convocados.filter { it.getBoolean("titular") == true }.forEach { entradas[it.id] = 0 }
+            eventos.sortedBy { it.getLong("minuto") ?: 0L }.forEach { doc ->
+                val minuto = (doc.getLong("minuto") ?: 0L).toInt()
+                when (doc.getString("tipo")) {
+                    "cambio" -> {
+                        jugador(doc.getString("jugadorId"))?.let { salidas.putIfAbsent(it, minuto) }
+                        jugador(doc.getString("jugadorSecundarioId"))?.let { entradas.putIfAbsent(it, minuto) }
+                    }
+                    "tarjeta_roja" -> jugador(doc.getString("jugadorId"))?.let { salidas.putIfAbsent(it, minuto) }
+                }
+            }
+            entradas.forEach { (jugadorId, desde) ->
+                val hasta = (salidas[jugadorId] ?: fin).coerceAtLeast(desde)
+                resultados += EventoPartido(partidoId, jugadorId, "MINUTOS", hasta - desde)
             }
         }
         return resultados
     }
 
-    private suspend fun nombresDeJugadores(equipoId: String): Map<String, String> = runCatching {
-        firestore.collection("jugadores")
-            .whereEqualTo("equipoId", equipoId)
-            .get()
-            .await()
-            .documents
-            .associate { it.id to (it.getString("nombre") ?: "Jugador sin nombre") }
-    }.getOrDefault(emptyMap())
+    /**
+     * Nombres de los jugadores. `jugadores` solo lo puede leer el personal de la academia, así que
+     * para jugadores y padres se usan los nombres copiados en los convocados de cada partido.
+     */
+    private suspend fun nombresDeJugadores(equipoId: String): Map<String, String> {
+        val delPlantel = runCatching {
+            firestore.collection("jugadores")
+                .whereEqualTo("equipoId", equipoId)
+                .get()
+                .await()
+                .documents
+                .associate { it.id to (it.getString("nombre") ?: "Jugador sin nombre") }
+        }.getOrDefault(emptyMap())
+        return nombresConvocados + delPlantel
+    }
+
+    /** Nombres leídos de `partidos/{id}/convocados` en la última consulta de eventos. */
+    private var nombresConvocados: Map<String, String> = emptyMap()
 
     private suspend fun asistenciaPorJugador(equipoId: String, filtro: FiltroEstadisticas): Map<String, Double> {
         val docs = runCatching {

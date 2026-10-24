@@ -17,37 +17,30 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.SportsSoccer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -150,24 +143,48 @@ fun PartidosListaScreen(
                     }
                 }
                 if (state.partidos.isEmpty()) {
-                    item { EstadoVacio() }
+                    item { EstadoVacio(state.puedeCrear) }
                 }
-                items(state.partidos, key = { it.id }) { partido ->
-                    PartidoCard(partido = partido, onClick = { onAbrirPartido(partido.id) })
+                // Agrupados por estado: lo que está en juego primero.
+                val grupos = listOf(
+                    "En vivo" to state.partidos.filter { it.estado == EstadoPartido.EN_CURSO },
+                    "Programados" to state.partidos.filter { it.estado == EstadoPartido.PROGRAMADO },
+                    "Finalizados" to state.partidos.filter {
+                        it.estado == EstadoPartido.FINALIZADO || it.estado == EstadoPartido.ACTA_CERRADA
+                    },
+                )
+                grupos.filter { it.second.isNotEmpty() }.forEach { (titulo, lista) ->
+                    item(key = "titulo-$titulo") {
+                        Text(
+                            "$titulo (${lista.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    items(lista, key = { it.id }) { partido ->
+                        PartidoCard(partido = partido, onClick = { onAbrirPartido(partido.id) })
+                    }
                 }
             }
         }
 
-        ExtendedFloatingActionButton(
-            onClick = { viewModel.mostrarCrear(true) },
-            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Partido de práctica", fontWeight = FontWeight.Bold) },
-            containerColor = ColoresPartido.Verde,
-            contentColor = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        )
+        if (state.puedeCrear) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            ) {
+                ExtendedFloatingActionButton(
+                    onClick = viewModel::abrirFormulario,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Nuevo partido", fontWeight = FontWeight.Bold) },
+                    containerColor = ColoresPartido.Verde,
+                    contentColor = Color.White,
+                )
+            }
+        }
         SnackbarHost(
             snackbar,
             modifier = Modifier
@@ -176,11 +193,8 @@ fun PartidosListaScreen(
         )
     }
 
-    if (state.mostrarCrear) {
-        CrearPartidoDialog(
-            onCrear = viewModel::crearPartidoPractica,
-            onCancelar = { viewModel.mostrarCrear(false) },
-        )
+    state.formulario?.let { form ->
+        NuevoPartidoSheet(state = state, form = form, viewModel = viewModel)
     }
 }
 
@@ -202,9 +216,9 @@ private fun Encabezado(partidos: List<Partido>) {
                 Text("Partidos", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text(
                     when {
-                        enVivo > 0 -> "$enVivo partido(s) en vivo ahora"
+                        enVivo > 0 -> "${cantidad(enVivo, "partido", "partidos")} en vivo ahora"
                         partidos.isEmpty() -> "Registra eventos en vivo desde la cancha"
-                        else -> "${partidos.size} partido(s) registrados"
+                        else -> "${cantidad(partidos.size, "partido registrado", "partidos registrados")}"
                     },
                     color = Color.White.copy(alpha = 0.85f),
                     style = MaterialTheme.typography.bodyMedium,
@@ -220,7 +234,7 @@ private fun Encabezado(partidos: List<Partido>) {
 }
 
 @Composable
-private fun EstadoVacio() {
+private fun EstadoVacio(puedeCrear: Boolean) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -234,7 +248,11 @@ private fun EstadoVacio() {
         }
         Text("Aún no hay partidos", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
         Text(
-            "Crea un partido de práctica para probar el registro en vivo.",
+            if (puedeCrear) {
+                "Toca \"Nuevo partido\" para programar uno con un equipo de tu academia."
+            } else {
+                "Cuando el entrenador programe un partido, aparecerá aquí y podrás seguirlo en vivo."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -273,7 +291,16 @@ private fun PartidoCard(partido: Partido, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text("vs", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+                if (partido.estado == EstadoPartido.PROGRAMADO) {
+                    Text("vs", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+                } else {
+                    Text(
+                        "${partido.golesEquipo} - ${partido.golesRival}",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
                 Text(
                     partido.nombreRival,
                     fontWeight = FontWeight.SemiBold,
@@ -288,70 +315,4 @@ private fun PartidoCard(partido: Partido, onClick: () -> Unit) {
             }
         }
     }
-}
-
-@Composable
-private fun CrearPartidoDialog(
-    onCrear: (String, String, Int, Int) -> Unit,
-    onCancelar: () -> Unit,
-) {
-    var equipo by remember { mutableStateOf("") }
-    var rival by remember { mutableStateOf("") }
-    var cambios by remember { mutableStateOf("5") }
-    var duracion by remember { mutableStateOf("45") }
-
-    AlertDialog(
-        onDismissRequest = onCancelar,
-        icon = { Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = ColoresPartido.Verde) },
-        title = { Text("Nuevo partido de práctica") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Se crea con un plantel de ejemplo (11 titulares y 5 suplentes) y la alineación confirmada.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    value = equipo,
-                    onValueChange = { equipo = it.take(40) },
-                    label = { Text("Tu equipo") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = rival,
-                    onValueChange = { rival = it.take(40) },
-                    label = { Text("Rival") },
-                    singleLine = true,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = cambios,
-                        onValueChange = { cambios = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Cambios") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = duracion,
-                        onValueChange = { duracion = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Min. por tiempo") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Text(
-                    "El partido termina solo al cumplirse 2 × ${duracion.toIntOrNull() ?: 45} minutos.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onCrear(equipo, rival, cambios.toIntOrNull() ?: 5, duracion.toIntOrNull() ?: 45) }) {
-                Text("Crear")
-            }
-        },
-        dismissButton = { TextButton(onClick = onCancelar) { Text("Cancelar") } },
-    )
 }

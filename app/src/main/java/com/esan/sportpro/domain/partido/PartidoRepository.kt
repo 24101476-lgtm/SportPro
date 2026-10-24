@@ -3,6 +3,7 @@ package com.esan.sportpro.domain.partido
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 
+
 /**
  * Acceso a los datos del partido.
  *
@@ -20,34 +21,40 @@ interface PartidoRepository {
      */
     val erroresEscritura: SharedFlow<String>
 
-    // ------------------------------------------------ Lecturas generales
+
+    // ============================================================
+    // LECTURAS GENERALES
+    // ============================================================
 
     fun observarPartidos(): Flow<List<Partido>>
 
     fun observarPartido(
-        partidoId: String
+        partidoId: String,
     ): Flow<Partido?>
 
     fun observarEventos(
-        partidoId: String
+        partidoId: String,
     ): Flow<List<EventoPartido>>
 
     fun observarConvocados(
-        partidoId: String
+        partidoId: String,
     ): Flow<List<JugadorConvocado>>
 
-    // ------------------------------------------------ US-013: catálogo
+
+    // ============================================================
+    // US-013 · CATÁLOGO DINÁMICO DE EVENTOS
+    // ============================================================
 
     fun observarCatalogo(): Flow<List<TipoEvento>>
 
     fun observarCatalogoCompleto(): Flow<List<TipoEvento>>
 
     fun crearTipoEvento(
-        tipo: TipoEvento
+        tipo: TipoEvento,
     ): String
 
     fun actualizarTipoEvento(
-        tipo: TipoEvento
+        tipo: TipoEvento,
     )
 
     fun cambiarEstadoTipoEvento(
@@ -62,7 +69,10 @@ interface PartidoRepository {
      */
     fun observarRolActual(): Flow<String?>
 
-    // ------------------------------------------------ US-014: programación y convocatoria
+
+    // ============================================================
+    // US-014 · PROGRAMACIÓN Y CONVOCATORIA
+    // ============================================================
 
     /**
      * Crea un partido programado pendiente de iniciar.
@@ -83,13 +93,13 @@ interface PartidoRepository {
      * Observa en tiempo real las respuestas de la convocatoria.
      */
     fun observarRespuestasConvocatoria(
-        partidoId: String
+        partidoId: String,
     ): Flow<List<RespuestaConvocatoria>>
 
     /**
      * Publica los jugadores seleccionados para la convocatoria.
      *
-     * Se almacenarán en respuestasConvocatoria y no en convocados,
+     * Se almacenan en respuestasConvocatoria y no en convocados,
      * porque convocados queda reservado para la alineación final.
      */
     fun publicarConvocatoria(
@@ -117,7 +127,7 @@ interface PartidoRepository {
     )
 
     /**
-     * Registra el envío de un recordatorio a jugadores
+     * Registra el envío de un recordatorio a los jugadores
      * que todavía no han respondido.
      */
     fun enviarRecordatorioConvocatoria(
@@ -125,11 +135,16 @@ interface PartidoRepository {
         jugadoresPendientesIds: List<String>,
     )
 
-    // ------------------------------------------------ Partido de práctica existente
+
+    // ============================================================
+    // CREACIÓN DE PARTIDOS
+    // ============================================================
 
     /**
      * Crea un partido de práctica con plantel de ejemplo
      * y alineación confirmada.
+     *
+     * Se conserva por compatibilidad con el flujo existente.
      */
     fun crearPartidoPractica(
         nombreEquipo: String,
@@ -138,10 +153,36 @@ interface PartidoRepository {
         duracionTiempoMin: Int,
     ): String
 
-    // ------------------------------------------------ Registro de eventos en vivo
+    /**
+     * Crea un partido con sus convocados (titulares y suplentes)
+     * y la alineación confirmada.
+     *
+     * Método incorporado desde main.
+     * Funciona sin conexión y devuelve el id inmediatamente.
+     */
+    fun crearPartido(
+        nuevo: NuevoPartido,
+    ): String
 
     /**
-     * Registra un evento nuevo. Devuelve el id del documento creado.
+     * Guarda en el documento del partido el marcador calculado
+     * a partir de los eventos vigentes.
+     */
+    fun actualizarMarcador(
+        partidoId: String,
+        golesEquipo: Int,
+        golesRival: Int,
+    )
+
+
+    // ============================================================
+    // REGISTRO DE EVENTOS EN VIVO
+    // ============================================================
+
+    /**
+     * Registra un evento nuevo.
+     *
+     * Devuelve el id del documento creado.
      *
      * [eventosRelacionados] se guardan en el mismo lote y apuntan
      * al evento principal.
@@ -172,13 +213,9 @@ interface PartidoRepository {
         incompleto: Boolean,
     )
 
-    fun observarJugadoresEquipo(
-        equipoId: String
-    ): Flow<List<JugadorPlantel>>
-
     /**
      * Marca el evento y los generados a partir de él
-     * como ANULADO. Nunca se borra.
+     * como ANULADO. Nunca se borra físicamente.
      */
     fun anularEvento(
         partidoId: String,
@@ -187,10 +224,45 @@ interface PartidoRepository {
         motivo: String,
     )
 
+
+    // ============================================================
+    // JUGADORES
+    // ============================================================
+
+    fun observarJugadoresEquipo(
+        equipoId: String,
+    ): Flow<List<JugadorPlantel>>
+
+
+    // ============================================================
+    // CIERRE DEL ACTA
+    // ============================================================
+
+    /**
+     * Firma original utilizada por tu módulo.
+     */
     fun cerrarActa(
         partidoId: String,
         eventosIncompletos: Int,
     )
+
+    /**
+     * Nueva firma incorporada desde main.
+     *
+     * Permite cerrar el acta guardando además
+     * el marcador final calculado.
+     */
+    fun cerrarActa(
+        partidoId: String,
+        eventosIncompletos: Int,
+        golesEquipo: Int,
+        golesRival: Int,
+    )
+
+
+    // ============================================================
+    // US-015 · RESPUESTA A CONVOCATORIA
+    // ============================================================
 
     fun observarRespuestaConvocatoria(
         partidoId: String,
@@ -204,16 +276,20 @@ interface PartidoRepository {
         motivo: String? = null,
     )
 
-    // ------------------------------------------------ US-016: alineación
+
+    // ============================================================
+    // US-016 · ALINEACIÓN
+    // ============================================================
 
     /**
      * Guarda la alineación final del partido.
      *
      * Los jugadores se almacenan en:
+     *
      * partidos/{partidoId}/convocados/{jugadorId}
      *
-     * Esta colección es la que consume posteriormente
-     * el módulo de registro del partido en vivo.
+     * Esta colección es consumida posteriormente
+     * por el módulo de registro del partido en vivo.
      */
     fun guardarAlineacionFinal(
         partidoId: String,

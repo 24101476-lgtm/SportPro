@@ -14,10 +14,8 @@ SportPro - App móvil de gestión de academias deportivas (Desarrollo de Aplicac
 - Android Studio (verificado con la serie 2026.1.x del equipo; si al abrir el proyecto Android
   Studio ofrece actualizar el Android Gradle Plugin / Gradle Wrapper, es seguro aceptar).
 - JDK 17.
-- El proyecto **no incluye `gradlew`/`gradle-wrapper.jar`** todavía: al abrir la carpeta en
-  Android Studio, acepta la generación automática del wrapper (o ejecuta
-  `gradle wrapper --gradle-version 8.11` una vez si tienes Gradle instalado localmente) y
-  commitea esos archivos en tu primer PR de infraestructura.
+- El repositorio incluye el Gradle Wrapper: ejecuta `./gradlew assembleDebug` (o `gradlew.bat` en
+  Windows) y `./gradlew testDebugUnitTest` para las pruebas unitarias.
 
 ## Firebase
 
@@ -65,3 +63,23 @@ referenciar `Closes #<numero>` para cerrar el issue al mergear.
 
 Las 30 historias de usuario están documentadas como GitHub Issues (`US-001` a `US-030`),
 etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
+
+## Estado del proyecto (entrega semana 7)
+
+| Módulo | Historias | Estado |
+|---|---|---|
+| Cuentas: registro con rol, login, recuperar contraseña, sesión persistente, cierre de sesión | US-001, US-002 | Implementado |
+| Navegación principal por rol | US-003 | Implementado (`HomeModule.visiblesPara`) |
+| Academia: equipos por categoría | US-004, US-005 | Implementado (alta, edición, desactivar) |
+| Jugadores: perfil con datos físicos, contacto y emergencia | US-006, US-007 | Implementado (sin fotografía) |
+| Entrenamientos: planificación, biblioteca de ejercicios, asistencia e historial | US-009 a US-013 | Implementado |
+| Partido en vivo, eventos y correcciones | — | Implementado (ver `docs/diseno-tecnico-partido-en-vivo.md`) |
+| Mensualidades, Estadísticas, Anuncios, Comunidad | US-008, US-026 a US-030 | Implementado |
+| Resumen narrativo con IA | — | Diseño listo (`docs/diseno-integracion-ia.md`); implementación en semana 12 |
+
+## Documentación técnica
+
+- [`docs/diseno-tecnico-partido-en-vivo.md`](docs/diseno-tecnico-partido-en-vivo.md): registro de eventos en tiempo real, offline y trazabilidad.
+- [`docs/diseno-integracion-ia.md`](docs/diseno-integracion-ia.md): integración segura con el proveedor de IA.
+- [`docs/modelo-datos-gestion.md`](docs/modelo-datos-gestion.md): colecciones de equipos, jugadores y entrenamientos, y permisos por rol.
+- `firestore.rules`: reglas de seguridad. Copiarlas en Firebase Console → Firestore Database → Reglas → Publicar.

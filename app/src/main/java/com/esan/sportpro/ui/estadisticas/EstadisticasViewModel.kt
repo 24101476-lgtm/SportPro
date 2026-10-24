@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.estadisticas
 
+import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.estadisticas.StatsRepository
 import com.esan.sportpro.domain.estadisticas.ColumnaEstadisticaJugador

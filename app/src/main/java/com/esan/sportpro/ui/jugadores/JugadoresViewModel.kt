@@ -265,7 +265,9 @@ class JugadoresViewModel @Inject constructor(
         val codigo = ReglasVinculacion.generarCodigo(currentState.jugadores.map { it.codigoVinculacion }.toSet())
         viewModelScope.launch {
             try {
-                val confirmado = vinculacionRepository.asignarCodigo(jugador, codigo)
+                // Criterio 5: el apoderado ve nombre y categoría ("Barcelona FC · Sub-13").
+                val etiqueta = currentState.equipos.firstOrNull { it.id == jugador.equipoId }?.etiqueta ?: jugador.equipoNombre
+                val confirmado = vinculacionRepository.asignarCodigo(jugador, codigo, etiqueta)
                 val texto = "Código generado: $codigo"
                 sendEvent(JugadoresEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
             } catch (e: Exception) {

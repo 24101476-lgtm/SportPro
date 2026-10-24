@@ -37,6 +37,9 @@ interface VinculacionRepository {
     /** Solo el administrador; el padre pierde el acceso en cuanto el cambio llega al servidor. */
     suspend fun revocar(vinculacion: Vinculacion, uid: String, nombre: String): Boolean
 
-    /** Asigna el código de vinculación a un jugador que todavía no lo tiene. */
-    suspend fun asignarCodigo(jugador: Jugador, codigo: String): Boolean
+    /**
+     * Asigna el código de vinculación a un jugador que todavía no lo tiene.
+     * @param equipoEtiqueta equipo y categoría ("Barcelona FC · Sub-13") que verá el apoderado.
+     */
+    suspend fun asignarCodigo(jugador: Jugador, codigo: String, equipoEtiqueta: String): Boolean
 }

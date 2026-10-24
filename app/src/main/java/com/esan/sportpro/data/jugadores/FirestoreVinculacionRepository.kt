@@ -164,7 +164,7 @@ class FirestoreVinculacionRepository @Inject constructor(
         return lote.commit().esperarConfirmacion()
     }
 
-    override suspend fun asignarCodigo(jugador: Jugador, codigo: String): Boolean {
+    override suspend fun asignarCodigo(jugador: Jugador, codigo: String, equipoEtiqueta: String): Boolean {
         val lote = firestore.batch()
         lote.update(firestore.collection("jugadores").document(jugador.id), "codigoVinculacion", codigo)
         lote.set(
@@ -172,7 +172,7 @@ class FirestoreVinculacionRepository @Inject constructor(
             mapOf(
                 "academiaId" to jugador.academiaId,
                 "equipoId" to jugador.equipoId,
-                "equipoNombre" to jugador.equipoNombre,
+                "equipoNombre" to equipoEtiqueta,
                 "nombre" to jugador.nombreCompleto,
                 "codigo" to codigo,
                 "activo" to jugador.activo,

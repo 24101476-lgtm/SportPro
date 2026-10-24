@@ -10,8 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -20,16 +20,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.anuncios.Anuncio
-import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.common.EstadoVacioModulo
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.partido.ColoresPartido
 
 /** US-027 — Frame 126_Anuncios_Lista (incluye el banner de urgentes del Frame 129). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,53 +48,67 @@ fun AnunciosListaScreen(
 
     Scaffold(
         modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = { Text("Anuncios") },
-                actions = {
-                    IconButton(onClick = onAbrirPreferencias) {
-                        Icon(Icons.Default.NotificationsOff, contentDescription = "Preferencias de notificaciones")
-                    }
-                },
-            )
-        },
         floatingActionButton = {
             if (state.puedePublicar) {
-                FloatingActionButton(onClick = onNuevoAnuncio) {
+                FloatingActionButton(
+                    onClick = onNuevoAnuncio,
+                    containerColor = ColoresPartido.Verde,
+                    contentColor = Color.White,
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "Nuevo anuncio")
                 }
             }
         },
     ) { padding ->
-        when {
-            state.isLoading -> Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) { CircularProgressIndicator() }
-
-            state.anuncios.isEmpty() && state.anunciosUrgentesNoLeidos.isEmpty() -> EmptyStateMessage(
-                mensaje = "Todavía no hay anuncios publicados",
-                modifier = Modifier.padding(padding),
-            )
-
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (state.anunciosUrgentesNoLeidos.isNotEmpty()) {
-                    item {
-                        AnuncioUrgenteBanner(
-                            anuncios = state.anunciosUrgentesNoLeidos,
-                            onAbrir = onAbrirAnuncio,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EncabezadoModulo(
+                titulo = "Anuncios",
+                subtitulo = "Comunicados de tu academia",
+                icono = Icons.Default.Campaign,
+                accion = {
+                    IconButton(onClick = onAbrirPreferencias) {
+                        Icon(
+                            Icons.Default.NotificationsOff,
+                            contentDescription = "Preferencias de notificaciones",
+                            tint = Color.White,
                         )
                     }
-                }
-                items(state.anuncios, key = { it.id }) { anuncio ->
-                    AnuncioListaItem(anuncio = anuncio, onClick = { onAbrirAnuncio(anuncio) })
+                },
+            )
+            when {
+                state.isLoading -> Column(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) { CircularProgressIndicator() }
+
+                state.anuncios.isEmpty() && state.anunciosUrgentesNoLeidos.isEmpty() -> EstadoVacioModulo(
+                    titulo = "Todavía no hay anuncios",
+                    mensaje = "Cuando se publique un comunicado, aparecerá aquí",
+                    icono = Icons.Default.Campaign,
+                )
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (state.anunciosUrgentesNoLeidos.isNotEmpty()) {
+                        item {
+                            AnuncioUrgenteBanner(
+                                anuncios = state.anunciosUrgentesNoLeidos,
+                                onAbrir = onAbrirAnuncio,
+                            )
+                        }
+                    }
+                    items(state.anuncios, key = { it.id }) { anuncio ->
+                        AnuncioListaItem(anuncio = anuncio, onClick = { onAbrirAnuncio(anuncio) })
+                    }
                 }
             }
         }
@@ -100,7 +117,7 @@ fun AnunciosListaScreen(
 
 @Composable
 private fun AnuncioListaItem(anuncio: Anuncio, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    TarjetaSportPro(onClick = onClick) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -4,6 +4,7 @@ import com.esan.sportpro.data.esperarConfirmacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.toObject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -11,13 +12,14 @@ import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Perfiles de jugador en la colección `jugadores` (US-006/US-007). */
+/** Perfiles de jugador en `jugadores` y su entrada pública mínima en `directorio_jugadores` (US-006/US-007). */
 @Singleton
 class FirestoreJugadorRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : JugadorRepository {
 
     private val coleccion get() = firestore.collection("jugadores")
+    private val directorio get() = firestore.collection("directorio_jugadores")
 
     override fun observarJugadores(academiaId: String): Flow<List<Jugador>> = callbackFlow {
         val registro = coleccion.whereEqualTo("academiaId", academiaId)
@@ -33,7 +35,7 @@ class FirestoreJugadorRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
-    override suspend fun guardar(jugador: Jugador): Boolean {
+    override suspend fun guardar(jugador: Jugador, equipoEtiqueta: String): Boolean {
         // Se escribe un mapa explícito (y no el objeto) para no persistir propiedades calculadas.
         val datos = mapOf(
             "equipoId" to jugador.equipoId,
@@ -52,20 +54,47 @@ class FirestoreJugadorRepository @Inject constructor(
             "contactoEmergenciaNombre" to jugador.contactoEmergenciaNombre.trim(),
             "contactoEmergenciaTelefono" to jugador.contactoEmergenciaTelefono.trim(),
             "contactoEmergenciaParentesco" to jugador.contactoEmergenciaParentesco.trim(),
+            "codigoVinculacion" to jugador.codigoVinculacion,
         )
-        return if (jugador.id.isBlank()) {
-            coleccion.document().set(
+        val nuevo = jugador.id.isBlank()
+        val documento = if (nuevo) coleccion.document() else coleccion.document(jugador.id)
+        val lote = firestore.batch()
+        if (nuevo) {
+            lote.set(
+                documento,
                 datos + mapOf(
                     "academiaId" to jugador.academiaId,
                     "activo" to true,
                     "creadoPor" to jugador.creadoPor,
                 ),
-            ).esperarConfirmacion()
+            )
         } else {
-            coleccion.document(jugador.id).update(datos).esperarConfirmacion()
+            lote.update(documento, datos)
         }
+        lote.set(
+            directorio.document(documento.id),
+            mapOf(
+                "academiaId" to jugador.academiaId,
+                "equipoId" to jugador.equipoId,
+                "equipoNombre" to equipoEtiqueta,
+                "nombre" to jugador.nombreCompleto,
+                "codigo" to jugador.codigoVinculacion,
+                "activo" to (if (nuevo) true else jugador.activo),
+            ),
+            // merge: nunca pisa el contador `apoderadosAprobados`, que mantiene la vinculación.
+            SetOptions.merge(),
+        )
+        return lote.commit().esperarConfirmacion()
     }
 
-    override suspend fun cambiarEstado(jugadorId: String, activo: Boolean): Boolean =
-        coleccion.document(jugadorId).update("activo", activo).esperarConfirmacion()
+    override suspend fun cambiarEstado(jugador: Jugador, activo: Boolean): Boolean {
+        val lote = firestore.batch()
+        lote.update(coleccion.document(jugador.id), "activo", activo)
+        lote.set(
+            directorio.document(jugador.id),
+            mapOf("academiaId" to jugador.academiaId, "activo" to activo),
+            SetOptions.merge(),
+        )
+        return lote.commit().esperarConfirmacion()
+    }
 }

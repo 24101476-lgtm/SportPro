@@ -86,10 +86,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // US-007: el padre tiene un vínculo aprobado con el jugador. El id del vínculo es
+    // {padreUid}_{jugadorId}, así basta un `get` para comprobarlo.
+    function vinculoAprobado(jugadorId) {
+      return autenticado()
+        && exists(/databases/$(database)/documents/vinculaciones/$(request.auth.uid + '_' + jugadorId))
+        && get(/databases/$(database)/documents/vinculaciones/$(request.auth.uid + '_' + jugadorId)).data.estado == 'APROBADA';
+    }
+
     // US-006/US-007: perfil del jugador. Incluye datos físicos y de contacto de posibles menores
-    // de edad, por eso solo lo leen y editan el administrador y el entrenador de su academia.
+    // de edad, por eso solo lo leen el administrador y el entrenador de su academia, y el
+    // apoderado con vínculo aprobado (solo el de su hijo). Solo el personal lo edita.
     match /jugadores/{jugadorId} {
-      allow read: if esStaff() && resource.data.academiaId == academiaPropia();
+      allow read: if (esStaff() && resource.data.academiaId == academiaPropia())
+        || vinculoAprobado(jugadorId);
       allow create: if esStaff()
         && request.resource.data.academiaId == academiaPropia()
         && request.resource.data.creadoPor == request.auth.uid;
@@ -177,10 +187,56 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Vínculo padre/madre ↔ jugador.
-    match /vinculaciones/{id} {
-      allow read: if autenticado();
-      allow write: if autenticado();
+    // US-007: datos mínimos de cada jugador (nombre, equipo, código y contador de apoderados)
+    // para que el padre de la misma academia pida la vinculación. Sin datos sensibles.
+    match /directorio_jugadores/{jugadorId} {
+      allow read: if autenticado() && resource.data.academiaId == academiaPropia();
+      allow create, update: if esStaff()
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.get('apoderadosAprobados', 0) >= 0
+        && request.resource.data.get('apoderadosAprobados', 0) <= 2;
+      allow delete: if false;
+    }
+
+    // US-007: vínculo padre/madre ↔ jugador, con id {padreUid}_{jugadorId}.
+    // - El padre lee los suyos y crea (o reenvía tras un rechazo o revocación) su solicitud
+    //   PENDIENTE, siempre a su nombre.
+    // - El personal de la academia aprueba o rechaza las pendientes; solo el administrador
+    //   revoca una aprobada. Padre y jugador del vínculo no se pueden cambiar.
+    match /vinculaciones/{vinculacionId} {
+      function solicitudPropiaValida() {
+        return rol() == 'PADRE_DE_FAMILIA'
+          && vinculacionId == request.auth.uid + '_' + request.resource.data.jugadorId
+          && request.resource.data.padreUid == request.auth.uid
+          && request.resource.data.estado == 'PENDIENTE'
+          && request.resource.data.academiaId == academiaPropia();
+      }
+
+      allow read: if autenticado()
+        && (resource.data.padreUid == request.auth.uid
+          || (esStaff() && resource.data.academiaId == academiaPropia()));
+
+      allow create: if autenticado() && solicitudPropiaValida();
+
+      allow update: if autenticado() && (
+        (solicitudPropiaValida() && resource.data.estado in ['RECHAZADA', 'REVOCADA'])
+        || (esStaff()
+          && resource.data.academiaId == academiaPropia()
+          && request.resource.data.academiaId == resource.data.academiaId
+          && request.resource.data.padreUid == resource.data.padreUid
+          && request.resource.data.jugadorId == resource.data.jugadorId
+          && ((resource.data.estado == 'PENDIENTE' && request.resource.data.estado in ['APROBADA', 'RECHAZADA'])
+            || (esAdmin() && resource.data.estado == 'APROBADA' && request.resource.data.estado == 'REVOCADA')))
+      );
+
+      allow delete: if false;
+
+      // Criterio 8: registro de cada acción; nunca se edita ni se borra.
+      match /auditoria/{registroId} {
+        allow read: if esStaff();
+        allow create: if autenticado() && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
     // US-026/US-027: anuncios y preferencias de notificación.

@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,7 +57,9 @@ import com.esan.sportpro.ui.common.EmptyStateMessage
 
 /**
  * Módulo Jugadores (US-006/US-007). Navegación interna por estado del ViewModel:
- * lista → detalle → formulario. Solo administrador y entrenador acceden (privacidad de menores).
+ * lista → detalle → formulario, y lista → solicitudes de vinculación (US-007). Administrador y
+ * entrenador ven todos los perfiles; el padre de familia ve solo a sus hijos vinculados
+ * ([MisHijosScreen]); el jugador no accede (privacidad de menores).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +78,13 @@ fun JugadoresScreen(
 
     BackHandler(enabled = state.pantalla == PantallaJugadores.Formulario) { viewModel.cancelarFormulario() }
     BackHandler(enabled = state.pantalla is PantallaJugadores.Detalle) { viewModel.volverALista() }
+    BackHandler(enabled = state.pantalla == PantallaJugadores.Solicitudes) { viewModel.volverALista() }
+
+    // US-007: el padre de familia ve aquí a sus hijos vinculados (con su propio ViewModel).
+    if (state.esPadre) {
+        MisHijosScreen(modifier = modifier)
+        return
+    }
 
     when {
         state.cargando -> Column(
@@ -104,6 +114,23 @@ fun JugadoresScreen(
                 ListaJugadores(state = state, viewModel = viewModel, modifier = Modifier.padding(padding))
             }
 
+            is PantallaJugadores.Solicitudes -> Scaffold(
+                modifier = modifier,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Solicitudes de vinculación") },
+                        navigationIcon = {
+                            IconButton(onClick = viewModel::volverALista) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                            }
+                        },
+                    )
+                },
+            ) { padding ->
+                SolicitudesVinculacionContenido(state = state, viewModel = viewModel, modifier = Modifier.padding(padding))
+            }
+
             is PantallaJugadores.Detalle -> {
                 val jugador = state.jugador(pantalla.jugadorId)
                 Scaffold(
@@ -129,6 +156,7 @@ fun JugadoresScreen(
                             onEditar = { viewModel.editarJugador(jugador) },
                             onCambiarEstado = { viewModel.cambiarEstado(jugador) },
                             modifier = Modifier.padding(padding),
+                            apoderados = { SeccionApoderados(state = state, jugador = jugador, viewModel = viewModel) },
                         )
                     }
                 }
@@ -156,6 +184,8 @@ fun JugadoresScreen(
             }
         }
     }
+
+    DialogosVinculacion(state = state, viewModel = viewModel)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -166,6 +196,17 @@ private fun ListaJugadores(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        // US-007: aviso dentro de la app de las solicitudes pendientes (hasta que exista el push).
+        val pendientes = state.solicitudesPendientes.size
+        OutlinedButton(
+            onClick = viewModel::abrirSolicitudes,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        ) {
+            Icon(Icons.Default.FamilyRestroom, contentDescription = null)
+            Text(
+                if (pendientes > 0) "  Solicitudes de vinculación ($pendientes pendientes)" else "  Solicitudes de vinculación",
+            )
+        }
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -251,6 +292,7 @@ private fun DetalleJugador(
     onEditar: () -> Unit,
     onCambiarEstado: () -> Unit,
     modifier: Modifier = Modifier,
+    apoderados: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -284,6 +326,8 @@ private fun DetalleJugador(
             FilaDato("Presente / Tarde", "${resumen.presentes} / ${resumen.tardes}")
             FilaDato("Justificado / Ausente", "${resumen.justificados} / ${resumen.ausentes}")
         }
+
+        apoderados()
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),

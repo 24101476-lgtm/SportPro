@@ -32,9 +32,16 @@ class HomeModuleTest {
     }
 
     @Test
-    fun padre_soloVeMensualidadesPartidoEstadisticasYComunidad() {
+    fun padre_veSusHijosMensualidadesPartidoEstadisticasYComunidad() {
+        // US-007: Jugadores muestra al padre solo "Mis hijos" (sus vinculaciones aprobadas).
         assertEquals(
-            listOf(HomeModule.MENSUALIDADES, HomeModule.PARTIDO, HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD),
+            listOf(
+                HomeModule.JUGADORES,
+                HomeModule.MENSUALIDADES,
+                HomeModule.PARTIDO,
+                HomeModule.ESTADISTICAS,
+                HomeModule.COMUNIDAD,
+            ),
             HomeModule.visiblesPara(UserRole.PADRE_DE_FAMILIA),
         )
     }

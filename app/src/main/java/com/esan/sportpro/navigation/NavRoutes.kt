@@ -34,8 +34,8 @@ enum class HomeModule(val label: String) {
          * - Entrenador: gestiona plantel, entrenamientos y partido; no ve la configuración de la
          *   academia más allá de la lectura de equipos (la escritura se restringe en pantalla).
          * - Jugador: sus entrenamientos, partidos, estadísticas y la comunidad.
-         * - Padre de familia: mensualidades de sus hijos, partidos, estadísticas y comunidad.
-         *   No accede a datos físicos ni de contacto de otros jugadores (módulo Jugadores oculto).
+         * - Padre de familia: sus hijos vinculados (US-007: el módulo Jugadores le muestra solo
+         *   "Mis hijos", nunca a otros jugadores), mensualidades, partidos, estadísticas y comunidad.
          */
         fun visiblesPara(rol: UserRole): List<HomeModule> = when (rol) {
             UserRole.ADMINISTRADOR -> entries.toList()
@@ -43,7 +43,7 @@ enum class HomeModule(val label: String) {
                 ACADEMIA, JUGADORES, ENTRENAMIENTOS, PARTIDO, ESTADISTICAS, COMUNIDAD, IA,
             )
             UserRole.JUGADOR -> listOf(ENTRENAMIENTOS, PARTIDO, ESTADISTICAS, COMUNIDAD)
-            UserRole.PADRE_DE_FAMILIA -> listOf(MENSUALIDADES, PARTIDO, ESTADISTICAS, COMUNIDAD)
+            UserRole.PADRE_DE_FAMILIA -> listOf(JUGADORES, MENSUALIDADES, PARTIDO, ESTADISTICAS, COMUNIDAD)
         }
     }
 }

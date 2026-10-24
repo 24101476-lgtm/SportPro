@@ -1,26 +1,37 @@
 package com.esan.sportpro.data.entrenamientos
 
+import android.net.Uri
 import com.esan.sportpro.data.esperarConfirmacion
+import com.esan.sportpro.data.imagenes.CompresorImagen
 import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
+import com.esan.sportpro.domain.entrenamientos.ResultadoGuardarEjercicio
 import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObject
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.ZoneId
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Entrenamientos (`entrenamientos`) y biblioteca de ejercicios (`ejercicios`) — US-009 a US-013. */
+/**
+ * Entrenamientos (`entrenamientos`) y biblioteca de ejercicios (`ejercicios`) — US-009 a US-013.
+ * Las imágenes de la biblioteca se guardan en Cloud Storage: `ejercicios/{ejercicioId}/imagen.jpg`.
+ */
 @Singleton
 class FirestoreEntrenamientoRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage,
+    private val compresor: CompresorImagen,
 ) : EntrenamientoRepository {
 
     private val entrenamientos get() = firestore.collection("entrenamientos")
@@ -54,6 +65,7 @@ class FirestoreEntrenamientoRepository @Inject constructor(
                     "nombre" to it.nombre.trim(),
                     "descripcion" to it.descripcion.trim(),
                     "duracionMin" to it.duracionMin,
+                    "ejercicioId" to it.ejercicioId,
                 )
             },
         )
@@ -115,13 +127,74 @@ class FirestoreEntrenamientoRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
-    override suspend fun guardarEnBiblioteca(ejercicio: EjercicioBiblioteca): Boolean =
-        biblioteca.document().set(
-            mapOf(
-                "academiaId" to ejercicio.academiaId,
-                "nombre" to ejercicio.nombre.trim(),
-                "descripcion" to ejercicio.descripcion.trim(),
-                "duracionMin" to ejercicio.duracionMin,
-            ),
-        ).esperarConfirmacion()
+    override suspend fun guardarEnBiblioteca(
+        ejercicio: EjercicioBiblioteca,
+        imagenLocal: String?,
+        quitarImagen: Boolean,
+    ): ResultadoGuardarEjercicio {
+        val nuevo = ejercicio.id.isBlank()
+        // El id se genera antes para poder guardar la imagen en ejercicios/{id}/imagen.jpg.
+        val documento = if (nuevo) biblioteca.document() else biblioteca.document(ejercicio.id)
+
+        var imagenUrl = if (quitarImagen) "" else ejercicio.imagenUrl
+        var imagenFallida = false
+        if (imagenLocal != null) {
+            val subida = subirImagen(documento.id, Uri.parse(imagenLocal))
+            if (subida != null) imagenUrl = subida else imagenFallida = true
+        } else if (quitarImagen && ejercicio.imagenUrl.isNotBlank()) {
+            runCatching { imagenEjercicio(documento.id).delete() }
+        }
+
+        val datos = mapOf(
+            "nombre" to ejercicio.nombre.trim(),
+            "objetivo" to ejercicio.objetivo.trim(),
+            "categoria" to ejercicio.categoria,
+            "duracionMin" to ejercicio.duracionMin,
+            "minJugadores" to ejercicio.minJugadores,
+            "materiales" to ejercicio.materiales.trim(),
+            "descripcion" to ejercicio.descripcion.trim(),
+            "imagenUrl" to imagenUrl,
+        )
+        val confirmado = if (nuevo) {
+            documento.set(
+                datos + mapOf(
+                    "academiaId" to ejercicio.academiaId,
+                    "activo" to true,
+                    "creadoPor" to ejercicio.creadoPor,
+                ),
+            ).esperarConfirmacion()
+        } else {
+            documento.update(datos).esperarConfirmacion()
+        }
+        return ResultadoGuardarEjercicio(confirmado = confirmado, imagenFallida = imagenFallida)
+    }
+
+    override suspend fun cambiarEstadoEjercicio(ejercicioId: String, activo: Boolean): Boolean =
+        biblioteca.document(ejercicioId).update("activo", activo).esperarConfirmacion()
+
+    override suspend fun eliminarEjercicio(ejercicio: EjercicioBiblioteca): Boolean {
+        val confirmado = biblioteca.document(ejercicio.id).delete().esperarConfirmacion()
+        if (ejercicio.imagenUrl.isNotBlank()) runCatching { imagenEjercicio(ejercicio.id).delete() }
+        return confirmado
+    }
+
+    private fun imagenEjercicio(ejercicioId: String) = storage.reference.child("ejercicios/$ejercicioId/imagen.jpg")
+
+    /**
+     * Comprime y sube la imagen. Cloud Storage no tiene cola offline como Firestore: sin conexión
+     * la subida falla (o vence el tiempo) y el ejercicio se guarda igual, sin imagen.
+     * @return la URL de descarga, o `null` si no se pudo subir.
+     */
+    private suspend fun subirImagen(ejercicioId: String, uri: Uri): String? = runCatching {
+        val bytes = compresor.comprimir(uri) ?: return null
+        withTimeoutOrNull(TIEMPO_MAXIMO_SUBIDA_MS) {
+            val referencia = imagenEjercicio(ejercicioId)
+            referencia.putBytes(bytes).await()
+            referencia.downloadUrl.await().toString()
+        }
+    }.getOrNull()
+
+    private companion object {
+        const val TIEMPO_MAXIMO_SUBIDA_MS = 20_000L
+    }
 }

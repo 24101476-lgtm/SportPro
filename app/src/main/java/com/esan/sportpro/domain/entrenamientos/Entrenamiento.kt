@@ -3,11 +3,16 @@ package com.esan.sportpro.domain.entrenamientos
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.Exclude
 
-/** Ejercicio dentro de una sesión de entrenamiento. */
+/**
+ * Ejercicio dentro de una sesión de entrenamiento. Es una copia: cambiar o desactivar el ejercicio
+ * en la biblioteca no altera las sesiones ya planificadas. [ejercicioId] apunta al ejercicio de la
+ * biblioteca del que salió (vacío si se escribió solo para esta sesión).
+ */
 data class Ejercicio(
     val nombre: String = "",
     val descripcion: String = "",
     val duracionMin: Int = 0,
+    val ejercicioId: String = "",
 )
 
 /**
@@ -37,20 +42,17 @@ data class Entrenamiento(
     @get:Exclude
     val duracionTotalMin: Int get() = ejercicios.sumOf { it.duracionMin }
 
+    /**
+     * Sesión ya realizada. Por ahora equivale a tener la asistencia registrada; cuando US-011
+     * agregue el estado `Realizada` de la sesión, este es el único punto que hay que cambiar.
+     */
+    @get:Exclude
+    val realizada: Boolean get() = asistenciaRegistrada
+
     /** Clave para ordenar cronológicamente: `2026-10-15 16:30`. */
     @get:Exclude
     val clave: String get() = "$fecha $hora"
 }
-
-/** Ejercicio guardado en la biblioteca reutilizable de la academia (`ejercicios`). */
-data class EjercicioBiblioteca(
-    @DocumentId
-    val id: String = "",
-    val academiaId: String = "",
-    val nombre: String = "",
-    val descripcion: String = "",
-    val duracionMin: Int = 0,
-)
 
 /** Estado de asistencia de un jugador a un entrenamiento (US-009 a US-013). */
 enum class EstadoAsistencia(val etiqueta: String) {

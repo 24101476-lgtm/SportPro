@@ -7,6 +7,7 @@ import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
 import com.esan.sportpro.domain.cuentas.PerfilActual
 import com.esan.sportpro.domain.cuentas.SesionRepository
+import com.esan.sportpro.domain.entrenamientos.BibliotecaEjercicios
 import com.esan.sportpro.domain.entrenamientos.CampoEjercicio
 import com.esan.sportpro.domain.entrenamientos.CampoEntrenamiento
 import com.esan.sportpro.domain.entrenamientos.DatosEntrenamiento
@@ -15,6 +16,7 @@ import com.esan.sportpro.domain.entrenamientos.Ejercicio
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
+import com.esan.sportpro.domain.entrenamientos.FiltroBiblioteca
 import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.JugadorRepository
@@ -30,6 +32,9 @@ sealed interface PantallaEntrenamientos {
     data class Detalle(val entrenamientoId: String) : PantallaEntrenamientos
     data object Formulario : PantallaEntrenamientos
     data class Asistencia(val entrenamientoId: String) : PantallaEntrenamientos
+
+    /** Biblioteca reutilizable de ejercicios (US-009), con su propio ViewModel. */
+    data object Biblioteca : PantallaEntrenamientos
 }
 
 /** Formulario de planificación. [id] es `null` al crear una sesión. */
@@ -40,12 +45,14 @@ data class FormularioEntrenamiento(
     val guardando: Boolean = false,
 )
 
-/** Diálogo para agregar un ejercicio nuevo a la sesión. */
+/**
+ * Diálogo para agregar a la sesión un ejercicio escrito solo para ella. Los ejercicios
+ * reutilizables se crean en la Biblioteca (US-009), que pide la ficha completa.
+ */
 data class FormularioEjercicio(
     val nombre: String = "",
     val descripcion: String = "",
     val duracion: String = "",
-    val guardarEnBiblioteca: Boolean = false,
     val errores: Map<CampoEjercicio, String> = emptyMap(),
 )
 
@@ -62,6 +69,8 @@ data class EntrenamientosUiState(
     val formulario: FormularioEntrenamiento = FormularioEntrenamiento(),
     val dialogoEjercicio: FormularioEjercicio? = null,
     val mostrarBiblioteca: Boolean = false,
+    /** Texto del buscador del selector "Desde biblioteca". */
+    val busquedaBiblioteca: String = "",
     /** Asistencia que se está editando: `jugadorId -> nombre de EstadoAsistencia`. */
     val asistenciaEdicion: Map<String, String> = emptyMap(),
     val guardandoAsistencia: Boolean = false,
@@ -70,6 +79,10 @@ data class EntrenamientosUiState(
     val puedeGestionar: Boolean get() = perfil?.esStaff == true
 
     val equiposActivos: List<Equipo> get() = equipos.filter { it.activo }
+
+    /** Ejercicios activos de la biblioteca que coinciden con el buscador del selector. */
+    val bibliotecaDisponible: List<EjercicioBiblioteca>
+        get() = BibliotecaEjercicios.buscar(biblioteca, FiltroBiblioteca(texto = busquedaBiblioteca))
 
     val entrenamientosVisibles: List<Entrenamiento>
         get() = entrenamientos.filter { filtroEquipoId == null || it.equipoId == filtroEquipoId }
@@ -134,6 +147,11 @@ class EntrenamientosViewModel @Inject constructor(
 
     fun volverALista() = setState { copy(pantalla = PantallaEntrenamientos.Lista) }
 
+    fun abrirGestionBiblioteca() {
+        if (!currentState.puedeGestionar) return
+        setState { copy(pantalla = PantallaEntrenamientos.Biblioteca) }
+    }
+
     // ---- Planificación -------------------------------------------------------------------
 
     fun nuevoEntrenamiento() {
@@ -194,7 +212,6 @@ class EntrenamientosViewModel @Inject constructor(
 
     fun confirmarEjercicio() {
         val dialogo = currentState.dialogoEjercicio ?: return
-        val perfil = currentState.perfil ?: return
         val errores = ValidacionEntrenamiento.validarEjercicio(dialogo.nombre, dialogo.descripcion, dialogo.duracion)
         if (errores.isNotEmpty()) {
             setState { copy(dialogoEjercicio = dialogo.copy(errores = errores)) }
@@ -204,31 +221,17 @@ class EntrenamientosViewModel @Inject constructor(
         val ejercicio = Ejercicio(dialogo.nombre.trim(), dialogo.descripcion.trim(), duracion)
         onCampoChanged(CampoEntrenamiento.EJERCICIOS) { copy(ejercicios = ejercicios + ejercicio) }
         setState { copy(dialogoEjercicio = null) }
-
-        if (dialogo.guardarEnBiblioteca) {
-            viewModelScope.launch {
-                try {
-                    entrenamientoRepository.guardarEnBiblioteca(
-                        EjercicioBiblioteca(
-                            academiaId = perfil.academiaId,
-                            nombre = ejercicio.nombre,
-                            descripcion = ejercicio.descripcion,
-                            duracionMin = ejercicio.duracionMin,
-                        ),
-                    )
-                } catch (e: Exception) {
-                    sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))
-                }
-            }
-        }
     }
 
-    fun abrirBiblioteca() = setState { copy(mostrarBiblioteca = true) }
+    fun abrirBiblioteca() = setState { copy(mostrarBiblioteca = true, busquedaBiblioteca = "") }
 
     fun cerrarBiblioteca() = setState { copy(mostrarBiblioteca = false) }
 
+    fun onBusquedaBiblioteca(texto: String) = setState { copy(busquedaBiblioteca = texto) }
+
+    /** Agrega una copia del ejercicio a la sesión, enlazada a la biblioteca por su id. */
     fun agregarDeBiblioteca(item: EjercicioBiblioteca) {
-        val ejercicio = Ejercicio(item.nombre, item.descripcion, item.duracionMin)
+        val ejercicio = item.aEjercicioDeSesion()
         onCampoChanged(CampoEntrenamiento.EJERCICIOS) { copy(ejercicios = ejercicios + ejercicio) }
         setState { copy(mostrarBiblioteca = false) }
     }

@@ -13,7 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,7 +33,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.esan.sportpro.domain.comunidad.Aviso
-import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.EstadoVacioModulo
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.partido.ColoresPartido
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -52,7 +61,11 @@ fun AvisosBuscadorScreen(
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
-            FloatingActionButton(onClick = onNuevoAviso) {
+            FloatingActionButton(
+                onClick = onNuevoAviso,
+                containerColor = ColoresPartido.Verde,
+                contentColor = androidx.compose.ui.graphics.Color.White,
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Nuevo aviso")
             }
         },
@@ -72,8 +85,9 @@ fun AvisosBuscadorScreen(
             }
 
             if (!state.isLoading && state.avisos.isEmpty()) {
-                EmptyStateMessage(
-                    mensaje = "No encontramos convocatorias con esos filtros",
+                EstadoVacioModulo(
+                    titulo = if (state.filtro.tieneFiltrosActivos) "Sin resultados" else "Aún no hay convocatorias",
+                    mensaje = if (state.filtro.tieneFiltrosActivos) "No encontramos convocatorias con esos filtros" else "Cuando una academia publique una prueba, aparecerá aquí",
                     icono = Icons.Default.SearchOff,
                     modifier = Modifier.weight(1f, fill = true),
                 )
@@ -107,26 +121,53 @@ fun AvisosBuscadorScreen(
 
 @Composable
 private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    TarjetaSportPro(onClick = onClick) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (aviso.academiaEscudoUrl != null) {
-                    AsyncImage(model = aviso.academiaEscudoUrl, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Surface(shape = CircleShape, color = ColoresPartido.Verde.copy(alpha = 0.15f), modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (aviso.academiaEscudoUrl != null) {
+                            AsyncImage(model = aviso.academiaEscudoUrl, contentDescription = null, modifier = Modifier.size(32.dp))
+                        } else {
+                            Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = ColoresPartido.Verde)
+                        }
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(aviso.academiaNombre, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(aviso.titulo, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
+                Surface(shape = RoundedCornerShape(50), color = ColoresPartido.Verde.copy(alpha = 0.12f)) {
+                    Text(
+                        aviso.categoria,
+                        color = ColoresPartido.Verde,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
             }
-            Text(
-                "${aviso.categoria} · ${aviso.ubicacionDistrito}",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
+                Icon(Icons.Default.Place, contentDescription = null, tint = ColoresPartido.Verde, modifier = Modifier.size(18.dp))
+                Text(" ${aviso.ubicacionDistrito}", style = MaterialTheme.typography.bodySmall)
+            }
             aviso.fechaPrueba?.let { fecha ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = ColoresPartido.Verde, modifier = Modifier.size(18.dp))
+                    Text(
+                        " ${SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(fecha)} · ${aviso.hora}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            if (aviso.posicionesBuscadas.isNotEmpty()) {
                 Text(
-                    "Prueba: ${SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(fecha)} · ${aviso.hora}",
+                    "Buscamos: " + aviso.posicionesBuscadas.joinToString(", ") { nombre ->
+                        runCatching { com.esan.sportpro.domain.comunidad.PosicionJugador.valueOf(nombre).etiqueta }.getOrDefault(nombre)
+                    },
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }

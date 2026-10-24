@@ -35,6 +35,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.partido.ColoresPartido
 import com.esan.sportpro.domain.comunidad.EstadoPublicacion
 import com.esan.sportpro.domain.comunidad.Publicacion
 import com.esan.sportpro.domain.comunidad.TipoReaccion
@@ -56,10 +58,24 @@ fun PublicacionCard(
     var menuAbierto by remember { mutableStateOf(false) }
     val esAutor = publicacion.autorUid == uidActual
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    TarjetaSportPro(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = ColoresPartido.Verde.copy(alpha = 0.15f),
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            publicacion.autorNombre.trim().take(1).uppercase(),
+                            color = ColoresPartido.Verde,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(publicacion.autorNombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
                         formatearFecha(publicacion) + if (publicacion.editado) " · Editado" else "",
@@ -133,7 +149,7 @@ fun PublicacionCard(
                     Surface(
                         onClick = { onReaccionar(if (activa) null else tipo) },
                         shape = RoundedCornerShape(16.dp),
-                        color = if (activa) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (activa) ColoresPartido.Verde.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.padding(end = 4.dp),
                     ) {
                         Row(

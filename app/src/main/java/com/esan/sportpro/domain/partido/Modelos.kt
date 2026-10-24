@@ -1,7 +1,13 @@
 package com.esan.sportpro.domain.partido
 
 /** Estado general del partido. */
-enum class EstadoPartido { PROGRAMADO, EN_CURSO, FINALIZADO, ACTA_CERRADA }
+enum class EstadoPartido {
+    PROGRAMADO,
+    EN_CURSO,
+    FINALIZADO,
+    CANCELADO,
+    ACTA_CERRADA
+}
 
 /** Estado de cada versión de un evento. Ningún evento se elimina físicamente. */
 enum class EstadoEvento { VIGENTE, REEMPLAZADO, ANULADO }
@@ -53,6 +59,31 @@ object JugadorEspecial {
     fun esEspecial(id: String?): Boolean = id == RIVAL || id == NO_IDENTIFICADO
 }
 
+enum class EstadoRespuestaConvocatoria {
+    SIN_RESPONDER,
+    CONFIRMADO,
+    NO_DISPONIBLE
+}
+
+data class RespuestaConvocatoria(
+    val jugadorId: String,
+    val nombre: String,
+    val dorsal: Int? = null,
+
+    val estado: EstadoRespuestaConvocatoria =
+        EstadoRespuestaConvocatoria.SIN_RESPONDER,
+
+    val motivo: String? = null,
+
+    val respondidoPorUid: String? = null,
+    val respondidoPorNombre: String? = null,
+
+    val fechaRespuestaMs: Long? = null,
+
+    val convocadoPorUid: String? = null,
+    val fechaConvocatoriaMs: Long? = null,
+)
+
 /** Tipo de evento definido en el catálogo configurable (colección `catalogoEventos`). */
 data class TipoEvento(
     val id: String,
@@ -81,6 +112,11 @@ data class JugadorConvocado(
     val etiqueta: String get() = if (dorsal != null) "$dorsal · $nombre" else nombre
 }
 
+data class JugadorPlantel(
+    val id: String,
+    val nombre: String,
+    val equipoId: String,
+)
 /** Documento principal del partido (colección `partidos`). */
 data class Partido(
     val id: String,
@@ -91,7 +127,6 @@ data class Partido(
     val alineacionConfirmada: Boolean,
     val cambiosPermitidos: Int,
     val duracionTiempoMin: Int,
-    /** Marcas de tiempo del servidor (ms). Si aún no se sincronizan se usa la estimación local. */
     val inicioPrimerTiempoMs: Long?,
     val inicioSegundoTiempoMs: Long?,
     val enDescanso: Boolean,
@@ -101,7 +136,15 @@ data class Partido(
     val fechaMs: Long?,
     val actaCerradaConIncompletos: Int? = null,
     val tienePendientes: Boolean = false,
+
+    // US-014
+    val hora: String? = null,
+    val lugar: String? = null,
+    val tipoPartido: String? = null,
+    val maxConvocados: Int = 23,
+    val fechaLimiteRespuestaMs: Long? = null,
 )
+
 
 /**
  * Una versión de un evento del partido (subcolección `eventos`).

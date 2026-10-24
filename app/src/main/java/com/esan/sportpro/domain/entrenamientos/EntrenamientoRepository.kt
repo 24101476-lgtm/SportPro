@@ -15,13 +15,31 @@ interface EntrenamientoRepository {
     /** Crea la sesión si [Entrenamiento.id] está vacío; si no, actualiza su planificación. */
     suspend fun guardar(entrenamiento: Entrenamiento): Boolean
 
+    // ---- Asistencia (US-011) --------------------------------------------------------------
+
     /**
-     * Guarda la asistencia de la sesión: `jugadorId -> nombre de EstadoAsistencia`. Reemplaza la
-     * asistencia anterior de esa sesión y marca `asistenciaRegistrada = true`. Además escribe un
-     * registro por jugador en `asistencias_entrenamiento`, que es la colección que consume el
-     * módulo de Estadísticas (campos `equipoId`, `jugadorId`, `presente` y `fecha`).
+     * Una sesión con el indicador de cambios locales aún no confirmados por el servidor, para
+     * mostrar "Sin conexión…" / "Sincronizado" (criterios 6 y 7).
      */
-    suspend fun registrarAsistencia(entrenamiento: Entrenamiento, asistencia: Map<String, String>): Boolean
+    fun observarSesion(entrenamientoId: String): Flow<SesionObservada>
+
+    /** Cambios de asistencia de la sesión, sin ordenar (ver [ReglasAsistencia.ordenarHistorial]). */
+    fun observarHistorialAsistencia(entrenamientoId: String): Flow<List<RegistroHistorialAsistencia>>
+
+    /**
+     * Guarda al instante una o varias marcas (también sin conexión: quedan en la caché local y se
+     * envían solas al volver la red). Actualiza `asistencia` y `asistenciaDetalle` del documento y
+     * agrega un registro por marca a `historial_asistencia`.
+     * @return `true` si el servidor confirmó, `false` si quedó pendiente.
+     */
+    suspend fun marcarAsistencia(entrenamientoId: String, marcas: List<MarcaJugador>): Boolean
+
+    /**
+     * Cierra la sesión: estado `Realizada`, porcentaje del equipo y un registro por jugador en
+     * `asistencias_entrenamiento` (campos `equipoId`, `jugadorId`, `presente`, `fecha`), que es la
+     * colección que consume el módulo de Estadísticas.
+     */
+    suspend fun cerrarSesion(entrenamiento: Entrenamiento, plantelIds: List<String>, porcentaje: Double): Boolean
 
     // ---- Biblioteca de ejercicios (US-009) ------------------------------------------------
 
@@ -55,3 +73,17 @@ interface EntrenamientoRepository {
  * @property imagenFallida `true` si el ejercicio se guardó pero la imagen no se pudo subir.
  */
 data class ResultadoGuardarEjercicio(val confirmado: Boolean, val imagenFallida: Boolean = false)
+
+/** Marca de un jugador lista para guardar. */
+data class MarcaJugador(val jugadorId: String, val jugadorNombre: String, val marca: MarcaAsistencia)
+
+/**
+ * @property entrenamiento `null` si el documento no existe (o se borró).
+ * @property cambiosPendientes hay escrituras locales que el servidor todavía no confirmó.
+ * @property desdeCache los datos vienen de la caché local (sin confirmación del servidor).
+ */
+data class SesionObservada(
+    val entrenamiento: Entrenamiento?,
+    val cambiosPendientes: Boolean,
+    val desdeCache: Boolean,
+)

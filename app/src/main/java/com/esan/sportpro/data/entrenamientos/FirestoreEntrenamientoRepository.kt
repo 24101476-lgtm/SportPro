@@ -7,10 +7,17 @@ import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
+import com.esan.sportpro.domain.entrenamientos.EstadoSesion
+import com.esan.sportpro.domain.entrenamientos.MarcaJugador
+import com.esan.sportpro.domain.entrenamientos.RegistroHistorialAsistencia
+import com.esan.sportpro.domain.entrenamientos.SesionObservada
 import com.esan.sportpro.domain.entrenamientos.ResultadoGuardarEjercicio
 import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.toObject
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
@@ -75,6 +82,7 @@ class FirestoreEntrenamientoRepository @Inject constructor(
                     "academiaId" to entrenamiento.academiaId,
                     "asistencia" to emptyMap<String, String>(),
                     "asistenciaRegistrada" to false,
+                    "estado" to EstadoSesion.PROGRAMADA.name,
                     "creadoPor" to entrenamiento.creadoPor,
                 ),
             ).esperarConfirmacion()
@@ -83,9 +91,78 @@ class FirestoreEntrenamientoRepository @Inject constructor(
         }
     }
 
-    override suspend fun registrarAsistencia(
+    // ---- Asistencia (US-011) --------------------------------------------------------------
+
+    override fun observarSesion(entrenamientoId: String): Flow<SesionObservada> = callbackFlow {
+        // MetadataChanges.INCLUDE: avisa también cuando el servidor confirma las escrituras
+        // locales (hasPendingWrites pasa a false), aunque los datos no cambien.
+        val registro = entrenamientos.document(entrenamientoId)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) return@addSnapshotListener
+                trySend(
+                    SesionObservada(
+                        entrenamiento = if (snapshot.exists()) snapshot.toObject<Entrenamiento>() else null,
+                        cambiosPendientes = snapshot.metadata.hasPendingWrites(),
+                        desdeCache = snapshot.metadata.isFromCache,
+                    ),
+                )
+            }
+        awaitClose { registro.remove() }
+    }
+
+    override fun observarHistorialAsistencia(entrenamientoId: String): Flow<List<RegistroHistorialAsistencia>> =
+        callbackFlow {
+            val registro = historial(entrenamientoId).addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.documents?.mapNotNull { it.toObject<RegistroHistorialAsistencia>() }.orEmpty())
+            }
+            awaitClose { registro.remove() }
+        }
+
+    override suspend fun marcarAsistencia(entrenamientoId: String, marcas: List<MarcaJugador>): Boolean {
+        if (marcas.isEmpty()) return true
+        val documento = entrenamientos.document(entrenamientoId)
+        val ahora = System.currentTimeMillis()
+        val lote = firestore.batch()
+        marcas.forEach { (jugadorId, jugadorNombre, marca) ->
+            val detalle = mapOf(
+                "estado" to marca.estado,
+                "minutosRetraso" to marca.minutosRetraso,
+                "motivo" to marca.motivo,
+                "marcadoPor" to marca.marcadoPor,
+                "marcadoPorNombre" to marca.marcadoPorNombre,
+                // Hora del servidor: decide qué marca prevalece si dos usuarios marcan a la vez.
+                "marcadoEn" to FieldValue.serverTimestamp(),
+            )
+            // FieldPath evita problemas si el id tuviera caracteres especiales.
+            lote.update(
+                documento,
+                FieldPath.of("asistencia", jugadorId), marca.estado,
+                FieldPath.of("asistenciaDetalle", jugadorId), detalle,
+            )
+            lote.set(
+                historial(entrenamientoId).document(),
+                detalle + mapOf(
+                    "jugadorId" to jugadorId,
+                    "jugadorNombre" to jugadorNombre,
+                    "marcadoEnDispositivo" to ahora,
+                ),
+            )
+        }
+        return lote.commit().esperarConfirmacion()
+    }
+
+    override suspend fun cerrarSesion(
         entrenamiento: Entrenamiento,
-        asistencia: Map<String, String>,
+        plantelIds: List<String>,
+        porcentaje: Double,
     ): Boolean {
         val fecha = ValidacionEntrenamiento.parsearFecha(entrenamiento.fecha)
             ?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.let { Timestamp(Date.from(it)) }
@@ -93,11 +170,16 @@ class FirestoreEntrenamientoRepository @Inject constructor(
         val lote = firestore.batch()
         lote.update(
             entrenamientos.document(entrenamiento.id),
-            mapOf("asistencia" to asistencia, "asistenciaRegistrada" to true),
+            mapOf(
+                "estado" to EstadoSesion.REALIZADA.name,
+                "asistenciaRegistrada" to true,
+                "porcentajeAsistencia" to porcentaje,
+                "realizadaEn" to FieldValue.serverTimestamp(),
+            ),
         )
-        asistencia.forEach { (jugadorId, nombreEstado) ->
-            val estado = EstadoAsistencia.desde(nombreEstado) ?: return@forEach
-            // Id determinista: registrar de nuevo la asistencia sobrescribe, no duplica.
+        plantelIds.forEach { jugadorId ->
+            val estado = EstadoAsistencia.desde(entrenamiento.asistencia[jugadorId]) ?: return@forEach
+            // Id determinista: volver a cerrar la sesión sobrescribe, no duplica.
             lote.set(
                 asistenciasEstadisticas.document("${entrenamiento.id}_$jugadorId"),
                 mapOf(
@@ -106,12 +188,16 @@ class FirestoreEntrenamientoRepository @Inject constructor(
                     "jugadorId" to jugadorId,
                     "estado" to estado.name,
                     "presente" to estado.participo,
+                    "minutosRetraso" to entrenamiento.asistenciaDetalle[jugadorId]?.minutosRetraso,
                     "fecha" to fecha,
                 ),
             )
         }
         return lote.commit().esperarConfirmacion()
     }
+
+    private fun historial(entrenamientoId: String) =
+        entrenamientos.document(entrenamientoId).collection("historial_asistencia")
 
     override fun observarBiblioteca(academiaId: String): Flow<List<EjercicioBiblioteca>> = callbackFlow {
         val registro = biblioteca.whereEqualTo("academiaId", academiaId)

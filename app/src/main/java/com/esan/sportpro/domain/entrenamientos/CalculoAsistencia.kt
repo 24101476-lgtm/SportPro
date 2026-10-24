@@ -25,7 +25,7 @@ object CalculoAsistencia {
      */
     fun resumen(jugadorId: String, entrenamientos: List<Entrenamiento>): ResumenAsistencia {
         val estados = entrenamientos
-            .filter { it.asistenciaRegistrada }
+            .filter { it.realizada }
             .mapNotNull { EstadoAsistencia.desde(it.asistencia[jugadorId]) }
         return ResumenAsistencia(
             registrados = estados.size,

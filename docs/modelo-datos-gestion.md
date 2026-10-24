@@ -26,8 +26,15 @@ entrenamientos/{entrenamientoId}       (US-009 a US-013)
    academiaId, equipoId, equipoNombre
    fecha (AAAA-MM-DD), hora (HH:mm), lugar, objetivo
    ejercicios[] { nombre, descripcion, duracionMin, ejercicioId }   (copia; ejercicioId = id en la biblioteca o "")
-   asistencia { jugadorId: PRESENTE | TARDE | JUSTIFICADO | AUSENTE }, asistenciaRegistrada
+   asistencia { jugadorId: PRESENTE | TARDE | JUSTIFICADO | AUSENTE }   (ausente del mapa = "Sin marcar")
+   asistenciaDetalle { jugadorId: { estado, minutosRetraso?, motivo, marcadoPor, marcadoPorNombre, marcadoEn (hora servidor) } }
+   estado: PROGRAMADA | REALIZADA | CANCELADA   (vacío en sesiones antiguas = Programada)
+   asistenciaRegistrada (true al cerrar; se mantiene por compatibilidad), porcentajeAsistencia?, realizadaEn
    creadoPor
+
+entrenamientos/{id}/historial_asistencia/{registroId}   (US-011) cada cambio de asistencia; nunca se edita ni borra
+   jugadorId, jugadorNombre, estado, minutosRetraso?, motivo, marcadoPor, marcadoPorNombre
+   marcadoEn (hora servidor), marcadoEnDispositivo (ms, para ordenar pendientes)
 
 ejercicios/{ejercicioId}               (US-009) biblioteca reutilizable de la academia
    academiaId, nombre (3-60, único en el club), objetivo, categoria (CategoriaTecnica.name)
@@ -36,7 +43,8 @@ ejercicios/{ejercicioId}               (US-009) biblioteca reutilizable de la ac
    Imagen en Cloud Storage: ejercicios/{ejercicioId}/imagen.jpg (JPEG, máx. 1024 px por lado)
 
 asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísticas
-   entrenamientoId, equipoId, jugadorId, estado, presente (bool), fecha (Timestamp)
+   entrenamientoId, equipoId, jugadorId, estado, presente (bool), minutosRetraso?, fecha (Timestamp)
+   Se escribe al cerrar la sesión (estado Realizada).
 ```
 
 ## Decisiones
@@ -49,6 +57,8 @@ asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísti
 | Escrituras con `esperarConfirmacion()` (4 s) | Con la persistencia offline, la escritura queda en caché y no bloquea la pantalla; la app avisa "Se sincronizará cuando vuelva la conexión" |
 | Las sesiones guardan una **copia** de cada ejercicio (con `ejercicioId`) | Editar o desactivar un ejercicio de la biblioteca no altera las sesiones históricas (US-009, criterio 8) |
 | Un ejercicio usado en una sesión realizada **no se elimina, se desactiva** | La app lo verifica antes de borrar; "realizada" = `asistenciaRegistrada` hasta que US-011 agregue el estado de la sesión |
+| Cada marca de asistencia **se guarda al instante** con la persistencia offline de Firestore | El registro funciona sin conexión; el indicador usa `hasPendingWrites` (MetadataChanges.INCLUDE) para mostrar "Sin conexión…" / "Sincronizado a las HH:mm" (US-011) |
+| Conflictos: **gana la última escritura** que llega al servidor (`marcadoEn` = hora del servidor) | Ambos cambios quedan en `historial_asistencia`; las reglas impiden editar o borrar el historial y cambiar la asistencia de una sesión Realizada |
 | `asistencia` dentro del documento del entrenamiento | Un solo listener alimenta la lista, el detalle y el historial por jugador; contiene solo ids y estados |
 | `academiaId = clubId` del usuario, o `academia-demo` si es nulo | Es el valor temporal que ya usan Mensualidades y Comunidad, hasta que US-004 vincule usuarios a academias |
 

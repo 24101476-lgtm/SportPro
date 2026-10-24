@@ -15,11 +15,8 @@ import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Ejercicio
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
-import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
 import com.esan.sportpro.domain.entrenamientos.FiltroBiblioteca
 import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
-import com.esan.sportpro.domain.jugadores.Jugador
-import com.esan.sportpro.domain.jugadores.JugadorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -60,7 +57,6 @@ data class EntrenamientosUiState(
     val perfil: PerfilActual? = null,
     val entrenamientos: List<Entrenamiento> = emptyList(),
     val equipos: List<Equipo> = emptyList(),
-    val jugadores: List<Jugador> = emptyList(),
     val biblioteca: List<EjercicioBiblioteca> = emptyList(),
     val cargando: Boolean = true,
     val error: String? = null,
@@ -71,9 +67,6 @@ data class EntrenamientosUiState(
     val mostrarBiblioteca: Boolean = false,
     /** Texto del buscador del selector "Desde biblioteca". */
     val busquedaBiblioteca: String = "",
-    /** Asistencia que se está editando: `jugadorId -> nombre de EstadoAsistencia`. */
-    val asistenciaEdicion: Map<String, String> = emptyMap(),
-    val guardandoAsistencia: Boolean = false,
 ) {
     /** Administrador y entrenador planifican y toman asistencia; el jugador solo consulta. */
     val puedeGestionar: Boolean get() = perfil?.esStaff == true
@@ -88,10 +81,6 @@ data class EntrenamientosUiState(
         get() = entrenamientos.filter { filtroEquipoId == null || it.equipoId == filtroEquipoId }
 
     fun entrenamiento(id: String): Entrenamiento? = entrenamientos.firstOrNull { it.id == id }
-
-    /** Jugadores activos del equipo del entrenamiento, para tomar asistencia. */
-    fun plantelDe(entrenamiento: Entrenamiento): List<Jugador> =
-        jugadores.filter { it.activo && it.equipoId == entrenamiento.equipoId }
 }
 
 sealed interface EntrenamientosEvent {
@@ -104,7 +93,6 @@ class EntrenamientosViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
     private val entrenamientoRepository: EntrenamientoRepository,
     private val equipoRepository: EquipoRepository,
-    private val jugadorRepository: JugadorRepository,
 ) : BaseViewModel<EntrenamientosUiState, EntrenamientosEvent>(EntrenamientosUiState()) {
 
     init {
@@ -130,12 +118,6 @@ class EntrenamientosViewModel @Inject constructor(
                     entrenamientoRepository.observarBiblioteca(perfil.academiaId)
                         .catch { /* la biblioteca es opcional */ }
                         .collect { lista -> setState { copy(biblioteca = lista) } }
-                }
-                launch {
-                    // Los jugadores solo se leen para tomar asistencia; las reglas lo limitan al staff.
-                    jugadorRepository.observarJugadores(perfil.academiaId)
-                        .catch { /* sin plantel no se puede tomar asistencia */ }
-                        .collect { lista -> setState { copy(jugadores = lista) } }
                 }
             }
         }
@@ -285,51 +267,18 @@ class EntrenamientosViewModel @Inject constructor(
         }
     }
 
-    // ---- Asistencia ----------------------------------------------------------------------
+    // ---- Asistencia (US-011): la pantalla tiene su propio ViewModel ---------------------------
 
     fun abrirAsistencia(entrenamiento: Entrenamiento) {
         if (!currentState.puedeGestionar) return
         val fecha = ValidacionEntrenamiento.parsearFecha(entrenamiento.fecha)
-        if (fecha != null && fecha.isAfter(LocalDate.now())) {
+        if (!entrenamiento.realizada && fecha != null && fecha.isAfter(LocalDate.now())) {
             sendEvent(EntrenamientosEvent.Mensaje("La asistencia se registra el día del entrenamiento o después."))
             return
         }
-        val plantel = currentState.plantelDe(entrenamiento)
-        // Parte de lo ya registrado; los jugadores sin registro arrancan como presentes.
-        val inicial = plantel.associate { jugador ->
-            jugador.id to (entrenamiento.asistencia[jugador.id] ?: EstadoAsistencia.PRESENTE.name)
-        }
-        setState {
-            copy(asistenciaEdicion = inicial, pantalla = PantallaEntrenamientos.Asistencia(entrenamiento.id))
-        }
+        setState { copy(pantalla = PantallaEntrenamientos.Asistencia(entrenamiento.id)) }
     }
-
-    fun onEstadoAsistencia(jugadorId: String, estado: EstadoAsistencia) =
-        setState { copy(asistenciaEdicion = asistenciaEdicion + (jugadorId to estado.name)) }
-
-    fun marcarTodosPresentes() =
-        setState { copy(asistenciaEdicion = asistenciaEdicion.mapValues { EstadoAsistencia.PRESENTE.name }) }
 
     fun volverADetalle(entrenamientoId: String) =
         setState { copy(pantalla = PantallaEntrenamientos.Detalle(entrenamientoId)) }
-
-    fun guardarAsistencia(entrenamientoId: String) {
-        val estado = currentState
-        if (!estado.puedeGestionar || estado.guardandoAsistencia) return
-        val entrenamiento = estado.entrenamiento(entrenamientoId) ?: return
-        setState { copy(guardandoAsistencia = true) }
-        viewModelScope.launch {
-            try {
-                val confirmado = entrenamientoRepository.registrarAsistencia(entrenamiento, estado.asistenciaEdicion)
-                setState {
-                    copy(guardandoAsistencia = false, pantalla = PantallaEntrenamientos.Detalle(entrenamientoId))
-                }
-                val texto = "Asistencia registrada"
-                sendEvent(EntrenamientosEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
-            } catch (e: Exception) {
-                setState { copy(guardandoAsistencia = false) }
-                sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))
-            }
-        }
-    }
 }

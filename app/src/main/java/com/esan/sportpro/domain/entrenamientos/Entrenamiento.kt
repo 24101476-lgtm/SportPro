@@ -21,7 +21,9 @@ data class Ejercicio(
  *
  * [asistencia] relaciona `jugadorId` con el nombre de un [EstadoAsistencia]. Se guarda dentro del
  * mismo documento para sincronizar y calcular el historial con un solo listener; solo contiene
- * ids y estados, nunca datos de contacto ni físicos.
+ * ids y estados, nunca datos de contacto ni físicos. Un jugador que no figura está "Sin marcar".
+ * [asistenciaDetalle] agrega a cada marca los minutos de retraso, el motivo y quién la hizo
+ * (US-011); cada cambio queda además en la subcolección `historial_asistencia`.
  */
 data class Entrenamiento(
     @DocumentId
@@ -35,19 +37,27 @@ data class Entrenamiento(
     val objetivo: String = "",
     val ejercicios: List<Ejercicio> = emptyList(),
     val asistencia: Map<String, String> = emptyMap(),
+    val asistenciaDetalle: Map<String, MarcaAsistencia> = emptyMap(),
+    /** Se mantiene por compatibilidad: `true` una vez cerrada la sesión (lo leen otros módulos). */
     val asistenciaRegistrada: Boolean = false,
+    /** Nombre de [EstadoSesion]; vacío en sesiones creadas antes de US-011 (= Programada). */
+    val estado: String = "",
+    /** Porcentaje de asistencia del equipo calculado al cerrar la sesión (US-011, criterio 9). */
+    val porcentajeAsistencia: Double? = null,
     val creadoPor: String = "",
 ) {
     /** Duración total de la sesión: suma de la duración de sus ejercicios. */
     @get:Exclude
     val duracionTotalMin: Int get() = ejercicios.sumOf { it.duracionMin }
 
-    /**
-     * Sesión ya realizada. Por ahora equivale a tener la asistencia registrada; cuando US-011
-     * agregue el estado `Realizada` de la sesión, este es el único punto que hay que cambiar.
-     */
+    /** Estado de la sesión; las sesiones antiguas con asistencia registrada cuentan como realizadas. */
     @get:Exclude
-    val realizada: Boolean get() = asistenciaRegistrada
+    val estadoSesion: EstadoSesion
+        get() = EstadoSesion.desde(estado)
+            ?: if (asistenciaRegistrada) EstadoSesion.REALIZADA else EstadoSesion.PROGRAMADA
+
+    @get:Exclude
+    val realizada: Boolean get() = estadoSesion == EstadoSesion.REALIZADA
 
     /** Clave para ordenar cronológicamente: `2026-10-15 16:30`. */
     @get:Exclude
@@ -58,8 +68,8 @@ data class Entrenamiento(
 enum class EstadoAsistencia(val etiqueta: String) {
     PRESENTE("Presente"),
     TARDE("Tarde"),
-    JUSTIFICADO("Justificado"),
-    AUSENTE("Ausente"),
+    JUSTIFICADO("Falta justificada"),
+    AUSENTE("Falta injustificada"),
     ;
 
     /** Presente y tarde cuentan como participación; justificado y ausente no. */

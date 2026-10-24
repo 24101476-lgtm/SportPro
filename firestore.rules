@@ -106,10 +106,22 @@ service cloud.firestore {
       allow create: if esStaff()
         && request.resource.data.academiaId == academiaPropia()
         && request.resource.data.creadoPor == request.auth.uid;
+      // US-011: una sesión Realizada ya no acepta cambios de asistencia (incluidas marcas
+      // hechas sin conexión que lleguen después del cierre).
       allow update: if esStaff()
         && resource.data.academiaId == academiaPropia()
-        && request.resource.data.academiaId == resource.data.academiaId;
+        && request.resource.data.academiaId == resource.data.academiaId
+        && !(resource.data.get('estado', '') == 'REALIZADA'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['asistencia', 'asistenciaDetalle', 'estado']));
       allow delete: if false;
+
+      // US-011: cada cambio de asistencia queda registrado; nunca se edita ni se borra.
+      match /historial_asistencia/{registroId} {
+        allow read: if esStaff();
+        allow create: if esStaff() && request.resource.data.marcadoPor == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
     // US-009: biblioteca reutilizable de ejercicios. La ven todos los entrenadores y el

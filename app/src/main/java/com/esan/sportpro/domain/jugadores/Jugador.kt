@@ -32,11 +32,18 @@ data class Jugador(
     val contactoEmergenciaNombre: String = "",
     val contactoEmergenciaTelefono: String = "",
     val contactoEmergenciaParentesco: String = "",
+    /** URL de la foto en Cloud Storage (`jugadores/{id}/foto.jpg`, US-006); vacía si no tiene. */
+    val fotoUrl: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
 ) {
     @get:Exclude
     val nombreCompleto: String get() = "$nombres $apellidos".trim()
+
+    /** Iniciales para el avatar cuando no hay foto: "Luis Pérez" -> "LP". */
+    @get:Exclude
+    val iniciales: String
+        get() = listOf(nombres, apellidos).mapNotNull { it.trim().firstOrNull()?.uppercaseChar() }.joinToString("")
 
     /** Edad en años cumplidos a la fecha [hoy]; `null` si la fecha de nacimiento no es válida. */
     fun edad(hoy: LocalDate = LocalDate.now()): Int? =

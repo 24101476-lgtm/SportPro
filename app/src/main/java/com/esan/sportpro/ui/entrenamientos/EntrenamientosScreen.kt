@@ -56,6 +56,7 @@ import com.esan.sportpro.domain.entrenamientos.CampoEntrenamiento
 import com.esan.sportpro.domain.entrenamientos.Ejercicio
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
+import com.esan.sportpro.domain.entrenamientos.ReglasAsistencia
 import com.esan.sportpro.ui.common.CampoFormulario
 import com.esan.sportpro.ui.common.EmptyStateMessage
 
@@ -164,34 +165,11 @@ fun EntrenamientosScreen(
             // Se atiende antes del `when` (la biblioteca tiene su propio Scaffold y ViewModel).
             PantallaEntrenamientos.Biblioteca -> Unit
 
-            is PantallaEntrenamientos.Asistencia -> {
-                val entrenamiento = state.entrenamiento(pantalla.entrenamientoId)
-                Scaffold(
-                    modifier = modifier,
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    topBar = {
-                        TopAppBar(
-                            title = { Text("Asistencia") },
-                            navigationIcon = {
-                                IconButton(onClick = { viewModel.volverADetalle(pantalla.entrenamientoId) }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                                }
-                            },
-                        )
-                    },
-                ) { padding ->
-                    if (entrenamiento == null) {
-                        EmptyStateMessage("No se encontró el entrenamiento.", Modifier.padding(padding))
-                    } else {
-                        AsistenciaContenido(
-                            state = state,
-                            entrenamiento = entrenamiento,
-                            viewModel = viewModel,
-                            modifier = Modifier.padding(padding),
-                        )
-                    }
-                }
-            }
+            is PantallaEntrenamientos.Asistencia -> AsistenciaScreen(
+                entrenamientoId = pantalla.entrenamientoId,
+                onVolver = { viewModel.volverADetalle(pantalla.entrenamientoId) },
+                modifier = modifier,
+            )
         }
     }
 }
@@ -265,8 +243,11 @@ private fun EntrenamientoCard(entrenamiento: Entrenamiento, onClick: () -> Unit)
             )
             Text(entrenamiento.objetivo, style = MaterialTheme.typography.bodyMedium)
             Text(
-                "${entrenamiento.ejercicios.size} ejercicios · ${entrenamiento.duracionTotalMin} min" +
-                    if (entrenamiento.asistenciaRegistrada) " · Asistencia registrada" else "",
+                listOfNotNull(
+                    "${entrenamiento.ejercicios.size} ejercicios · ${entrenamiento.duracionTotalMin} min",
+                    entrenamiento.estadoSesion.etiqueta,
+                    entrenamiento.porcentajeAsistencia?.let { "Asistencia ${ReglasAsistencia.formatearPorcentaje(it)}" },
+                ).joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
             )
         }
@@ -297,13 +278,19 @@ private fun DetalleEntrenamiento(
             EjercicioItem(numero = indice + 1, ejercicio = ejercicio)
         }
 
-        Subtitulo("Asistencia")
-        if (entrenamiento.asistenciaRegistrada) {
-            val estados = entrenamiento.asistencia.values.mapNotNull { EstadoAsistencia.desde(it) }
-            val presentes = estados.count { it.participo }
-            Text("$presentes de ${estados.size} jugadores asistieron.", style = MaterialTheme.typography.bodyMedium)
-        } else {
-            Text("Todavía no se registró la asistencia.", style = MaterialTheme.typography.bodyMedium)
+        Subtitulo("Asistencia · ${entrenamiento.estadoSesion.etiqueta}")
+        val estados = entrenamiento.asistencia.values.mapNotNull { EstadoAsistencia.desde(it) }
+        when {
+            entrenamiento.realizada -> {
+                val presentes = estados.count { it.participo }
+                Text("$presentes de ${estados.size} jugadores asistieron.", style = MaterialTheme.typography.bodyMedium)
+                entrenamiento.porcentajeAsistencia?.let {
+                    Text("Asistencia del equipo: ${ReglasAsistencia.formatearPorcentaje(it)}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            estados.isNotEmpty() ->
+                Text("Asistencia en curso: ${estados.size} jugadores marcados.", style = MaterialTheme.typography.bodyMedium)
+            else -> Text("Todavía no se registró la asistencia.", style = MaterialTheme.typography.bodyMedium)
         }
 
         if (puedeGestionar) {
@@ -311,8 +298,12 @@ private fun DetalleEntrenamiento(
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f)) { Text("Editar") }
-                Button(onClick = onAsistencia, modifier = Modifier.weight(1f)) { Text("Tomar asistencia") }
+                if (!entrenamiento.realizada) {
+                    OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f)) { Text("Editar") }
+                }
+                Button(onClick = onAsistencia, modifier = Modifier.weight(1f)) {
+                    Text(if (entrenamiento.realizada) "Ver asistencia" else "Tomar asistencia")
+                }
             }
         }
     }
@@ -529,71 +520,6 @@ private fun FormularioEntrenamientoContenido(
             },
             confirmButton = { TextButton(onClick = viewModel::cerrarBiblioteca) { Text("Cerrar") } },
         )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AsistenciaContenido(
-    state: EntrenamientosUiState,
-    entrenamiento: Entrenamiento,
-    viewModel: EntrenamientosViewModel,
-    modifier: Modifier = Modifier,
-) {
-    val plantel = state.plantelDe(entrenamiento)
-
-    if (plantel.isEmpty()) {
-        EmptyStateMessage(
-            mensaje = "El equipo ${entrenamiento.equipoNombre} todavía no tiene jugadores activos.",
-            modifier = modifier,
-            icono = Icons.Default.Groups2,
-        )
-        return
-    }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("${entrenamiento.fecha} · ${entrenamiento.equipoNombre}", style = MaterialTheme.typography.titleSmall)
-            TextButton(onClick = viewModel::marcarTodosPresentes) { Text("Todos presentes") }
-        }
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(plantel, key = { it.id }) { jugador ->
-                val actual = EstadoAsistencia.desde(state.asistenciaEdicion[jugador.id])
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(jugador.nombreCompleto, style = MaterialTheme.typography.titleSmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            EstadoAsistencia.entries.forEach { estado ->
-                                FilterChip(
-                                    selected = actual == estado,
-                                    onClick = { viewModel.onEstadoAsistencia(jugador.id, estado) },
-                                    label = { Text(estado.etiqueta) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Button(
-            onClick = { viewModel.guardarAsistencia(entrenamiento.id) },
-            enabled = !state.guardandoAsistencia,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-            if (state.guardandoAsistencia) {
-                CircularProgressIndicator(modifier = Modifier.padding(2.dp), strokeWidth = 2.dp)
-            } else {
-                Text("Guardar asistencia")
-            }
-        }
     }
 }
 

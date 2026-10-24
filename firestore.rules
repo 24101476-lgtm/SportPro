@@ -112,11 +112,35 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Biblioteca reutilizable de ejercicios de la academia.
+    // US-009: biblioteca reutilizable de ejercicios. La ven todos los entrenadores y el
+    // administrador de la misma academia; solo el autor o el administrador la editan,
+    // desactivan o eliminan. El autor y la academia no pueden cambiarse al editar.
+    // (La app solo elimina ejercicios que nunca se usaron en una sesión realizada.)
+    function esAutorOAdmin(datos) {
+      return esAdmin() || datos.get('creadoPor', '') == request.auth.uid;
+    }
+
     match /ejercicios/{ejercicioId} {
-      allow read: if esStaff();
-      allow create: if esStaff() && request.resource.data.academiaId == academiaPropia();
-      allow update, delete: if false;
+      allow read: if esStaff() && resource.data.academiaId == academiaPropia();
+      allow create: if esStaff()
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoPor == request.auth.uid
+        && request.resource.data.activo == true
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() >= 3 && request.resource.data.nombre.size() <= 60
+        && request.resource.data.duracionMin is int
+        && request.resource.data.duracionMin >= 1 && request.resource.data.duracionMin <= 120;
+      allow update: if esStaff()
+        && resource.data.academiaId == academiaPropia()
+        && esAutorOAdmin(resource.data)
+        && request.resource.data.academiaId == resource.data.academiaId
+        && request.resource.data.get('creadoPor', '') == resource.data.get('creadoPor', '')
+        && (request.resource.data.duracionMin == resource.data.duracionMin
+          || (request.resource.data.duracionMin is int
+            && request.resource.data.duracionMin >= 1 && request.resource.data.duracionMin <= 120));
+      allow delete: if esStaff()
+        && resource.data.academiaId == academiaPropia()
+        && esAutorOAdmin(resource.data);
     }
 
     // Registro por jugador y entrenamiento que consume el módulo de Estadísticas.

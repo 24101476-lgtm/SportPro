@@ -72,7 +72,8 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Navegación principal por rol | US-003 | Implementado (`HomeModule.visiblesPara`) |
 | Academia: equipos por categoría | US-004, US-005 | Implementado (alta, edición, desactivar) |
 | Jugadores: perfil con datos físicos, contacto y emergencia | US-006, US-007 | Implementado (sin fotografía) |
-| Entrenamientos: planificación, biblioteca de ejercicios, asistencia e historial | US-009 a US-013 | Implementado |
+| Entrenamientos: biblioteca de ejercicios | US-009 | Implementado (ficha completa, buscador con filtros, permisos por autor, desactivación) |
+| Entrenamientos: planificación, asistencia e historial | US-010 a US-012 | Base implementada; faltan criterios de aceptación |
 | Partido en vivo, eventos y correcciones | — | Implementado (ver `docs/diseno-tecnico-partido-en-vivo.md`) |
 | Mensualidades, Estadísticas, Anuncios, Comunidad | US-008, US-026 a US-030 | Implementado |
 | Resumen narrativo con IA | — | Diseño listo (`docs/diseno-integracion-ia.md`); implementación en semana 12 |

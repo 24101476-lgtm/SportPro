@@ -19,11 +19,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Groups2
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -33,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -59,7 +61,7 @@ import com.esan.sportpro.ui.common.EmptyStateMessage
 
 /**
  * Módulo Entrenamientos (US-009 a US-013). Navegación interna por estado del ViewModel:
- * lista → detalle → formulario / asistencia. Administrador y entrenador planifican y toman
+ * lista → detalle → formulario / asistencia, y lista → biblioteca de ejercicios (US-009). Administrador y entrenador planifican y toman
  * asistencia; el jugador solo consulta las sesiones.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,6 +83,11 @@ fun EntrenamientosScreen(
     BackHandler(enabled = state.pantalla is PantallaEntrenamientos.Detalle) { viewModel.volverALista() }
     (state.pantalla as? PantallaEntrenamientos.Asistencia)?.let { pantalla ->
         BackHandler { viewModel.volverADetalle(pantalla.entrenamientoId) }
+    }
+
+    if (state.pantalla == PantallaEntrenamientos.Biblioteca) {
+        BibliotecaEjerciciosScreen(onSalir = viewModel::volverALista, modifier = modifier)
+        return
     }
 
     when {
@@ -154,6 +161,9 @@ fun EntrenamientosScreen(
                 FormularioEntrenamientoContenido(state = state, viewModel = viewModel, modifier = Modifier.padding(padding))
             }
 
+            // Se atiende antes del `when` (la biblioteca tiene su propio Scaffold y ViewModel).
+            PantallaEntrenamientos.Biblioteca -> Unit
+
             is PantallaEntrenamientos.Asistencia -> {
                 val entrenamiento = state.entrenamiento(pantalla.entrenamientoId)
                 Scaffold(
@@ -194,6 +204,15 @@ private fun ListaEntrenamientos(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        if (state.puedeGestionar) {
+            OutlinedButton(
+                onClick = viewModel::abrirGestionBiblioteca,
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            ) {
+                Icon(Icons.Default.FitnessCenter, contentDescription = null)
+                Text("  Biblioteca de ejercicios")
+            }
+        }
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -400,7 +419,7 @@ private fun FormularioEntrenamientoContenido(
             }
             OutlinedButton(
                 onClick = viewModel::abrirBiblioteca,
-                enabled = state.biblioteca.isNotEmpty(),
+                enabled = state.biblioteca.any { it.activo },
                 modifier = Modifier.weight(1f),
             ) { Text("Desde biblioteca") }
         }
@@ -457,20 +476,11 @@ private fun FormularioEntrenamientoContenido(
                         error = dialogo.errores[CampoEjercicio.DESCRIPCION],
                         minLineas = 2,
                     )
-                    Row(
-                        modifier = Modifier.clickable {
-                            viewModel.onEjercicioChanged { copy(guardarEnBiblioteca = !guardarEnBiblioteca) }
-                        },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = dialogo.guardarEnBiblioteca,
-                            onCheckedChange = { marcado ->
-                                viewModel.onEjercicioChanged { copy(guardarEnBiblioteca = marcado) }
-                            },
-                        )
-                        Text("Guardar en la biblioteca para reutilizarlo")
-                    }
+                    Text(
+                        "Este ejercicio solo se agrega a esta sesión. Para reutilizarlo, créalo en la Biblioteca de ejercicios.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             },
             confirmButton = { TextButton(onClick = viewModel::confirmarEjercicio) { Text("Agregar") } },
@@ -483,20 +493,37 @@ private fun FormularioEntrenamientoContenido(
             onDismissRequest = viewModel::cerrarBiblioteca,
             title = { Text("Biblioteca de ejercicios") },
             text = {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(state.biblioteca, key = { it.id }) { item ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.agregarDeBiblioteca(item) }
-                                .padding(vertical = 8.dp),
-                        ) {
-                            Text("${item.nombre} · ${item.duracionMin} min", style = MaterialTheme.typography.titleSmall)
-                            if (item.descripcion.isNotBlank()) {
-                                Text(item.descripcion, style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = state.busquedaBiblioteca,
+                        onValueChange = viewModel::onBusquedaBiblioteca,
+                        placeholder = { Text("Buscar por nombre") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    val disponibles = state.bibliotecaDisponible
+                    if (disponibles.isEmpty()) {
+                        Text("No hay ejercicios con ese nombre.", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(disponibles, key = { it.id }) { item ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.agregarDeBiblioteca(item) }
+                                    .padding(vertical = 8.dp),
+                            ) {
+                                Text("${item.nombre} · ${item.duracionMin} min", style = MaterialTheme.typography.titleSmall)
+                                item.categoriaTecnica?.let {
+                                    Text(it.etiqueta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                }
+                                if (item.objetivo.isNotBlank()) {
+                                    Text(item.objetivo, style = MaterialTheme.typography.bodySmall)
+                                }
                             }
+                            HorizontalDivider()
                         }
-                        HorizontalDivider()
                     }
                 }
             },

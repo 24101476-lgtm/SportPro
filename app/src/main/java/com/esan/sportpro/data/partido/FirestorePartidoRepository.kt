@@ -736,6 +736,75 @@ class FirestorePartidoRepository @Inject constructor(
             }
     }
 
+    override fun guardarAlineacionFinal(
+        partidoId: String,
+        jugadores: List<JugadorConvocado>,
+        convocadosPreviosIds: List<String>,
+    ) {
+        val partidoRef =
+            partidos.document(partidoId)
+
+        val convocados =
+            convocadosRef(partidoId)
+
+        val batch =
+            firestore.batch()
+
+        /*
+         * Si anteriormente existía una alineación y algún jugador
+         * ya no forma parte de ella, eliminamos únicamente ese
+         * documento para no dejar jugadores antiguos.
+         */
+        val nuevosIds =
+            jugadores
+                .map { it.id }
+                .toSet()
+
+        convocadosPreviosIds
+            .filterNot { it in nuevosIds }
+            .forEach { jugadorId ->
+
+                batch.delete(
+                    convocados.document(jugadorId)
+                )
+            }
+
+        /*
+         * Guardamos titulares y suplentes.
+         *
+         * El ID del documento es el jugadorId real.
+         */
+        jugadores.forEach { jugador ->
+
+            batch.set(
+                convocados.document(jugador.id),
+                mapOf(
+                    "nombre" to jugador.nombre,
+                    "dorsal" to jugador.dorsal,
+                    "titular" to jugador.titular,
+                    "posicion" to jugador.posicion,
+                )
+            )
+        }
+
+        /*
+         * La alineación pasa a estar oficialmente confirmada.
+         */
+        batch.update(
+            partidoRef,
+            mapOf(
+                "alineacionConfirmada" to true,
+                "alineacionConfirmadaPor" to uidActual,
+                "alineacionConfirmadaEn" to
+                        FieldValue.serverTimestamp(),
+            )
+        )
+
+        batch.commitLogged(
+            "guardarAlineacionFinal"
+        )
+    }
+
     override fun crearTipoEvento(
         tipo: TipoEvento
     ): String {

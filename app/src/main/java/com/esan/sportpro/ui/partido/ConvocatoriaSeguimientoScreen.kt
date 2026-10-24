@@ -44,10 +44,12 @@ import com.esan.sportpro.domain.partido.RespuestaConvocatoria
 import androidx.compose.material3.OutlinedButton
 
 @OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun ConvocatoriaSeguimientoScreen(
     onVolver: () -> Unit,
     onGestionarPartido: () -> Unit,
+    onPrepararAlineacion: () -> Unit,
     viewModel: ConvocatoriaSeguimientoViewModel = hiltViewModel(),
 ) {
 
@@ -293,6 +295,15 @@ fun ConvocatoriaSeguimientoScreen(
                                     "Gestionar partido"
                                 )
                             }
+
+                            Button(
+                                onClick = onPrepararAlineacion,
+                                enabled = state.confirmados >= 11,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Preparar alineación")
+                            }
+
 
                             Button(
                                 onClick =

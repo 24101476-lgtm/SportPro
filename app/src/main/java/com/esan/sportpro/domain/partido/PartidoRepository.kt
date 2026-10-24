@@ -203,4 +203,21 @@ interface PartidoRepository {
         estado: EstadoRespuestaConvocatoria,
         motivo: String? = null,
     )
+
+    // ------------------------------------------------ US-016: alineación
+
+    /**
+     * Guarda la alineación final del partido.
+     *
+     * Los jugadores se almacenan en:
+     * partidos/{partidoId}/convocados/{jugadorId}
+     *
+     * Esta colección es la que consume posteriormente
+     * el módulo de registro del partido en vivo.
+     */
+    fun guardarAlineacionFinal(
+        partidoId: String,
+        jugadores: List<JugadorConvocado>,
+        convocadosPreviosIds: List<String> = emptyList(),
+    )
 }

@@ -1,16 +1,19 @@
 package com.esan.sportpro.ui.partido
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 
 
 // ============================================================
-// RUTAS
+// RUTAS GENERALES
 // ============================================================
 
 private const val RUTA_LISTA =
@@ -29,9 +32,9 @@ private const val RUTA_GESTION_PARTIDO =
     "partidos/{partidoId}/gestion"
 
 
-// ------------------------------------------------------------
-// US-015 - RESPUESTA DEL JUGADOR
-// ------------------------------------------------------------
+// ============================================================
+// US-015 · RESPUESTA DEL JUGADOR
+// ============================================================
 
 private const val RUTA_CONVOCATORIA_JUGADOR =
     "partidos/{partidoId}/convocatoria/jugador/{jugadorId}"
@@ -46,9 +49,39 @@ private const val RUTA_CONVOCATORIA_VENCIDA =
     "partidos/{partidoId}/convocatoria/jugador/{jugadorId}/vencida"
 
 
-// ------------------------------------------------------------
-// US-013 - CATÁLOGO
-// ------------------------------------------------------------
+// ============================================================
+// US-016 · ALINEACIÓN
+// ============================================================
+
+/*
+ * Este es el NavGraph padre.
+ *
+ * El AlineacionViewModel quedará asociado a este graph,
+ * por eso las pantallas 72, 73, 74, 75 y 76 compartirán
+ * exactamente la misma instancia.
+ */
+private const val RUTA_ALINEACION =
+    "partidos/{partidoId}/alineacion-flujo"
+
+private const val RUTA_ALINEACION_PREPARAR =
+    "alineacion/preparar"
+
+private const val RUTA_ALINEACION_TITULARES =
+    "alineacion/titulares"
+
+private const val RUTA_ALINEACION_POSICIONES =
+    "alineacion/posiciones"
+
+private const val RUTA_ALINEACION_RESUMEN =
+    "alineacion/resumen"
+
+private const val RUTA_ALINEACION_CONFIRMADA =
+    "alineacion/confirmada"
+
+
+// ============================================================
+// US-013 · CATÁLOGO
+// ============================================================
 
 private const val RUTA_CATALOGO =
     "catalogo"
@@ -60,9 +93,9 @@ private const val RUTA_CATALOGO_EDITAR =
     "catalogo/editar/{eventoId}"
 
 
-// ------------------------------------------------------------
-// REGISTRO EN VIVO
-// ------------------------------------------------------------
+// ============================================================
+// PARTIDO EN VIVO
+// ============================================================
 
 private const val RUTA_REGISTRO =
     "partido/{partidoId}"
@@ -134,6 +167,16 @@ private fun rutaConvocatoriaVencida(
     "partidos/$partidoId/convocatoria/jugador/$jugadorId/vencida"
 
 
+// ------------------------------------------------------------
+// US-016
+// ------------------------------------------------------------
+
+private fun rutaAlineacion(
+    partidoId: String
+): String =
+    "partidos/$partidoId/alineacion-flujo"
+
+
 // ============================================================
 // MÓDULO PARTIDO
 // ============================================================
@@ -146,6 +189,7 @@ fun PartidoScreen(
     val navController =
         rememberNavController()
 
+
     NavHost(
         navController = navController,
         startDestination = RUTA_LISTA,
@@ -154,7 +198,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 63 - LISTA DE PARTIDOS
+        // 63 · LISTA DE PARTIDOS
         // ====================================================
 
         composable(
@@ -196,7 +240,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 64 - PROGRAMAR PARTIDO
+        // 64 · PROGRAMAR PARTIDO
         // ====================================================
 
         composable(
@@ -216,6 +260,13 @@ fun PartidoScreen(
                             partidoId
                         )
                     ) {
+
+                        popUpTo(
+                            RUTA_PARTIDO_NUEVO
+                        ) {
+                            inclusive = true
+                        }
+
                         launchSingleTop = true
                     }
                 },
@@ -224,7 +275,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 65 - SELECCIONAR CONVOCADOS
+        // 65 · SELECCIONAR CONVOCADOS
         // ====================================================
 
         composable(
@@ -249,6 +300,7 @@ fun PartidoScreen(
                     )
                     .orEmpty()
 
+
             ConvocatoriaSeleccionScreen(
 
                 onVolver = {
@@ -262,6 +314,15 @@ fun PartidoScreen(
                             partidoId
                         )
                     ) {
+
+                        popUpTo(
+                            rutaConvocatoria(
+                                partidoId
+                            )
+                        ) {
+                            inclusive = true
+                        }
+
                         launchSingleTop = true
                     }
                 },
@@ -270,7 +331,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 66 - SEGUIMIENTO DE CONVOCATORIA
+        // 66 · SEGUIMIENTO DE CONVOCATORIA
         // ====================================================
 
         composable(
@@ -296,10 +357,23 @@ fun PartidoScreen(
                     )
                     .orEmpty()
 
+
             ConvocatoriaSeguimientoScreen(
 
                 onVolver = {
-                    navController.popBackStack()
+
+                    navController.navigate(
+                        RUTA_LISTA
+                    ) {
+
+                        popUpTo(
+                            RUTA_LISTA
+                        ) {
+                            inclusive = false
+                        }
+
+                        launchSingleTop = true
+                    }
                 },
 
                 onGestionarPartido = {
@@ -312,12 +386,28 @@ fun PartidoScreen(
                         launchSingleTop = true
                     }
                 },
+
+                /*
+                 * US-016:
+                 * desde el seguimiento de convocatoria
+                 * el entrenador prepara la alineación.
+                 */
+                onPrepararAlineacion = {
+
+                    navController.navigate(
+                        rutaAlineacion(
+                            partidoId
+                        )
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
 
 
         // ====================================================
-        // 67 - REPROGRAMAR / CANCELAR PARTIDO
+        // 67 · REPROGRAMAR / CANCELAR PARTIDO
         // ====================================================
 
         composable(
@@ -349,7 +439,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 68 - DETALLE DE CONVOCATORIA DEL JUGADOR
+        // 68 · DETALLE DE CONVOCATORIA DEL JUGADOR
         // ====================================================
 
         composable(
@@ -390,6 +480,7 @@ fun PartidoScreen(
                     )
                     .orEmpty()
 
+
             ConvocatoriaDetalleJugadorScreen(
 
                 onVolver = {
@@ -400,8 +491,10 @@ fun PartidoScreen(
 
                     navController.navigate(
                         rutaConvocatoriaNoDisponible(
-                            partidoId = partidoId,
-                            jugadorId = jugadorId,
+                            partidoId =
+                                partidoId,
+                            jugadorId =
+                                jugadorId,
                         )
                     ) {
                         launchSingleTop = true
@@ -412,8 +505,10 @@ fun PartidoScreen(
 
                     navController.navigate(
                         rutaConvocatoriaRespuesta(
-                            partidoId = partidoId,
-                            jugadorId = jugadorId,
+                            partidoId =
+                                partidoId,
+                            jugadorId =
+                                jugadorId,
                         )
                     ) {
                         launchSingleTop = true
@@ -424,8 +519,10 @@ fun PartidoScreen(
 
                     navController.navigate(
                         rutaConvocatoriaVencida(
-                            partidoId = partidoId,
-                            jugadorId = jugadorId,
+                            partidoId =
+                                partidoId,
+                            jugadorId =
+                                jugadorId,
                         )
                     ) {
                         launchSingleTop = true
@@ -436,7 +533,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 69 - MOTIVO DE NO DISPONIBILIDAD
+        // 69 · MOTIVO DE NO DISPONIBILIDAD
         // ====================================================
 
         composable(
@@ -477,6 +574,7 @@ fun PartidoScreen(
                     )
                     .orEmpty()
 
+
             ConvocatoriaNoDisponibleScreen(
 
                 onVolver = {
@@ -487,8 +585,10 @@ fun PartidoScreen(
 
                     navController.navigate(
                         rutaConvocatoriaRespuesta(
-                            partidoId = partidoId,
-                            jugadorId = jugadorId,
+                            partidoId =
+                                partidoId,
+                            jugadorId =
+                                jugadorId,
                         )
                     ) {
                         launchSingleTop = true
@@ -499,8 +599,10 @@ fun PartidoScreen(
 
                     navController.navigate(
                         rutaConvocatoriaVencida(
-                            partidoId = partidoId,
-                            jugadorId = jugadorId,
+                            partidoId =
+                                partidoId,
+                            jugadorId =
+                                jugadorId,
                         )
                     ) {
                         launchSingleTop = true
@@ -511,7 +613,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 70 - RESPUESTA REGISTRADA
+        // 70 · RESPUESTA REGISTRADA
         // ====================================================
 
         composable(
@@ -558,7 +660,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // 71 - CONVOCATORIA VENCIDA
+        // 71 · CONVOCATORIA VENCIDA
         // ====================================================
 
         composable(
@@ -605,7 +707,296 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // US-013 - CATÁLOGO DE EVENTOS
+        // US-016 · GRAPH DE ALINEACIÓN
+        // ====================================================
+
+        navigation(
+
+            /*
+             * Navegamos al graph utilizando:
+             *
+             * partidos/{partidoId}/alineacion-flujo
+             *
+             * El partidoId queda almacenado en el
+             * SavedStateHandle del AlineacionViewModel.
+             */
+            route =
+                RUTA_ALINEACION,
+
+            startDestination =
+                RUTA_ALINEACION_PREPARAR,
+
+            arguments = listOf(
+
+                navArgument(
+                    "partidoId"
+                ) {
+                    type =
+                        NavType.StringType
+                }
+            )
+        ) {
+
+
+            // =================================================
+            // 72 · PREPARAR ALINEACIÓN
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_PREPARAR
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+
+                AlineacionPrepararScreen(
+
+                    onVolver = {
+                        navController.popBackStack()
+                    },
+
+                    onContinuar = {
+
+                        navController.navigate(
+                            RUTA_ALINEACION_TITULARES
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    viewModel =
+                        viewModel,
+                )
+            }
+
+
+            // =================================================
+            // 73 · SELECCIONAR TITULARES
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_TITULARES
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+
+                AlineacionTitularesScreen(
+
+                    onVolver = {
+                        navController.popBackStack()
+                    },
+
+                    onContinuar = {
+
+                        navController.navigate(
+                            RUTA_ALINEACION_POSICIONES
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    viewModel =
+                        viewModel,
+                )
+            }
+
+
+            // =================================================
+            // 74 · POSICIONES Y DORSALES
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_POSICIONES
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+
+                AlineacionPosicionesScreen(
+
+                    onVolver = {
+                        navController.popBackStack()
+                    },
+
+                    onContinuar = {
+
+                        navController.navigate(
+                            RUTA_ALINEACION_RESUMEN
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    viewModel =
+                        viewModel,
+                )
+            }
+
+
+            // =================================================
+            // 75 · RESUMEN Y CONFIRMACIÓN
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_RESUMEN
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+
+                AlineacionResumenScreen(
+
+                    onVolver = {
+                        navController.popBackStack()
+                    },
+
+                    onConfirmada = {
+
+                        navController.navigate(
+                            RUTA_ALINEACION_CONFIRMADA
+                        ) {
+
+                            /*
+                             * Quitamos la pantalla 75
+                             * para que después de confirmar
+                             * no vuelva accidentalmente al
+                             * botón de confirmación.
+                             */
+                            popUpTo(
+                                RUTA_ALINEACION_RESUMEN
+                            ) {
+                                inclusive = true
+                            }
+
+                            launchSingleTop = true
+                        }
+                    },
+
+                    viewModel =
+                        viewModel,
+                )
+            }
+
+
+            // =================================================
+            // 76 · ALINEACIÓN CONFIRMADA
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_CONFIRMADA
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+
+                AlineacionConfirmadaScreen(
+
+                    onFinalizar = {
+
+                        navController.navigate(
+                            RUTA_LISTA
+                        ) {
+
+                            popUpTo(
+                                RUTA_LISTA
+                            ) {
+                                inclusive = false
+                            }
+
+                            launchSingleTop = true
+                        }
+                    },
+
+                    viewModel =
+                        viewModel,
+                )
+            }
+        }
+
+
+        // ====================================================
+        // US-013 · CATÁLOGO DE EVENTOS
         // ====================================================
 
         composable(
@@ -628,7 +1019,8 @@ fun PartidoScreen(
                     }
                 },
 
-                onAbrirEvento = { eventoId ->
+                onAbrirEvento = {
+                        eventoId ->
 
                     navController.navigate(
                         rutaCatalogoEditar(
@@ -643,7 +1035,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // US-013 - NUEVO EVENTO
+        // US-013 · NUEVO EVENTO
         // ====================================================
 
         composable(
@@ -667,7 +1059,7 @@ fun PartidoScreen(
 
 
         // ====================================================
-        // US-013 - EDITAR EVENTO
+        // US-013 · EDITAR EVENTO
         // ====================================================
 
         composable(
@@ -691,6 +1083,7 @@ fun PartidoScreen(
                     ?.getString(
                         "eventoId"
                     )
+
 
             EventoCatalogoFormScreen(
 

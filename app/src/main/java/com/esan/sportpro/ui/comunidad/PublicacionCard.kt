@@ -35,6 +35,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.esan.sportpro.ui.common.TarjetaSportPro
 import com.esan.sportpro.domain.comunidad.EstadoPublicacion
 import com.esan.sportpro.domain.comunidad.Publicacion
 import com.esan.sportpro.domain.comunidad.TipoReaccion
@@ -56,7 +57,7 @@ fun PublicacionCard(
     var menuAbierto by remember { mutableStateOf(false) }
     val esAutor = publicacion.autorUid == uidActual
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    TarjetaSportPro(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {

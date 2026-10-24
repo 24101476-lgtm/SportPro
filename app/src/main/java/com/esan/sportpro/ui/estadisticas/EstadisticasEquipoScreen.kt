@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,16 +17,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.estadisticas.EstadisticaEquipo
-import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.common.EstadoVacioModulo
+import com.esan.sportpro.ui.common.TarjetaSportPro
 
 /** US-026 — Frame 121_Estadisticas_Equipo. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,77 +41,78 @@ fun EstadisticasEquipoScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = { Text("Estadísticas del equipo") },
-                actions = {
+    Scaffold(modifier = modifier) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            EncabezadoModulo(
+                titulo = "Estadísticas",
+                subtitulo = "Resultados y goles de tu equipo",
+                icono = Icons.Default.Groups,
+                accion = {
                     IconButton(onClick = onAbrirFiltros) {
-                        Icon(Icons.Default.FilterList, contentDescription = "Filtros")
+                        Icon(Icons.Default.FilterList, contentDescription = "Filtros", tint = Color.White)
                     }
                 },
             )
-        },
-    ) { padding ->
-        when {
-            state.isLoading -> Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) { CircularProgressIndicator() }
+            when {
+                state.isLoading -> Column(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) { CircularProgressIndicator() }
 
-            state.sinPartidosEnPeriodo -> EmptyStateMessage(
-                mensaje = "Aún no hay partidos registrados en este periodo",
-                modifier = Modifier.padding(padding),
-            )
+                state.sinPartidosEnPeriodo -> EstadoVacioModulo(
+                    titulo = "Aún no hay partidos",
+                    mensaje = "No hay partidos registrados en este periodo",
+                    icono = Icons.Default.Groups,
+                )
 
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                item {
-                    if (state.filtro.tieneFiltrosActivos) {
-                        Text(
-                            text = "Filtros activos",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                item { ResumenEquipoGrid(state.resumenEquipo) }
-                item {
-                    if (state.golesUltimosPartidos.isNotEmpty()) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            GraficoGolesBarChart(
-                                puntos = state.golesUltimosPartidos,
-                                modifier = Modifier.padding(16.dp),
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    item {
+                        if (state.filtro.tieneFiltrosActivos) {
+                            Text(
+                                text = "Filtros activos",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
-                }
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onVerJugadores,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Groups, contentDescription = null)
-                                Text(
-                                    text = "Ver tabla de jugadores",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    modifier = Modifier.padding(start = 8.dp),
+                    item { ResumenEquipoGrid(state.resumenEquipo) }
+                    item {
+                        if (state.golesUltimosPartidos.isNotEmpty()) {
+                            TarjetaSportPro {
+                                GraficoGolesBarChart(
+                                    puntos = state.golesUltimosPartidos,
+                                    modifier = Modifier.padding(16.dp),
                                 )
+                            }
+                        }
+                    }
+                    item {
+                        TarjetaSportPro(onClick = onVerJugadores) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Groups, contentDescription = null)
+                                    Text(
+                                        text = "Ver tabla de jugadores",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.padding(start = 8.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -132,7 +134,7 @@ private fun ResumenEquipoGrid(resumen: EstadisticaEquipo) {
         "Diferencia de gol" to resumen.diferenciaGol.toString(),
         "Promedio goles/partido" to "%.2f".format(resumen.promedioGolesPorPartido),
     )
-    Card(modifier = Modifier.fillMaxWidth()) {
+    TarjetaSportPro {
         Column(modifier = Modifier.padding(16.dp)) {
             filas.chunked(2).forEach { par ->
                 Row(

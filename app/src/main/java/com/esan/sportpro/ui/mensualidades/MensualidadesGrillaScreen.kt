@@ -13,7 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -23,18 +23,22 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
 import com.esan.sportpro.navigation.UserRole
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.RegistroSimuladoLegend
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.partido.ColoresPartido
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -67,17 +71,25 @@ fun MensualidadesGrillaScreen(
 
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text("Mensualidades") }) },
         floatingActionButton = {
             if (state.rolActual == UserRole.ADMINISTRADOR) {
-                FloatingActionButton(onClick = viewModel::onNuevoRegistro) {
+                FloatingActionButton(
+                    onClick = viewModel::onNuevoRegistro,
+                    containerColor = ColoresPartido.Verde,
+                    contentColor = Color.White,
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "Registrar pago")
                 }
             }
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            RegistroSimuladoLegend()
+            EncabezadoModulo(
+                titulo = "Mensualidades",
+                subtitulo = "Control de pagos del mes por jugador",
+                icono = Icons.Default.Payments,
+            )
+            RegistroSimuladoLegend(modifier = Modifier.padding(top = 12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -122,17 +134,18 @@ fun MensualidadesGrillaScreen(
                 state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.mensualidades.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Aún no hay mensualidades registradas en este periodo", style = MaterialTheme.typography.bodyMedium)
-                }
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.mensualidades.isEmpty() -> EstadoVacioModulo(
+                    titulo = "Aún no hay mensualidades",
+                    mensaje = "No hay pagos registrados en este periodo",
+                    icono = Icons.Default.Payments,
+                )
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(state.mensualidades, key = { it.mensualidad.id }) { item ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
+                        TarjetaSportPro(
                             onClick = { viewModel.onJugadorSeleccionado(item.mensualidad.jugadorId) },
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {

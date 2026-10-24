@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,7 +28,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.domain.comunidad.Aviso
 import com.esan.sportpro.domain.comunidad.MotivoReporte
 import com.esan.sportpro.domain.comunidad.Publicacion
@@ -71,6 +74,12 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
     }
 
     Column(modifier = modifier.fillMaxSize()) {
+        EncabezadoModulo(
+            titulo = "Comunidad",
+            subtitulo = "Muro, avisos y moderación de tu academia",
+            icono = Icons.Default.Forum,
+            modifier = Modifier.padding(16.dp),
+        )
         moderacionState.suspensionActual?.let { UsuarioSuspendidoBanner(suspension = it) }
 
         Row(verticalAlignment = Alignment.CenterVertically) {

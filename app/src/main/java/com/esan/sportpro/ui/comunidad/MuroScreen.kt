@@ -26,7 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.comunidad.Publicacion
 import com.esan.sportpro.domain.comunidad.TipoReaccion
-import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.EstadoVacioModulo
+import com.esan.sportpro.ui.partido.ColoresPartido
 import com.google.firebase.auth.FirebaseAuth
 
 /** US-028, criterio 5 — Frame 131_Comunidad_Muro. */
@@ -45,7 +46,11 @@ fun MuroScreen(
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
-            FloatingActionButton(onClick = onNuevaPublicacion) {
+            FloatingActionButton(
+                onClick = onNuevaPublicacion,
+                containerColor = ColoresPartido.Verde,
+                contentColor = androidx.compose.ui.graphics.Color.White,
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Nueva publicación")
             }
         },
@@ -58,7 +63,11 @@ fun MuroScreen(
                 .padding(padding),
         ) {
             if (!state.isLoading && state.publicaciones.isEmpty()) {
-                EmptyStateMessage(mensaje = "Aún no hay publicaciones. ¡Sé el primero en compartir algo!", icono = Icons.Default.Forum)
+                EstadoVacioModulo(
+                    titulo = "Aún no hay publicaciones",
+                    mensaje = "¡Sé el primero en compartir algo!",
+                    icono = Icons.Default.Forum,
+                )
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),

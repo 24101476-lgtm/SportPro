@@ -102,7 +102,7 @@ class EstadisticasViewModel @Inject constructor(
     /**
      * Devuelve la lista de jugadorId visibles para el usuario actual, o `null` si no hay
      * restricción. Reutiliza el mismo criterio de vinculación padre-jugador que US-008
-     * (colección `vinculaciones`) — ver TODO(US-007) en `PadreMensualidadesViewModel`.
+     * (colección `vinculaciones`, solo vínculos con estado APROBADA — US-007).
      */
     private suspend fun jugadorIdsPermitidosParaRolActual(): List<String>? {
         if (currentState.rolActual != UserRole.PADRE_DE_FAMILIA) return null
@@ -110,6 +110,8 @@ class EstadisticasViewModel @Inject constructor(
         return runCatching {
             firestore.collection("vinculaciones")
                 .whereEqualTo("padreUid", padreUid)
+                // US-007: solo los vínculos aprobados (no los pendientes, rechazados ni revocados).
+                .whereEqualTo("estado", "APROBADA")
                 .get()
                 .await()
                 .documents

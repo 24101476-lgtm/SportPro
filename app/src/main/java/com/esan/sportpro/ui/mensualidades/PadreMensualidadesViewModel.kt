@@ -25,9 +25,8 @@ data class PadreMensualidadesUiState(
  * US-008 — Frame 40_Padre_Mensualidades. El padre de familia ve exclusivamente las mensualidades
  * de los jugadores vinculados a su cuenta (criterio de aceptación 8).
  *
- * TODO(US-007): reemplazar la lectura directa de "vinculaciones" por el repositorio del módulo
- * de vinculación padre-jugador cuando esté disponible; por ahora se consulta la colección
- * directamente para no bloquear el avance de este módulo.
+ * Lee los vínculos aprobados de `vinculaciones` (US-007: id `{padreUid}_{jugadorId}`, campos
+ * `padreUid`, `jugadorId` y `estado`; ver `domain/jugadores/Vinculacion`).
  */
 @HiltViewModel
 class PadreMensualidadesViewModel @Inject constructor(
@@ -50,6 +49,8 @@ class PadreMensualidadesViewModel @Inject constructor(
             val jugadorIds = runCatching {
                 firestore.collection("vinculaciones")
                     .whereEqualTo("padreUid", padreUid)
+                // US-007: solo los vínculos aprobados (no los pendientes, rechazados ni revocados).
+                .whereEqualTo("estado", "APROBADA")
                     .get()
                     .await()
                     .documents

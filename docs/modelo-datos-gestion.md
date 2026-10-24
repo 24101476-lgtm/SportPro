@@ -20,7 +20,18 @@ jugadores/{jugadorId}                  (US-006/US-007)
    posicion, dorsal?, estaturaCm?, pesoKg?
    telefono, correo
    contactoEmergenciaNombre, contactoEmergenciaTelefono, contactoEmergenciaParentesco
+   codigoVinculacion (6 caracteres, único en la academia; US-007), fotoUrl
    activo, creadoPor
+
+directorio_jugadores/{jugadorId}       (US-007) datos mínimos que ve el apoderado para pedir el vínculo
+   academiaId, equipoId, equipoNombre ("Equipo · Categoría"), nombre, codigo, activo
+   apoderadosAprobados (0-2; lo mantiene la aprobación/revocación, las reglas impiden pasar de 2)
+
+vinculaciones/{padreUid}_{jugadorId}   (US-007) vínculo padre/madre ↔ jugador
+   academiaId, padreUid, padreNombre, jugadorId, jugadorNombre, equipoId, equipoNombre
+   estado: PENDIENTE | APROBADA | RECHAZADA | REVOCADA, motivoRechazo
+   solicitadaEn, resueltaPor, resueltaPorNombre, resueltaEn
+vinculaciones/{id}/auditoria/{registroId}   cada acción: accion (SOLICITUD | APROBACION | RECHAZO | REVOCACION), uid, nombre, detalle, fecha
 
 entrenamientos/{entrenamientoId}       (US-009 a US-013)
    academiaId, equipoId, equipoNombre
@@ -67,7 +78,8 @@ asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísti
 | Dato | Administrador | Entrenador | Jugador | Padre de familia |
 |---|---|---|---|---|
 | Equipos (nombre, categoría) | Lee y edita | Lee | Lee | Lee |
-| **Perfil del jugador** (datos físicos, contacto, emergencia) | Lee y edita | Lee y edita | **No accede** | **No accede** |
+| **Perfil del jugador** (datos físicos, contacto, emergencia) | Lee y edita | Lee y edita | **No accede** | **Solo sus hijos con vínculo aprobado** (lectura) |
+| Solicitudes de vinculación | Aprueba, rechaza y **revoca** | Aprueba y rechaza | No | Crea las suyas y ve su estado |
 | Entrenamientos y objetivos | Lee y edita | Lee y edita | Lee | No ve el módulo |
 | Tomar asistencia | Sí | Sí | No | No |
 | Biblioteca de ejercicios: ver y crear | Sí | Sí | No | No |
@@ -78,6 +90,6 @@ La restricción se aplica en tres capas: (1) la pestaña no aparece (`HomeModule
 ## Pendientes conocidos
 
 - **Fotografía del jugador** (US-006): el modelo no incluye `fotoUrl` todavía; se agregará con Cloud Storage.
-- **Vincular padre ↔ hijo** para que un padre vea datos de su propio hijo (hoy no accede al módulo Jugadores).
+- **Notificación push** al personal cuando llega una solicitud de vinculación (US-007, criterio 2): depende del envío de notificaciones (US-027). Mientras tanto, la lista de Jugadores muestra "Solicitudes de vinculación (N pendientes)".
 - **Lectura de `equipos`, `entrenamientos` y `asistencias_entrenamiento`** está abierta a cualquier usuario autenticado (no filtra por academia). Se endurece cuando exista el vínculo con la academia.
 - **Regla de `usuarios`**: hoy un usuario puede escribir su propio documento, incluido el campo `rol`. Hay que restringir la creación de `ADMINISTRADOR` a quien tenga un código de invitación válido (verificación en servidor).

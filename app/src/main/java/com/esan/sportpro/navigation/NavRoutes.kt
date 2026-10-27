@@ -47,3 +47,69 @@ enum class HomeModule(val label: String) {
         }
     }
 }
+
+/** Tipo de pestaña de la barra inferior. */
+enum class TipoPestana { INICIO, SECCION, MAS }
+
+/**
+ * Una pestaña de la barra inferior. Una [TipoPestana.SECCION] con varios [modulos] los muestra
+ * con pestañas internas; [TipoPestana.MAS] los lista como accesos.
+ */
+data class PestanaNavegacion(
+    val id: String,
+    val label: String,
+    val tipo: TipoPestana,
+    val modulos: List<HomeModule> = emptyList(),
+)
+
+/**
+ * Barra inferior de 4 pestañas por rol (corrección de la entrega de la semana 7: con 7 u 8
+ * pestañas los botones quedaban pequeños y apretados). Lo que no cabe va agrupado en una sección
+ * o en "Más". Función pura para poder probarla sin Android.
+ */
+object MenuPrincipal {
+    const val MAX_PESTANAS = 4
+
+    private val inicio = PestanaNavegacion("inicio", "Inicio", TipoPestana.INICIO)
+    private val partidos = PestanaNavegacion("partidos", "Partidos", TipoPestana.SECCION, listOf(HomeModule.PARTIDO))
+
+    fun para(rol: UserRole): List<PestanaNavegacion> = when (rol) {
+        UserRole.ADMINISTRADOR -> listOf(
+            inicio,
+            PestanaNavegacion(
+                "plantel", "Plantel", TipoPestana.SECCION,
+                listOf(HomeModule.ACADEMIA, HomeModule.JUGADORES, HomeModule.ENTRENAMIENTOS, HomeModule.MENSUALIDADES),
+            ),
+            partidos,
+            PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD, HomeModule.IA)),
+        )
+        UserRole.ENTRENADOR -> listOf(
+            inicio,
+            PestanaNavegacion(
+                "plantel", "Plantel", TipoPestana.SECCION,
+                listOf(HomeModule.ACADEMIA, HomeModule.JUGADORES, HomeModule.ENTRENAMIENTOS),
+            ),
+            partidos,
+            PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD, HomeModule.IA)),
+        )
+        UserRole.JUGADOR -> listOf(
+            inicio,
+            PestanaNavegacion("entrenos", "Entrenos", TipoPestana.SECCION, listOf(HomeModule.ENTRENAMIENTOS)),
+            partidos,
+            PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD)),
+        )
+        UserRole.PADRE_DE_FAMILIA -> listOf(
+            inicio,
+            PestanaNavegacion(
+                "hijos", "Mis hijos", TipoPestana.SECCION,
+                listOf(HomeModule.JUGADORES, HomeModule.MENSUALIDADES),
+            ),
+            partidos,
+            PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD)),
+        )
+    }
+
+    /** Pestaña que contiene a [modulo] para ese rol, o `null` si el rol no lo ve. */
+    fun pestanaDe(rol: UserRole, modulo: HomeModule): PestanaNavegacion? =
+        para(rol).firstOrNull { modulo in it.modulos }
+}

@@ -1,5 +1,8 @@
 package com.esan.sportpro.ui.estadisticas
 
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,12 +62,38 @@ fun EstadisticasEquipoScreen(
                     }
                 },
             )
+            // Selector de equipo: las estadísticas son siempre de un equipo real de la academia.
+            if (state.equipos.size > 1) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.equipos.forEach { equipo ->
+                        FilterChip(
+                            selected = equipo.id == state.equipoSeleccionadoId,
+                            onClick = { viewModel.seleccionarEquipo(equipo.id) },
+                            label = { Text(equipo.etiqueta) },
+                        )
+                    }
+                }
+            } else {
+                state.equipos.firstOrNull()?.let { equipo ->
+                    Text(equipo.etiqueta, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
             when {
                 state.isLoading -> Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) { CircularProgressIndicator() }
+
+                state.sinEquipos -> EstadoVacioModulo(
+                    titulo = "Sin equipos",
+                    mensaje = "Las estadísticas aparecen cuando tu academia tiene equipos registrados" +
+                        " (para un padre, cuando su hijo está vinculado).",
+                    icono = Icons.Default.Groups,
+                )
 
                 state.sinPartidosEnPeriodo -> EstadoVacioModulo(
                     titulo = "Aún no hay partidos",

@@ -11,7 +11,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,6 +28,7 @@ data class ConvocatoriaSeleccionUiState(
     val mensaje: String? = null,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ConvocatoriaSeleccionViewModel @Inject constructor(
     private val repository: PartidoRepository,
@@ -34,14 +38,6 @@ class ConvocatoriaSeleccionViewModel @Inject constructor(
     private val partidoId: String =
         savedStateHandle["partidoId"] ?: ""
 
-    /*
-     * Temporalmente el proyecto completo trabaja
-     * con "equipo-demo".
-     *
-     * Más adelante deberá reemplazarse por el
-     * equipo real del usuario autenticado.
-     */
-    private val equipoIdActual = "equipo-demo"
 
     private val _uiState =
         MutableStateFlow(
@@ -70,20 +66,18 @@ class ConvocatoriaSeleccionViewModel @Inject constructor(
 
         viewModelScope.launch {
 
-            combine(
-                repository.observarJugadoresEquipo(
-                    equipoIdActual
-                ),
-                repository.observarPartido(
-                    partidoId
-                ),
-            ) { jugadores, partido ->
-
-                Pair(
-                    jugadores,
-                    partido?.maxConvocados ?: 23
-                )
-            }
+            // El plantel es el del equipo real del partido (antes se usaba un "equipo-demo" fijo
+            // que no existía, así que la convocatoria no mostraba jugadores).
+            repository.observarPartido(partidoId)
+                .flatMapLatest { partido ->
+                    val equipoId = partido?.equipoId
+                    val maximo = partido?.maxConvocados ?: 23
+                    if (equipoId.isNullOrBlank()) {
+                        flowOf(Pair(emptyList<JugadorPlantel>(), maximo))
+                    } else {
+                        repository.observarJugadoresEquipo(equipoId).map { jugadores -> Pair(jugadores, maximo) }
+                    }
+                }
                 .catch { error ->
 
                     _uiState.value =

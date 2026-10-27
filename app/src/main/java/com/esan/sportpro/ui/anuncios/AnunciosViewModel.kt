@@ -1,5 +1,10 @@
 package com.esan.sportpro.ui.anuncios
 
+import com.esan.sportpro.data.partido.describirErrorFirestore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.catch
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.anuncios.AnuncioRepository
@@ -30,8 +35,8 @@ data class AnunciosUiState(
     val mostrarArchivados: Boolean = false,
     val formulario: AnuncioFormulario = AnuncioFormulario(),
     val preferenciaInformativasActivas: Boolean = true,
-    /** TODO(US-003): reemplazar por el rol real del usuario autenticado. */
-    val rolActual: UserRole = UserRole.ENTRENADOR,
+    /** Rol del perfil autenticado; hasta cargarlo se asume el de menor privilegio. */
+    val rolActual: UserRole = UserRole.JUGADOR,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val avisoPublicacion: String? = null,
@@ -48,29 +53,42 @@ sealed interface AnunciosEvent {
 class AnunciosViewModel @Inject constructor(
     private val repository: AnuncioRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<AnunciosUiState, AnunciosEvent>(AnunciosUiState()) {
 
-    // TODO(academia): reemplazar por el academiaId real del usuario autenticado.
-    private val academiaIdActual = "academia-demo"
+    private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
+    private var nombreActual = ""
+    private var trabajoAnuncios: Job? = null
 
     init {
-        observarAnuncios()
-        observarUrgentesNoLeidos()
-        observarPreferencias()
+        viewModelScope.launch {
+            // Rol y academia reales del usuario autenticado.
+            sesionRepository.perfilActual()?.let { perfil ->
+                academiaIdActual = perfil.academiaId
+                nombreActual = perfil.nombre
+                setState { copy(rolActual = perfil.rol) }
+            }
+            observarAnuncios()
+            observarUrgentesNoLeidos()
+            observarPreferencias()
+        }
     }
 
     private fun observarAnuncios() {
-        viewModelScope.launch {
-            repository.observarAnuncios(academiaIdActual, currentState.mostrarArchivados).collectLatest { lista ->
-                setState { copy(anuncios = lista, isLoading = false, errorMessage = null) }
-            }
+        trabajoAnuncios?.cancel()
+        trabajoAnuncios = viewModelScope.launch {
+            repository.observarAnuncios(academiaIdActual, currentState.mostrarArchivados)
+                .catch { e -> setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) } }
+                .collectLatest { lista ->
+                    setState { copy(anuncios = lista, isLoading = false, errorMessage = null) }
+                }
         }
     }
 
     private fun observarUrgentesNoLeidos() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
-            repository.observarAnunciosUrgentesNoLeidos(academiaIdActual, uid).collectLatest { lista ->
+            repository.observarAnunciosUrgentesNoLeidos(academiaIdActual, uid).catch { }.collectLatest { lista ->
                 setState { copy(anunciosUrgentesNoLeidos = lista) }
             }
         }
@@ -79,7 +97,7 @@ class AnunciosViewModel @Inject constructor(
     private fun observarPreferencias() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
-            repository.observarPreferenciaInformativas(uid).collectLatest { activo ->
+            repository.observarPreferenciaInformativas(uid).catch { }.collectLatest { activo ->
                 setState { copy(preferenciaInformativasActivas = activo) }
             }
         }
@@ -112,7 +130,7 @@ class AnunciosViewModel @Inject constructor(
                         destinatarios = estado.formulario.destinatarios,
                         prioridad = estado.formulario.prioridad,
                         autorUid = uid,
-                        autorNombre = firebaseAuth.currentUser?.displayName ?: "Entrenador",
+                        autorNombre = nombreActual.ifBlank { firebaseAuth.currentUser?.displayName ?: "Entrenador" },
                     ),
                 )
             }

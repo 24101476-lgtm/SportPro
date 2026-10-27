@@ -1,5 +1,9 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.data.partido.describirErrorFirestore
+import kotlinx.coroutines.flow.catch
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import android.net.Uri
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
@@ -21,9 +25,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class PublicacionesUiState(
-    // TODO(academia): reemplazar por la academia real del usuario autenticado.
-    val academiaId: String = "academia-demo",
-    // TODO(US-003/cuentas): calcular desde la fecha de nacimiento del perfil real.
+    /** Academia, nombre y edad del perfil autenticado (se completan al cargar el perfil). */
+    val academiaId: String = PerfilActual.ACADEMIA_POR_DEFECTO,
+    val autorNombre: String = "",
     val autorEsMenorDeEdad: Boolean = false,
     val primeraPagina: List<Publicacion> = emptyList(),
     val paginasAdicionales: List<Publicacion> = emptyList(),
@@ -50,6 +54,7 @@ class PublicacionesViewModel @Inject constructor(
     private val repository: PublicacionRepository,
     private val moderacionRepository: ModeracionRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<PublicacionesUiState, PublicacionesEvent>(PublicacionesUiState()) {
 
     private var uidsBloqueados: List<String> = emptyList()
@@ -57,10 +62,16 @@ class PublicacionesViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            sesionRepository.perfilActual()?.let { perfil ->
+                setState {
+                    copy(academiaId = perfil.academiaId, autorNombre = perfil.nombre, autorEsMenorDeEdad = perfil.esMenor)
+                }
+            }
             val uid = firebaseAuth.currentUser?.uid
-            uidsBloqueados = uid?.let { moderacionRepository.obtenerUidsOcultosParaMuro(it) }.orEmpty()
+            uidsBloqueados = uid?.let { runCatching { moderacionRepository.obtenerUidsOcultosParaMuro(it) }.getOrNull() }.orEmpty()
             repository.observarPrimeraPagina(currentState.academiaId, uidsBloqueados)
                 .onEach { lista -> setState { copy(primeraPagina = lista, isLoading = false) } }
+                .catch { e -> setState { copy(isLoading = false) }; sendEvent(PublicacionesEvent.Error(describirErrorFirestore(e))) }
                 .launchIn(viewModelScope)
         }
     }
@@ -96,7 +107,7 @@ class PublicacionesViewModel @Inject constructor(
         val borrador = Publicacion(
             academiaId = currentState.academiaId,
             autorUid = uid,
-            autorNombre = firebaseAuth.currentUser?.displayName.orEmpty().ifBlank { "Usuario SportPro" },
+            autorNombre = currentState.autorNombre.ifBlank { firebaseAuth.currentUser?.displayName.orEmpty() }.ifBlank { "Usuario SportPro" },
             autorEsMenorDeEdad = currentState.autorEsMenorDeEdad,
             texto = texto,
             visibilidad = visibilidad,

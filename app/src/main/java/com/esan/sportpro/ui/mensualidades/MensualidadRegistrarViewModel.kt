@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.mensualidades
 
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.mensualidades.MensualidadRepository
@@ -43,10 +45,17 @@ sealed interface MensualidadRegistrarEvent {
 class MensualidadRegistrarViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<MensualidadRegistrarUiState, MensualidadRegistrarEvent>(MensualidadRegistrarUiState()) {
 
-    // TODO(academia): reemplazar por el academiaId real del usuario autenticado.
-    private val academiaIdActual = "academia-demo"
+    /** Academia del perfil autenticado (antes era un valor fijo). */
+    private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
+
+    init {
+        viewModelScope.launch {
+            sesionRepository.perfilActual()?.let { academiaIdActual = it.academiaId }
+        }
+    }
 
     fun onJugadorSeleccionado(jugadorId: String, jugadorNombre: String, equipoId: String, equipoNombre: String) {
         setState {

@@ -1,5 +1,9 @@
 package com.esan.sportpro.ui.mensualidades
 
+import com.esan.sportpro.data.partido.describirErrorFirestore
+import kotlinx.coroutines.flow.catch
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.mensualidades.MensualidadRepository
@@ -49,14 +53,21 @@ sealed interface MensualidadesGrillaEvent {
 class MensualidadesGrillaViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<MensualidadesGrillaUiState, MensualidadesGrillaEvent>(MensualidadesGrillaUiState()) {
 
-    // TODO(academia): reemplazar por el academiaId real del usuario autenticado.
-    private val academiaIdActual = "academia-demo"
+    private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
     private var observacionJob: Job? = null
 
     init {
-        observarGrilla()
+        viewModelScope.launch {
+            // Rol y academia reales: el entrenador ve solo el estado, sin montos (criterio 7).
+            sesionRepository.perfilActual()?.let { perfil ->
+                academiaIdActual = perfil.academiaId
+                setState { copy(rolActual = perfil.rol) }
+            }
+            observarGrilla()
+        }
     }
 
     private fun observarGrilla() {
@@ -73,7 +84,9 @@ class MensualidadesGrillaViewModel @Inject constructor(
                 anio = estado.anio,
                 equipoId = estado.equipoFiltro,
                 estado = estado.estadoFiltro,
-            ).collectLatest { lista ->
+            ).catch { e ->
+                setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) }
+            }.collectLatest { lista ->
                 val resueltas = lista.map { m ->
                     MensualidadConEstadoEfectivo(
                         mensualidad = m,

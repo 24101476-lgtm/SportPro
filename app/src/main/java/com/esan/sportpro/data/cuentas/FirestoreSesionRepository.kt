@@ -132,6 +132,7 @@ class FirestoreSesionRepository @Inject constructor(
             nombre = nombre,
             rol = rol,
             academiaId = perfil.getString("clubId") ?: PerfilActual.ACADEMIA_POR_DEFECTO,
+            esMenor = perfil.getBoolean("esMenor") == true,
         )
     }
 

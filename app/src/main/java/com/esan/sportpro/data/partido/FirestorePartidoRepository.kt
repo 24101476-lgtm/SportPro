@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
+import java.util.Calendar
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -120,12 +121,17 @@ class FirestorePartidoRepository @Inject constructor(
         _erroresEscritura.asSharedFlow()
 
     override fun observarJugadoresEquipo(
-        equipoId: String
+        equipoId: String,
+        academiaId: String?,
     ): Flow<List<JugadorPlantel>> = callbackFlow {
 
-        val reg = firestore
+        var consulta = firestore
             .collection("jugadores")
             .whereEqualTo("equipoId", equipoId)
+        if (academiaId != null) {
+            consulta = consulta.whereEqualTo("academiaId", academiaId)
+        }
+        val reg = consulta
             .addSnapshotListener { snap, error ->
 
                 if (error != null) {
@@ -155,7 +161,9 @@ class FirestorePartidoRepository @Inject constructor(
                                 id = doc.id,
                                 nombre =
                                     doc.getString("nombre")
-                                        ?: "Jugador sin nombre",
+                                        ?: listOfNotNull(doc.getString("nombres"), doc.getString("apellidos"))
+                                            .joinToString(" ")
+                                            .ifBlank { "Jugador sin nombre" },
                                 equipoId =
                                     doc.getString("equipoId")
                                         ?: equipoId,
@@ -902,9 +910,16 @@ class FirestorePartidoRepository @Inject constructor(
         duracionTiempoMin: Int,
         maxConvocados: Int,
         fechaLimiteRespuestaMs: Long,
+        equipoId: String?,
+        academiaId: String?,
+        categoria: String?,
     ): String {
 
         val uid = uidActual
+        // El formulario usa "Amistoso" / "Liga" / "Torneo"; Estadísticas filtra por AMISTOSO, LIGA, TORNEO.
+        val tipo = TiposPartido.todos.firstOrNull { (valor, etiqueta) ->
+            tipoPartido.trim().equals(valor, ignoreCase = true) || tipoPartido.trim().equals(etiqueta, ignoreCase = true)
+        }?.first ?: TiposPartido.AMISTOSO
 
         val partidoRef =
             partidos.document()
@@ -926,12 +941,35 @@ class FirestorePartidoRepository @Inject constructor(
                 "nombreRival" to
                         nombreRival.trim(),
 
-                /*
-                 * Conservamos categoria porque
-                 * ya es usada por el modelo existente.
-                 */
+                // Antes `categoria` guardaba el tipo de partido y no había equipo ni academia:
+                // el partido no aparecía en la lista (se filtra por academia) y la convocatoria
+                // quedaba sin jugadores.
                 "categoria" to
-                        tipoPartido.trim(),
+                        categoria,
+
+                "equipoId" to
+                        equipoId,
+
+                "academiaId" to
+                        academiaId,
+
+                "rivalNombre" to
+                        nombreRival.trim(),
+
+                "tipo" to
+                        tipo,
+
+                "temporada" to
+                        Calendar.getInstance().apply { timeInMillis = fechaMs }.get(Calendar.YEAR).toString(),
+
+                "golesEquipo" to
+                        0,
+
+                "golesRival" to
+                        0,
+
+                "actaCerrada" to
+                        false,
 
                 "estado" to
                         EstadoPartido
@@ -1899,7 +1937,7 @@ class FirestorePartidoRepository @Inject constructor(
             "fueraDeOrden" to fueraDeOrden,
             "excedeCambios" to excedeCambios,
             "eventoOrigenId" to eventoOrigenId,
-        )
+        ) + listOfNotNull(periodo?.let { "periodo" to it })
 
     // ---------------------------------------------------------------- Helpers de fechas
 
@@ -2013,6 +2051,9 @@ class FirestorePartidoRepository @Inject constructor(
 
             finPrimerTiempoMs =
                 millis("finPrimerTiempo"),
+
+            ultimoRecordatorioMs =
+                millis("ultimoRecordatorioConvocatoria"),
         )
     }
 
@@ -2196,6 +2237,16 @@ class FirestorePartidoRepository @Inject constructor(
             pendienteSincronizar =
                 metadata
                     .hasPendingWrites(),
+
+            periodo =
+                getLong(
+                    "periodo"
+                )?.toInt(),
+
+            reemplazadoEnMs =
+                millis(
+                    "reemplazadoEn"
+                ),
         )
     }
 

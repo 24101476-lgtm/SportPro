@@ -32,9 +32,10 @@ class ReglasPartidoTest {
         secundario: String? = null,
         estado: EstadoEvento = EstadoEvento.VIGENTE,
         incompleto: Boolean = false,
+        registradoEn: Long = minuto * 1000L,
     ) = EventoPartido(
         id, id, 1, tipo, tipo, minuto, equipo, jugador, jugador, secundario, secundario, null, null,
-        "uid", "op", minuto * 1000L, estado, 1, incompleto, false, false, null, null, emptyList(),
+        "uid", "op", registradoEn, estado, 1, incompleto, false, false, null, null, emptyList(),
         null, null, null, null, false,
     )
 
@@ -121,5 +122,65 @@ class ReglasPartidoTest {
         val reloj = ReglasPartido.reloj(partido(), 70 * 60_000L)
         assertEquals(15, reloj.adicion)
         assertFalse(reloj.tiempoCumplido)
+    }
+
+    // ------------------------------------------------------------ Tiempo añadido del 1.er tiempo
+
+    /** Caso real: el 1.er tiempo terminó en 45+15' (minuto 60) y el 2.º empezó en 45'. */
+    private val partidoConAnadido = listOf(
+        evento("ini", TiposEvento.INICIO_PARTIDO, 0, registradoEn = 0),
+        evento("gol1", TiposEvento.GOL, 52, jugador = "j9", registradoEn = 3_000),
+        evento("fin1", TiposEvento.FIN_PRIMER_TIEMPO, 60, registradoEn = 3_600),
+        evento("ini2", TiposEvento.INICIO_SEGUNDO_TIEMPO, 45, registradoEn = 4_500),
+        evento("gol2", TiposEvento.GOL, 50, jugador = "j9", registradoEn = 4_800),
+    )
+
+    @Test
+    fun tiempoAnadidoDelPrimerTiempo_quedaAntesDelSegundoTiempo() {
+        val orden = ReglasPartido.cronologia(partidoConAnadido).map { it.id }
+        assertEquals(listOf("ini", "gol1", "fin1", "ini2", "gol2"), orden)
+    }
+
+    @Test
+    fun eventoSinPeriodoGuardado_seDeducePorLaHoraDeRegistro() {
+        val gol1 = partidoConAnadido.first { it.id == "gol1" }
+        val gol2 = partidoConAnadido.first { it.id == "gol2" }
+        assertEquals(1, ReglasPartido.periodoDe(gol1, partidoConAnadido))
+        assertEquals(2, ReglasPartido.periodoDe(gol2, partidoConAnadido))
+        // Si se guardó el tiempo, se respeta.
+        assertEquals(1, ReglasPartido.periodoDe(gol2.copy(periodo = 1), partidoConAnadido))
+    }
+
+    @Test
+    fun minutoEnTiempoAnadido_seMuestraComoLoAnotaElArbitro() {
+        assertEquals("45+15'", ReglasPartido.textoMinuto(60, 1, 45))
+        assertEquals("45'", ReglasPartido.textoMinuto(45, 2, 45))
+        assertEquals("60'", ReglasPartido.textoMinuto(60, 2, 45))
+        assertEquals("90+3'", ReglasPartido.textoMinuto(93, 2, 45))
+    }
+
+    @Test
+    fun inicioDelSegundoTiempo_noEsFueraDeOrdenAunqueElPrimeroTuvieraAnadido() {
+        val primerTiempo = partidoConAnadido.take(3)
+        assertFalse(ReglasPartido.esFueraDeOrden(45, 2, primerTiempo))
+        // Dentro del mismo tiempo sí se detecta.
+        assertTrue(ReglasPartido.esFueraDeOrden(40, 1, primerTiempo))
+        assertTrue(ReglasPartido.esFueraDeOrden(47, 2, partidoConAnadido))
+    }
+
+    @Test
+    fun minutoDelSegundoTiempo_noPuedeSerMenorQueSuInicio() {
+        assertNotNull(ReglasPartido.validarMinutoPeriodo(30, 2, 45))
+        assertNull(ReglasPartido.validarMinutoPeriodo(45, 2, 45))
+        assertNull(ReglasPartido.validarMinutoPeriodo(60, 1, 45))
+        assertNotNull(ReglasPartido.validarMinutoPeriodo(61, 1, 45))
+    }
+
+    @Test
+    fun periodoParaRegistro_sigueAlEstadoDelPartido() {
+        assertEquals(1, ReglasPartido.periodoParaRegistro(TiposEvento.GOL, partido(), emptyList()))
+        assertEquals(2, ReglasPartido.periodoParaRegistro(TiposEvento.GOL, partido(inicio2 = 1L), emptyList()))
+        assertEquals(2, ReglasPartido.periodoParaRegistro(TiposEvento.INICIO_SEGUNDO_TIEMPO, partido(), emptyList()))
+        assertEquals(1, ReglasPartido.periodoParaRegistro(TiposEvento.FIN_PRIMER_TIEMPO, partido(inicio2 = 1L), emptyList()))
     }
 }

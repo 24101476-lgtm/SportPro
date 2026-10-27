@@ -130,7 +130,10 @@ fun NuevoPartidoSheet(state: PartidosUiState, form: FormularioPartido, viewModel
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Etiqueta("${form.titulares}/11 titulares", if (form.titulares == 11) ColoresPartido.Verde else ColoresPartido.Naranja)
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Etiqueta("${form.titulares}/11 titulares", if (form.titulares == 11) ColoresPartido.Verde else ColoresPartido.Naranja)
+                        Etiqueta("${form.suplentes}/12 suplentes", ColoresPartido.Azul)
+                    }
                 }
                 if (form.titulares in 1..10) {
                     Text(

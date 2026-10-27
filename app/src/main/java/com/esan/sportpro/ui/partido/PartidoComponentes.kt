@@ -47,6 +47,7 @@ import com.esan.sportpro.domain.partido.EstadoPartido
 import com.esan.sportpro.domain.partido.EventoPartido
 import com.esan.sportpro.domain.partido.JugadorEspecial
 import com.esan.sportpro.domain.partido.Partido
+import com.esan.sportpro.domain.partido.ReglasPartido
 import com.esan.sportpro.domain.partido.ResultadoPenal
 import com.esan.sportpro.domain.partido.TiposEvento
 import java.text.SimpleDateFormat
@@ -200,6 +201,18 @@ fun detalleEvento(
 
 const val SIN_INFO =
     "Sin información"
+
+/** Minuto del evento como lo anota el árbitro: "45+3'" en el tiempo añadido. */
+fun minutoEvento(
+    e: EventoPartido,
+    eventos: List<EventoPartido>,
+    partido: Partido?,
+): String =
+    ReglasPartido.textoMinuto(
+        e.minuto,
+        ReglasPartido.periodoDe(e, eventos),
+        partido?.duracionTiempoMin ?: 45,
+    )
 
 fun nombreEspecial(
     id: String

@@ -75,7 +75,8 @@ class ConvocatoriaSeleccionViewModel @Inject constructor(
                     if (equipoId.isNullOrBlank()) {
                         flowOf(Pair(emptyList<JugadorPlantel>(), maximo))
                     } else {
-                        repository.observarJugadoresEquipo(equipoId).map { jugadores -> Pair(jugadores, maximo) }
+                        repository.observarJugadoresEquipo(equipoId, partido.academiaId)
+                            .map { jugadores -> Pair(jugadores, maximo) }
                     }
                 }
                 .catch { error ->
@@ -173,8 +174,7 @@ class ConvocatoriaSeleccionViewModel @Inject constructor(
             _uiState.value =
                 estadoActual.copy(
                     mensaje =
-                        "Puedes convocar como máximo " +
-                                "${estadoActual.maxConvocados} jugadores."
+                        "Superaste el máximo de convocados (${estadoActual.maxConvocados})."
                 )
 
             return

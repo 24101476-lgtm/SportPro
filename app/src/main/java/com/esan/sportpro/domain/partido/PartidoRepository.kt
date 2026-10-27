@@ -87,6 +87,10 @@ interface PartidoRepository {
         duracionTiempoMin: Int,
         maxConvocados: Int,
         fechaLimiteRespuestaMs: Long,
+        /** Equipo real de la academia: sin él la convocatoria no tiene plantel que listar. */
+        equipoId: String? = null,
+        academiaId: String? = null,
+        categoria: String? = null,
     ): String
 
     /**
@@ -229,8 +233,13 @@ interface PartidoRepository {
     // JUGADORES
     // ============================================================
 
+    /**
+     * Plantel activo del equipo. [academiaId] es necesario para que la consulta cumpla las reglas
+     * de Firestore (`jugadores` solo se lee filtrando por la academia propia).
+     */
     fun observarJugadoresEquipo(
         equipoId: String,
+        academiaId: String? = null,
     ): Flow<List<JugadorPlantel>>
 
 

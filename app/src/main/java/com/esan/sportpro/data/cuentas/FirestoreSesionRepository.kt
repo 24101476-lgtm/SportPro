@@ -63,7 +63,10 @@ class FirestoreSesionRepository @Inject constructor(
             }
 
             // Perfil sin documento o con otro estado: la cuenta no puede usar la app.
-            val estado = perfil?.getString(CAMPO_ESTADO) ?: return@withContext ResultadoSesion.CuentaDesactivada
+            val estado = perfil?.getString(CAMPO_ESTADO) ?: run {
+                auth.signOut()
+                return@withContext ResultadoSesion.CuentaDesactivada
+            }
             if (estado != EstadoUsuario.ACTIVO.name) {
                 auth.signOut()
                 return@withContext ResultadoSesion.CuentaDesactivada

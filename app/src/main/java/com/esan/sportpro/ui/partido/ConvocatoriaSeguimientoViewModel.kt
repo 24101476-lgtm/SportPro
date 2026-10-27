@@ -160,6 +160,18 @@ class ConvocatoriaSeguimientoViewModel @Inject constructor(
             return
         }
 
+        // US-014: la acción Recordar está disponible una vez cada 12 horas.
+        val ultimo = _uiState.value.partido?.ultimoRecordatorioMs
+        val restanteMs = ultimo?.let { it + INTERVALO_RECORDATORIO_MS - System.currentTimeMillis() } ?: 0L
+        if (restanteMs > 0) {
+            val horas = (restanteMs + 3_599_999L) / 3_600_000L
+            _uiState.value =
+                _uiState.value.copy(
+                    mensaje = "Ya enviaste un recordatorio. Podrás enviar otro en $horas h."
+                )
+            return
+        }
+
         val idsPendientes =
             pendientes.map {
                 it.jugadorId
@@ -183,6 +195,10 @@ class ConvocatoriaSeguimientoViewModel @Inject constructor(
                     "Recordatorio registrado para " +
                             "${idsPendientes.size} jugador(es) pendiente(s)."
             )
+    }
+
+    private companion object {
+        const val INTERVALO_RECORDATORIO_MS = 12 * 60 * 60 * 1000L
     }
 
     fun mensajeMostrado() {

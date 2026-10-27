@@ -187,21 +187,44 @@ class PartidosViewModel @Inject constructor(
     fun onDuracion(texto: String) = actualizar { copy(duracionTexto = texto.filter(Char::isDigit).take(2)) }
     fun onCambios(texto: String) = actualizar { copy(cambiosTexto = texto.filter(Char::isDigit).take(2)) }
 
-    /** Rota la condición del jugador: titular → suplente → no convocado → titular. */
-    fun alternarJugador(jugadorId: String) = actualizar {
-        val actual = convocatoria[jugadorId] ?: Convocatoria.NO_CONVOCADO
+    /**
+     * Rota la condición del jugador: titular → suplente → no convocado → titular. Respeta los
+     * topes de 11 titulares y 12 suplentes (US-016): si no hay cupo se salta esa condición.
+     */
+    fun alternarJugador(jugadorId: String) {
+        val f = currentState.formulario ?: return
+        val actual = f.convocatoria[jugadorId] ?: Convocatoria.NO_CONVOCADO
+        val hayTitular = f.titulares < MAX_TITULARES
+        val haySuplente = f.suplentes < MAX_SUPLENTES
         val siguiente = when (actual) {
-            Convocatoria.NO_CONVOCADO -> if (titulares < MAX_TITULARES) Convocatoria.TITULAR else Convocatoria.SUPLENTE
-            Convocatoria.TITULAR -> Convocatoria.SUPLENTE
+            Convocatoria.NO_CONVOCADO -> when {
+                hayTitular -> Convocatoria.TITULAR
+                haySuplente -> Convocatoria.SUPLENTE
+                else -> null
+            }
+            Convocatoria.TITULAR -> if (haySuplente) Convocatoria.SUPLENTE else Convocatoria.NO_CONVOCADO
             Convocatoria.SUPLENTE -> Convocatoria.NO_CONVOCADO
         }
-        copy(convocatoria = convocatoria + (jugadorId to siguiente))
+        if (siguiente == null) {
+            setState {
+                copy(formulario = f.copy(error = "Ya tienes $MAX_TITULARES titulares y $MAX_SUPLENTES suplentes convocados"))
+            }
+            return
+        }
+        actualizar { copy(convocatoria = convocatoria + (jugadorId to siguiente)) }
     }
 
-    /** Propone los 11 primeros jugadores (por dorsal) como titulares y el resto como suplentes. */
+    /**
+     * Propone los 11 primeros jugadores (por dorsal) como titulares, los 12 siguientes como
+     * suplentes y deja al resto sin convocar.
+     */
     private fun propuesta(equipoId: String?): Map<String, Convocatoria> =
         currentState.jugadoresDe(equipoId).mapIndexed { i, j ->
-            j.id to if (i < MAX_TITULARES) Convocatoria.TITULAR else Convocatoria.SUPLENTE
+            j.id to when {
+                i < MAX_TITULARES -> Convocatoria.TITULAR
+                i < MAX_TITULARES + MAX_SUPLENTES -> Convocatoria.SUPLENTE
+                else -> Convocatoria.NO_CONVOCADO
+            }
         }.toMap()
 
     fun crearPartido() {
@@ -215,6 +238,7 @@ class PartidosViewModel @Inject constructor(
             perfil == null -> "No se pudo leer tu perfil. Vuelve a iniciar sesión."
             equipo == null -> "Selecciona el equipo"
             f.rival.trim().length < 2 -> "Escribe el nombre del rival"
+            f.rival.trim().equals(equipo.nombre.trim(), ignoreCase = true) -> "El rival no puede ser tu propio equipo"
             duracion == null || duracion !in 10..45 -> "La duración de cada tiempo debe estar entre 10 y 45 minutos"
             cambios == null || cambios !in 0..15 -> "Los cambios permitidos deben estar entre 0 y 15"
             f.titulares == 0 -> "Elige al menos un titular"
@@ -263,5 +287,6 @@ class PartidosViewModel @Inject constructor(
     private companion object {
         const val TIEMPO_ESPERA_MS = 8_000L
         const val MAX_TITULARES = 11
+        const val MAX_SUPLENTES = 12
     }
 }

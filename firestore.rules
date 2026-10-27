@@ -70,8 +70,17 @@ service cloud.firestore {
     // Se permite crear el catálogo base la primera vez desde la app.
     match /catalogoEventos/{tipoId} {
       allow read: if autenticado();
-      allow create: if autenticado();
-      allow update, delete: if esAdmin();
+      // Cualquier usuario autenticado puede sembrar los 14 eventos base (CatalogoBase); los
+      // eventos personalizados solo los crea el administrador (US-013).
+      allow create: if esAdmin()
+        || (autenticado() && tipoId in [
+             'inicio_partido', 'fin_primer_tiempo', 'inicio_segundo_tiempo', 'fin_partido',
+             'gol', 'falta', 'tarjeta_amarilla', 'tarjeta_roja', 'cambio', 'penal',
+             'tiro_esquina', 'fuera_de_juego', 'saque_lateral', 'saque_meta'
+           ]);
+      // No se borran: un tipo ya usado en partidos solo se desactiva.
+      allow update: if esAdmin();
+      allow delete: if false;
     }
 
     // US-001/US-004: códigos de invitación de 8 caracteres para crear cuentas de Administrador.
@@ -357,6 +366,32 @@ service cloud.firestore {
       match /convocados/{jugadorId} {
         allow read: if autenticado();
         allow write: if puedeOperar();
+      }
+
+      // US-014: historial de la programación (inicial, reprogramaciones y cancelación).
+      // Solo se agregan entradas; nunca se editan ni se borran.
+      match /historial/{registroId} {
+        allow read: if autenticado();
+        allow create: if puedeOperar() && request.resource.data.realizadoPor == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // US-014/US-015: respuesta de cada convocado. El personal publica la convocatoria y envía
+      // recordatorios; el jugador o su apoderado solo escriben su respuesta, a su nombre y antes
+      // de la fecha límite.
+      match /respuestasConvocatoria/{jugadorId} {
+        allow read: if autenticado();
+        allow create: if puedeOperar();
+        allow update: if puedeOperar()
+          || (autenticado()
+            && request.resource.data.respondidoPorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'estado', 'motivo', 'respondidoPorUid', 'respondidoPorNombre', 'fechaRespuesta'
+               ])
+            && request.resource.data.estado in ['CONFIRMADO', 'NO_DISPONIBLE']
+            && (get(/databases/$(database)/documents/partidos/$(partidoId)).data.get('fechaLimiteRespuesta', null) == null
+              || request.time <= get(/databases/$(database)/documents/partidos/$(partidoId)).data.fechaLimiteRespuesta));
+        allow delete: if false;
       }
 
       // Eventos del partido: nunca se eliminan físicamente.

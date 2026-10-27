@@ -4,6 +4,7 @@ import com.esan.sportpro.core.fecha.FechasSportPro
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,8 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -21,6 +25,8 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,16 +34,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.esan.sportpro.domain.partido.TiposPartido
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -54,8 +63,14 @@ fun PartidoProgramarScreen(
     val context =
         LocalContext.current
 
-    var nombreEquipo by rememberSaveable {
-        mutableStateOf("")
+    val ui by viewModel.uiState.collectAsState()
+
+    var equipoId by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    // Se preselecciona el primer equipo activo apenas llegan los equipos.
+    if (equipoId == null && ui.equipos.isNotEmpty()) {
+        equipoId = ui.equipos.first().id
     }
 
     var nombreRival by rememberSaveable {
@@ -171,24 +186,42 @@ fun PartidoProgramarScreen(
             }
 
             item {
-                OutlinedTextField(
-                    value = nombreEquipo,
-                    onValueChange = {
-                        nombreEquipo = it
-                        errorFormulario = null
-                    },
-                    label = {
-                        Text("Equipo")
-                    },
-                    placeholder = {
-                        Text(
-                            "Ej. SportPro"
-                        )
-                    },
-                    singleLine = true,
-                    modifier =
-                        Modifier.fillMaxWidth()
-                )
+                Text("Equipo", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 6.dp))
+                when {
+                    ui.cargando -> Text(
+                        "Cargando equipos…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ui.equipos.isEmpty() -> Text(
+                        "Tu academia aún no tiene equipos activos. El administrador puede crearlos en la pestaña Academia.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    else -> Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                    ) {
+                        ui.equipos.forEach { e ->
+                            FilterChip(
+                                selected = equipoId == e.id,
+                                onClick = {
+                                    equipoId = e.id
+                                    errorFormulario = null
+                                },
+                                label = { Text(e.etiqueta) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ColoresPartido.Verde,
+                                    selectedLabelColor = Color.White,
+                                ),
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            )
+                        }
+                    }
+                }
             }
 
             item {
@@ -424,31 +457,26 @@ fun PartidoProgramarScreen(
             }
 
             item {
-                OutlinedTextField(
-                    value = tipoPartido,
-
-                    onValueChange = {
-                        tipoPartido = it
-                        errorFormulario = null
-                    },
-
-                    label = {
-                        Text(
-                            "Tipo de partido"
+                // Solo los tres tipos que entiende Estadísticas (antes era texto libre).
+                Text("Tipo de partido", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TiposPartido.todos.forEach { (_, etiqueta) ->
+                        FilterChip(
+                            selected = tipoPartido == etiqueta,
+                            onClick = {
+                                tipoPartido = etiqueta
+                                errorFormulario = null
+                            },
+                            label = { Text(etiqueta) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = ColoresPartido.Verde,
+                                selectedLabelColor = Color.White,
+                            ),
+                            modifier = Modifier.heightIn(min = 48.dp),
                         )
-                    },
-
-                    placeholder = {
-                        Text(
-                            "Amistoso, Liga, Torneo..."
-                        )
-                    },
-
-                    singleLine = true,
-
-                    modifier =
-                        Modifier.fillMaxWidth()
-                )
+                    }
+                }
             }
 
             item {
@@ -711,83 +739,21 @@ fun PartidoProgramarScreen(
                             maxConvocados
                                 .toIntOrNull()
 
-                        errorFormulario =
-                            validarFormulario(
-                                nombreEquipo =
-                                    nombreEquipo,
-
-                                nombreRival =
-                                    nombreRival,
-
-                                fechaMs =
-                                    fechaMs,
-
-                                hora =
-                                    hora,
-
-                                lugar =
-                                    lugar,
-
-                                tipoPartido =
-                                    tipoPartido,
-
-                                duracion =
-                                    duracionNumero,
-
-                                maxConvocados =
-                                    maxNumero,
-
-                                fechaLimiteMs =
-                                    fechaLimiteMs,
+                        when (
+                            val resultado = viewModel.crearPartido(
+                                equipoId = equipoId,
+                                nombreRival = nombreRival,
+                                fechaMs = fechaMs,
+                                hora = hora,
+                                lugar = lugar,
+                                tipoPartido = tipoPartido,
+                                duracionTiempoMin = duracionNumero,
+                                maxConvocados = maxNumero,
+                                fechaLimiteRespuestaMs = fechaLimiteMs,
                             )
-
-                        if (
-                            errorFormulario ==
-                            null
                         ) {
-
-                            val partidoId =
-                                viewModel
-                                    .crearPartido(
-                                        nombreEquipo =
-                                            nombreEquipo,
-
-                                        nombreRival =
-                                            nombreRival,
-
-                                        fechaMs =
-                                            fechaMs,
-
-                                        hora =
-                                            hora,
-
-                                        lugar =
-                                            lugar,
-
-                                        tipoPartido =
-                                            tipoPartido,
-
-                                        duracionTiempoMin =
-                                            duracionNumero,
-
-                                        maxConvocados =
-                                            maxNumero,
-
-                                        fechaLimiteRespuestaMs =
-                                            fechaLimiteMs,
-                                    )
-
-                            if (
-                                partidoId != null
-                            ) {
-                                onPartidoCreado(
-                                    partidoId
-                                )
-                            } else {
-
-                                errorFormulario =
-                                    "Revisa los datos. La fecha límite debe ser anterior o igual a la fecha del partido."
-                            }
+                            is ResultadoProgramar.Creado -> onPartidoCreado(resultado.partidoId)
+                            is ResultadoProgramar.Error -> errorFormulario = resultado.mensaje
                         }
                     },
 
@@ -811,75 +777,4 @@ fun PartidoProgramarScreen(
             }
         }
     }
-}
-
-private fun validarFormulario(
-    nombreEquipo: String,
-    nombreRival: String,
-    fechaMs: Long?,
-    hora: String,
-    lugar: String,
-    tipoPartido: String,
-    duracion: Int?,
-    maxConvocados: Int?,
-    fechaLimiteMs: Long?,
-): String? {
-
-    if (
-        nombreEquipo.isBlank()
-    ) {
-        return "Ingresa el nombre del equipo."
-    }
-
-    if (
-        nombreRival.isBlank()
-    ) {
-        return "Ingresa el equipo rival."
-    }
-
-    if (
-        fechaMs == null
-    ) {
-        return "Selecciona la fecha del partido."
-    }
-
-    if (
-        hora.isBlank()
-    ) {
-        return "Selecciona la hora del partido."
-    }
-
-    if (
-        lugar.isBlank()
-    ) {
-        return "Ingresa el lugar del partido."
-    }
-
-    if (
-        tipoPartido.isBlank()
-    ) {
-        return "Ingresa el tipo de partido."
-    }
-
-    if (
-        duracion == null ||
-        duracion <= 0
-    ) {
-        return "Ingresa una duración válida."
-    }
-
-    if (
-        maxConvocados == null ||
-        maxConvocados <= 0
-    ) {
-        return "Ingresa un máximo de convocados válido."
-    }
-
-    if (
-        fechaLimiteMs == null
-    ) {
-        return "Selecciona la fecha límite de respuesta."
-    }
-
-    return null
 }

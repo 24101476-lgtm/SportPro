@@ -206,7 +206,12 @@ class RegistroPartidoViewModel @Inject constructor(
         val p = st.partido ?: return
         if (finAutomaticoEnviado || p.estado != EstadoPartido.EN_CURSO || !st.reloj.tiempoCumplido) return
         val responsable = p.operadorUid ?: p.creadoPor
-        if (responsable != null && responsable != st.uid) return
+        // Si el responsable no vuelve a abrir el partido (se quedaba "en vivo" por días), pasado un
+        // margen cualquier usuario autorizado lo cierra.
+        val inicio2 = p.inicioSegundoTiempoMs
+        val abandonado = inicio2 != null &&
+            st.ahoraMs - inicio2 > (2L * p.duracionTiempoMin + ReglasPartido.ADICION_MAX + MARGEN_ABANDONO_MIN) * 60_000L
+        if (responsable != null && responsable != st.uid && !(abandonado && st.puedeCorregir)) return
         if (ReglasPartido.existeVigente(TiposEvento.FIN_PARTIDO, st.eventos)) return
         finAutomaticoEnviado = true
         registrar(
@@ -268,8 +273,16 @@ class RegistroPartidoViewModel @Inject constructor(
 
     fun abrirHoja(tipo: TipoEvento) {
         val equipo = if (requiereEquipo(tipo)) EquipoEvento.PROPIO else null
+        // El 2.º tiempo siempre arranca en el minuto reglamentario (45'), aunque el 1.º se haya
+        // alargado con tiempo añadido o terminado antes.
+        val actual = currentState.minutoActual
+        val minuto = if (tipo.id == TiposEvento.INICIO_SEGUNDO_TIEMPO) {
+            currentState.partido?.duracionTiempoMin ?: actual
+        } else {
+            actual
+        }
         setState {
-            copy(hoja = HojaEvento(tipo = tipo, minutoTexto = minutoActual.toString(), equipo = equipo))
+            copy(hoja = HojaEvento(tipo = tipo, minutoTexto = minuto.toString(), equipo = equipo))
         }
     }
 
@@ -331,6 +344,13 @@ class RegistroPartidoViewModel @Inject constructor(
             setState { copy(hoja = hoja.copy(error = "Minuto inválido")) }
             return
         }
+        // Una corrección conserva el tiempo del evento original; uno nuevo toma el tiempo en curso.
+        val periodo = hoja.editando?.let { ReglasPartido.periodoDe(it, currentState.eventos) }
+            ?: ReglasPartido.periodoParaRegistro(hoja.tipo.id, currentState.partido, currentState.eventos)
+        ReglasPartido.validarMinutoPeriodo(minuto, periodo, currentState.partido?.duracionTiempoMin ?: 45)?.let { error ->
+            setState { copy(hoja = hoja.copy(error = error)) }
+            return
+        }
         val borrador = BorradorEvento(
             tipo = hoja.tipo,
             minuto = minuto,
@@ -341,6 +361,7 @@ class RegistroPartidoViewModel @Inject constructor(
             secundarioNombre = hoja.secundarioNombre,
             resultadoPenal = hoja.resultado,
             observacion = hoja.observacion.trim().ifBlank { null },
+            periodo = periodo,
         )
         val base = hoja.editando?.let { ed -> currentState.eventos.filter { it.grupoId != ed.grupoId } }
             ?: currentState.eventos
@@ -380,10 +401,12 @@ class RegistroPartidoViewModel @Inject constructor(
         }
     }
 
-    private fun registrar(borrador: BorradorEvento, excedeCambios: Boolean) {
+    private fun registrar(evento: BorradorEvento, excedeCambios: Boolean) {
         val eventos = currentState.eventos
-        val maximo = ReglasPartido.minutoMaximo(eventos)
-        val fueraDeOrden = maximo != null && borrador.minuto < maximo
+        val borrador = if (evento.periodo != null) evento else evento.copy(
+            periodo = ReglasPartido.periodoParaRegistro(evento.tipo.id, currentState.partido, eventos),
+        )
+        val fueraDeOrden = ReglasPartido.esFueraDeOrden(borrador.minuto, borrador.periodo ?: 1, eventos)
         val incompleto = ReglasPartido.esIncompleto(borrador)
         val relacionados = mutableListOf<BorradorEvento>()
         val avisos = mutableListOf<String>()
@@ -508,6 +531,7 @@ class RegistroPartidoViewModel @Inject constructor(
             secundarioNombre = if (faltaPrincipal) evento.jugadorSecundarioNombre else jugador.nombre,
             resultadoPenal = evento.resultadoPenal,
             observacion = evento.observacion,
+            periodo = ReglasPartido.periodoDe(evento, currentState.eventos),
         )
         val campos = ReglasPartido.camposModificados(evento, borrador)
         repo.corregirEvento(
@@ -560,6 +584,9 @@ class RegistroPartidoViewModel @Inject constructor(
         currentState.catalogo.firstOrNull { it.id == id } ?: checkNotNull(CatalogoBase.porId(id))
 
     private companion object {
+        /** Minutos de espera tras agotarse el tiempo añadido antes de que otro usuario cierre el partido. */
+        const val MARGEN_ABANDONO_MIN = 30L
+
         val EVENTOS_CONTROL_TIEMPO = setOf(
             TiposEvento.INICIO_PARTIDO,
             TiposEvento.FIN_PRIMER_TIEMPO,

@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,7 +26,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,7 +94,7 @@ fun AlineacionResumenScreen(
 
         topBar = {
 
-            TopAppBar(
+            BarraSuperiorSportPro(
 
                 title = {
                     Text(

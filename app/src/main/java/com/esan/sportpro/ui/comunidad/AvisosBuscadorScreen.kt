@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -155,7 +156,7 @@ private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = ColoresPartido.Verde, modifier = Modifier.size(18.dp))
                     Text(
-                        " ${SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(fecha)} · ${aviso.hora}",
+                        " ${FechasSportPro.formatoFechaCorta().format(fecha)} · ${aviso.hora}",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }

@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +44,7 @@ fun UsuarioSuspendidoBanner(suspension: Suspension, modifier: Modifier = Modifie
                 Text(suspension.motivo, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                 suspension.fechaFin?.let {
                     Text(
-                        "Podrás volver a publicar, comentar y reaccionar a partir del ${SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(it)}",
+                        "Podrás volver a publicar, comentar y reaccionar a partir del ${FechasSportPro.formatoFechaCorta().format(it)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )

@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,7 +54,7 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
         Scaffold(
             modifier = modifier,
             topBar = {
-                TopAppBar(
+                BarraSuperiorSportPro(
                     title = { Text("Usuarios bloqueados") },
                     navigationIcon = {
                         IconButton(onClick = { mostrarBloqueados = false }) {

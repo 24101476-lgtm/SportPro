@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +30,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -99,7 +99,7 @@ fun ConvocatoriaSeleccionScreen(
 
         topBar = {
 
-            TopAppBar(
+            BarraSuperiorSportPro(
 
                 title = {
                     Text(

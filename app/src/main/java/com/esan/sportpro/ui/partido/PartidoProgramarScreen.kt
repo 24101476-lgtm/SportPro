@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,14 +95,11 @@ fun PartidoProgramarScreen(
     }
 
     val formatoFecha =
-        SimpleDateFormat(
-            "dd/MM/yyyy",
-            Locale.getDefault()
-        )
+        FechasSportPro.formatoFecha()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = {
                     Text(
                         "Programar partido"

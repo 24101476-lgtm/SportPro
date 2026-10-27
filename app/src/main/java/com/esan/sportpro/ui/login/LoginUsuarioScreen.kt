@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.login
 
+import com.esan.sportpro.ui.common.MarcaSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,11 +68,7 @@ fun LoginUsuarioScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(text = "SportPro", style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = "Inicia sesión para continuar",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            MarcaSportPro(subtitulo = "Gestión de tu academia de fútbol. Inicia sesión para continuar")
 
             OutlinedTextField(
                 value = state.correo,

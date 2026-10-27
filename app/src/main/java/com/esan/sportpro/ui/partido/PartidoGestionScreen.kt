@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +33,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,10 +71,7 @@ fun PartidoGestionScreen(
 
     val formatoFecha =
         remember {
-            SimpleDateFormat(
-                "dd/MM/yyyy",
-                Locale.getDefault()
-            )
+            FechasSportPro.formatoFecha()
         }
 
     var nuevaFechaMs by rememberSaveable {
@@ -180,7 +178,7 @@ fun PartidoGestionScreen(
 
         topBar = {
 
-            TopAppBar(
+            BarraSuperiorSportPro(
 
                 title = {
                     Text(

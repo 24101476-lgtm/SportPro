@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +41,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -93,7 +94,7 @@ fun AsistenciaScreen(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text("Asistencia") },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
@@ -353,7 +354,7 @@ private fun DialogoConfirmacion(confirmacion: ConfirmacionAsistencia, cerrando: 
 
 @Composable
 private fun DialogoHistorial(state: AsistenciaUiState, viewModel: AsistenciaViewModel) {
-    val formato = remember { SimpleDateFormat("dd/MM HH:mm:ss", Locale.forLanguageTag("es-PE")) }
+    val formato = remember { FechasSportPro.formatoFechaHoraSegundos() }
     AlertDialog(
         onDismissRequest = viewModel::cerrarHistorial,
         title = { Text("Historial de cambios") },

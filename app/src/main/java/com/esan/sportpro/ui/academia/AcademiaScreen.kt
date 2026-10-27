@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups2
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,7 +43,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.academia.CampoEquipo
 import com.esan.sportpro.domain.academia.CategoriasEquipo
 import com.esan.sportpro.domain.academia.Equipo
+import com.esan.sportpro.ui.common.CargandoSportPro
+import com.esan.sportpro.ui.common.ChipEstado
 import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.common.ErrorSportPro
+import com.esan.sportpro.ui.common.IconoCircular
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.common.TonoEstado
 
 /**
  * Módulo Academia (US-004/US-005): equipos organizados por categoría. El administrador crea,
@@ -74,24 +82,27 @@ fun AcademiaScreen(
         },
     ) { padding ->
         when {
-            state.cargando -> Column(
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) { CircularProgressIndicator() }
+            state.cargando -> CargandoSportPro(modifier = Modifier.padding(padding))
 
-            state.error != null -> EmptyStateMessage(
+            state.error != null -> ErrorSportPro(
                 mensaje = state.error.orEmpty(),
                 modifier = Modifier.padding(padding),
             )
 
             else -> Column(modifier = Modifier.padding(padding)) {
+                val activos = state.equipos.count { it.activo }
+                EncabezadoModulo(
+                    titulo = "Academia",
+                    subtitulo = "$activos ${if (activos == 1) "equipo activo" else "equipos activos"}",
+                    icono = Icons.Default.School,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Equipos de la academia", style = MaterialTheme.typography.titleMedium)
+                    Text("Equipos por categoría", style = MaterialTheme.typography.titleMedium)
                     if (state.puedeEditar) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Inactivos", style = MaterialTheme.typography.labelMedium)
@@ -150,11 +161,13 @@ private fun EquipoCard(
     onEditar: () -> Unit,
     onCambiarEstado: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    TarjetaSportPro {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            IconoCircular(Icons.Default.Groups2)
             Column(modifier = Modifier.weight(1f)) {
                 Text(equipo.nombre, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -166,11 +179,7 @@ private fun EquipoCard(
                     Text("DT: ${equipo.entrenadorNombre}", style = MaterialTheme.typography.bodySmall)
                 }
                 if (!equipo.activo) {
-                    Text(
-                        "Inactivo",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    ChipEstado("Inactivo", TonoEstado.ERROR, modifier = Modifier.padding(top = 4.dp))
                 }
             }
             if (puedeEditar) {

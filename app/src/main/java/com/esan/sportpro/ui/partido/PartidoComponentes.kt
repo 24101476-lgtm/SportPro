@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.core.theme.PaletaSportPro
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -54,18 +56,12 @@ import java.util.Locale
 private val localeEs = Locale("es", "PE")
 
 fun formatearFecha(ms: Long): String =
-    SimpleDateFormat(
-        "dd/MM/yyyy HH:mm",
-        localeEs
-    ).format(
+    FechasSportPro.formatoFechaHora().format(
         Date(ms)
     )
 
 fun formatearFechaHora(ms: Long): String =
-    SimpleDateFormat(
-        "dd/MM/yyyy HH:mm:ss",
-        localeEs
-    ).format(
+    FechasSportPro.formatoFechaHoraSegundos().format(
         Date(ms)
     )
 
@@ -403,51 +399,16 @@ fun BannerSinConexion(
  * Colores del módulo Partido.
  */
 object ColoresPartido {
-
-    val VerdeOscuro =
-        Color(
-            0xFF0B3D2E
-        )
-
-    val Verde =
-        Color(
-            0xFF1B7A3E
-        )
-
-    val VerdeClaro =
-        Color(
-            0xFF2E9E5B
-        )
-
-    val Rojo =
-        Color(
-            0xFFD32F2F
-        )
-
-    val Amarillo =
-        Color(
-            0xFFFBC02D
-        )
-
-    val Azul =
-        Color(
-            0xFF1565C0
-        )
-
-    val Naranja =
-        Color(
-            0xFFEF6C00
-        )
-
-    val Morado =
-        Color(
-            0xFF6A1B9A
-        )
-
-    val Gris =
-        Color(
-            0xFF607D8B
-        )
+    // Delegan en la paleta común (core/theme/PaletaSportPro) para que toda la app use los mismos tonos.
+    val VerdeOscuro = PaletaSportPro.VerdeOscuro
+    val Verde = PaletaSportPro.Verde
+    val VerdeClaro = PaletaSportPro.VerdeClaro
+    val Rojo = PaletaSportPro.Error
+    val Amarillo = PaletaSportPro.Amarillo
+    val Azul = PaletaSportPro.Informacion
+    val Naranja = PaletaSportPro.Advertencia
+    val Morado = PaletaSportPro.Morado
+    val Gris = PaletaSportPro.Neutro
 }
 
 /**

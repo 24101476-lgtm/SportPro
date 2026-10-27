@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -175,5 +176,5 @@ fun PublicacionCard(
 
 private fun formatearFecha(publicacion: Publicacion): String {
     val fecha = publicacion.fechaPublicacion ?: return "Publicando…"
-    return SimpleDateFormat("d MMM, HH:mm", Locale("es", "PE")).format(fecha)
+    return FechasSportPro.formatoDiaMesHora().format(fecha)
 }

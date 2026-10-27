@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +15,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +39,7 @@ fun AvisoDetalleScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text(aviso.titulo) },
                 navigationIcon = {
                     IconButton(onClick = onVolver) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
@@ -61,7 +62,7 @@ fun AvisoDetalleScreen(
             Text(aviso.academiaNombre, style = MaterialTheme.typography.titleSmall)
             aviso.fechaPublicacion?.let {
                 Text(
-                    "Publicado el ${SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(it)}",
+                    "Publicado el ${FechasSportPro.formatoFechaCorta().format(it)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -72,7 +73,7 @@ fun AvisoDetalleScreen(
                 aviso.posicionesBuscadas.mapNotNull { nombre -> runCatching { PosicionJugador.valueOf(nombre) }.getOrNull()?.etiqueta }
                     .joinToString(", "),
             )
-            aviso.fechaPrueba?.let { Detalle("Fecha de la prueba", SimpleDateFormat("d MMM yyyy", Locale("es", "PE")).format(it)) }
+            aviso.fechaPrueba?.let { Detalle("Fecha de la prueba", FechasSportPro.formatoFechaCorta().format(it)) }
             Detalle("Hora", aviso.hora)
             Detalle("Ubicación", "${aviso.ubicacionDistrito} — ${aviso.ubicacionReferencia}")
             Detalle("Requisitos", aviso.requisitos)

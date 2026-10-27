@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.anuncios
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,7 +38,7 @@ fun PreferenciasNotificacionesScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text("Preferencias de notificaciones") },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {

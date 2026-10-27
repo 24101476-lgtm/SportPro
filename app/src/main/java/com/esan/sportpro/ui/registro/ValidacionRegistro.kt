@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.registro
 
+import com.esan.sportpro.navigation.UserRole
 import java.time.LocalDate
 import java.time.Period
 
@@ -21,6 +22,11 @@ object MensajesRegistro {
     const val APODERADO_REQUERIDO = "Ingresa el correo del apoderado"
     const val FECHA_NACIMIENTO_REQUERIDA = "Selecciona tu fecha de nacimiento"
     const val FECHA_NACIMIENTO_FUTURA = "La fecha de nacimiento no puede ser futura"
+    const val FECHA_NACIMIENTO_INVALIDA = "Revisa el año: la edad no puede superar los 100 años"
+    const val EDAD_MINIMA_JUGADOR = "El jugador debe tener al menos 4 años"
+    const val MAYOR_DE_EDAD_REQUERIDO = "Para este rol debes ser mayor de 18 años"
+    const val MENOR_REGISTRA_ACADEMIA =
+        "Los jugadores menores de 18 años no se registran solos: tu academia te registra y tu apoderado debe vincularse"
     const val SIN_CONEXION = "Sin conexión. Verifica tu red e inténtalo nuevamente"
     const val EXITO = "Cuenta creada. Verifica tu correo para continuar"
 }
@@ -53,6 +59,8 @@ object ValidacionRegistro {
     const val MAX_PASSWORD = 50
     const val LARGO_CODIGO_INVITACION = 8
     const val EDAD_MAYORIDAD = 18
+    const val EDAD_MINIMA_JUGADOR = 4
+    const val EDAD_MAXIMA = 100
 
     private val REGEX_CORREO =
         Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}$")
@@ -92,11 +100,31 @@ object ValidacionRegistro {
     fun validarConfirmacion(password: String, confirmacion: String): String? =
         if (password != confirmacion) MensajesRegistro.PASSWORDS_NO_COINCIDEN else null
 
-    fun validarFechaNacimiento(fecha: LocalDate?): String? {
+    /**
+     * Fecha de nacimiento según el rol (corrección de la semana 7: validar el año):
+     * - nunca futura ni con más de [EDAD_MAXIMA] años;
+     * - Administrador, Entrenador y Padre de familia: mayores de [EDAD_MAYORIDAD];
+     * - Jugador: al menos [EDAD_MINIMA_JUGADOR]. Un jugador menor de edad no puede crear su cuenta
+     *   (regla del apoderado: no queda registrado hasta tener un apoderado vinculado).
+     */
+    fun validarFechaNacimiento(fecha: LocalDate?, rol: UserRole? = null, hoy: LocalDate = LocalDate.now()): String? {
         if (fecha == null) return MensajesRegistro.FECHA_NACIMIENTO_REQUERIDA
-        if (fecha.isAfter(LocalDate.now())) return MensajesRegistro.FECHA_NACIMIENTO_FUTURA
-        return null
+        if (fecha.isAfter(hoy)) return MensajesRegistro.FECHA_NACIMIENTO_FUTURA
+        val edad = Period.between(fecha, hoy).years
+        if (edad > EDAD_MAXIMA) return MensajesRegistro.FECHA_NACIMIENTO_INVALIDA
+        return when (rol) {
+            null -> null
+            UserRole.JUGADOR -> when {
+                edad < EDAD_MINIMA_JUGADOR -> MensajesRegistro.EDAD_MINIMA_JUGADOR
+                edad < EDAD_MAYORIDAD -> MensajesRegistro.MENOR_REGISTRA_ACADEMIA
+                else -> null
+            }
+            else -> if (edad < EDAD_MAYORIDAD) MensajesRegistro.MAYOR_DE_EDAD_REQUERIDO else null
+        }
     }
+
+    /** Rango de años que ofrece el calendario del registro. */
+    fun anioMinimoNacimiento(hoy: LocalDate = LocalDate.now()): Int = hoy.year - EDAD_MAXIMA
 
     fun validarCodigoInvitacion(codigo: String): String? =
         if (codigo.trim().length != LARGO_CODIGO_INVITACION) MensajesRegistro.CODIGO_INVALIDO else null

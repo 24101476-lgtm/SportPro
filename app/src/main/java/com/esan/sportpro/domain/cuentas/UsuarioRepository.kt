@@ -38,7 +38,11 @@ interface UsuarioRepository {
     suspend fun enviarCorreoVerificacion()
 
     /** Escribe el perfil en `usuarios/{uid}`. */
-    suspend fun guardarUsuario(usuario: Usuario)
+    /**
+     * [codigoInvitacion] es obligatorio para un Administrador: las reglas de Firestore solo
+     * aceptan ese rol si el perfil trae un código de invitación válido y sin usar.
+     */
+    suspend fun guardarUsuario(usuario: Usuario, codigoInvitacion: String? = null)
 
     /** Marca el código de invitación como usado para que no se pueda reutilizar. */
     suspend fun marcarCodigoInvitacionUsado(codigo: String)

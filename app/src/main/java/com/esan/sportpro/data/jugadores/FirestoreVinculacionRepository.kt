@@ -2,6 +2,7 @@ package com.esan.sportpro.data.jugadores
 
 import com.esan.sportpro.data.esperarConfirmacion
 import com.esan.sportpro.domain.jugadores.DirectorioJugador
+import com.esan.sportpro.domain.jugadores.EstadoRegistro
 import com.esan.sportpro.domain.jugadores.EstadoVinculacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.ReglasVinculacion
@@ -139,6 +140,12 @@ class FirestoreVinculacionRepository @Inject constructor(
             mapOf("academiaId" to vinculacion.academiaId, "apoderadosAprobados" to FieldValue.increment(1)),
             SetOptions.merge(),
         )
+        // Regla del apoderado: con su primer apoderado aprobado el menor queda registrado.
+        lote.update(
+            firestore.collection("jugadores").document(vinculacion.jugadorId),
+            "estadoRegistro",
+            EstadoRegistro.COMPLETO.name,
+        )
         auditar(lote, documento, "APROBACION", uid, nombre)
         return lote.commit().esperarConfirmacion()
     }
@@ -151,7 +158,12 @@ class FirestoreVinculacionRepository @Inject constructor(
         return lote.commit().esperarConfirmacion()
     }
 
-    override suspend fun revocar(vinculacion: Vinculacion, uid: String, nombre: String): Boolean {
+    override suspend fun revocar(
+        vinculacion: Vinculacion,
+        uid: String,
+        nombre: String,
+        jugadorQuedaPendiente: Boolean,
+    ): Boolean {
         val documento = vinculaciones.document(vinculacion.id)
         val lote = firestore.batch()
         lote.update(documento, resolucion(EstadoVinculacion.REVOCADA, uid, nombre))
@@ -160,6 +172,14 @@ class FirestoreVinculacionRepository @Inject constructor(
             mapOf("academiaId" to vinculacion.academiaId, "apoderadosAprobados" to FieldValue.increment(-1)),
             SetOptions.merge(),
         )
+        if (jugadorQuedaPendiente) {
+            // Era el único apoderado de un menor: su registro vuelve a quedar pendiente.
+            lote.update(
+                firestore.collection("jugadores").document(vinculacion.jugadorId),
+                "estadoRegistro",
+                EstadoRegistro.PENDIENTE_APODERADO.name,
+            )
+        }
         auditar(lote, documento, "REVOCACION", uid, nombre)
         return lote.commit().esperarConfirmacion()
     }

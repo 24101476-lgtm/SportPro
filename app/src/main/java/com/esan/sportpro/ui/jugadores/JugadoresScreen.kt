@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.jugadores
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +37,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,8 +51,20 @@ import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.comunidad.PosicionJugador
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.CampoJugador
+import com.esan.sportpro.domain.jugadores.EstadoRegistro
 import com.esan.sportpro.domain.jugadores.Jugador
+import com.esan.sportpro.domain.jugadores.ReglasApoderado
+import com.esan.sportpro.domain.jugadores.ValidacionJugador
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.AvatarIniciales
+import com.esan.sportpro.ui.common.CampoFecha
 import com.esan.sportpro.ui.common.CampoFormulario
+import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.common.FilaDatoSportPro
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.common.TituloSeccion
+import com.esan.sportpro.ui.common.TonoEstado
 import com.esan.sportpro.ui.common.EmptyStateMessage
 
 /**
@@ -118,7 +130,7 @@ fun JugadoresScreen(
                 modifier = modifier,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
-                    TopAppBar(
+                    BarraSuperiorSportPro(
                         title = { Text("Solicitudes de vinculación") },
                         navigationIcon = {
                             IconButton(onClick = viewModel::volverALista) {
@@ -137,7 +149,7 @@ fun JugadoresScreen(
                     modifier = modifier,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     topBar = {
-                        TopAppBar(
+                        BarraSuperiorSportPro(
                             title = { Text(jugador?.nombreCompleto ?: "Jugador") },
                             navigationIcon = {
                                 IconButton(onClick = viewModel::volverALista) {
@@ -166,7 +178,7 @@ fun JugadoresScreen(
                 modifier = modifier,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
-                    TopAppBar(
+                    BarraSuperiorSportPro(
                         title = { Text(if (state.formulario.id == null) "Nuevo jugador" else "Editar jugador") },
                         navigationIcon = {
                             IconButton(onClick = viewModel::cancelarFormulario) {
@@ -196,6 +208,15 @@ private fun ListaJugadores(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        val registrados = state.jugadores.count { ReglasApoderado.participa(it) }
+        val pendientesApoderado = state.jugadores.count { it.activo && ReglasApoderado.pendiente(it) }
+        EncabezadoModulo(
+            titulo = "Jugadores",
+            subtitulo = "$registrados registrados" +
+                if (pendientesApoderado > 0) " · $pendientesApoderado pendientes de apoderado" else "",
+            icono = Icons.Default.Group,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        )
         // US-007: aviso dentro de la app de las solicitudes pendientes (hasta que exista el push).
         val pendientes = state.solicitudesPendientes.size
         OutlinedButton(
@@ -254,32 +275,31 @@ private fun ListaJugadores(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun JugadorCard(jugador: Jugador, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    TarjetaSportPro(onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = jugador.dorsal?.toString() ?: "–",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            AvatarIniciales(jugador.iniciales)
             Column(modifier = Modifier.weight(1f)) {
                 Text(jugador.nombreCompleto, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${jugador.posicion} · ${jugador.equipoNombre}",
+                    listOfNotNull(jugador.dorsal?.let { "#$it" }, jugador.posicion, jugador.equipoNombre).joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (!jugador.activo) {
-                    Text("Inactivo", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    if (ReglasApoderado.pendiente(jugador)) ChipEstado("Pendiente de apoderado", TonoEstado.ADVERTENCIA)
+                    if (jugador.esMenor()) ChipEstado("Menor", TonoEstado.INFORMACION)
+                    if (!jugador.activo) ChipEstado("Inactivo", TonoEstado.ERROR)
                 }
-            }
-            if (jugador.esMenor()) {
-                Text("Menor", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -298,13 +318,16 @@ private fun DetalleJugador(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (ReglasApoderado.pendiente(jugador)) {
+            AvisoRegistroPendiente(jugador)
+        }
         Seccion("Datos deportivos")
         FilaDato("Equipo", jugador.equipoNombre)
         FilaDato("Posición", jugador.posicion)
         FilaDato("Dorsal", jugador.dorsal?.toString())
 
         Seccion("Datos personales y físicos")
-        FilaDato("Fecha de nacimiento", jugador.fechaNacimiento)
+        FilaDato("Fecha de nacimiento", FechasSportPro.fechaIso(jugador.fechaNacimiento))
         FilaDato("Edad", jugador.edad()?.let { "$it años" })
         FilaDato("Estatura", jugador.estaturaCm?.let { "$it cm" })
         FilaDato("Peso", jugador.pesoKg?.let { "$it kg" })
@@ -313,10 +336,13 @@ private fun DetalleJugador(
         FilaDato("Teléfono", jugador.telefono.ifBlank { null })
         FilaDato("Correo", jugador.correo.ifBlank { null })
 
-        Seccion("Contacto de emergencia")
+        Seccion(if (jugador.esMenor()) "Apoderado y contacto de emergencia" else "Contacto de emergencia")
         FilaDato("Nombre", jugador.contactoEmergenciaNombre)
         FilaDato("Parentesco", jugador.contactoEmergenciaParentesco)
         FilaDato("Teléfono", jugador.contactoEmergenciaTelefono)
+        if (jugador.esMenor() || jugador.apoderadoCorreo.isNotBlank()) {
+            FilaDato("Correo del apoderado", jugador.apoderadoCorreo)
+        }
 
         Seccion("Asistencia a entrenamientos")
         if (resumen.registrados == 0) {
@@ -342,18 +368,30 @@ private fun DetalleJugador(
 }
 
 @Composable
-private fun Seccion(titulo: String) {
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        Text(titulo, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
-    }
-}
+private fun Seccion(titulo: String) = TituloSeccion(titulo)
 
 @Composable
-private fun FilaDato(etiqueta: String, valor: String?) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(etiqueta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(valor?.ifBlank { null } ?: "Sin información", style = MaterialTheme.typography.bodyMedium)
+private fun FilaDato(etiqueta: String, valor: String?) = FilaDatoSportPro(etiqueta, valor)
+
+/** Regla del apoderado: el registro del menor no está completo hasta que se vincule su apoderado. */
+@Composable
+private fun AvisoRegistroPendiente(jugador: Jugador) {
+    TarjetaSportPro {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ChipEstado(EstadoRegistro.PENDIENTE_APODERADO.etiqueta, TonoEstado.ADVERTENCIA)
+            Text(
+                "Este jugador es menor de edad y aún no tiene un apoderado vinculado, así que su registro no está completo: " +
+                    "no aparece en asistencia ni en convocatorias.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (jugador.codigoVinculacion.isNotBlank()) {
+                Text(
+                    "Entrega el código ${jugador.codigoVinculacion} al apoderado. Cuando apruebes su solicitud, el registro se completará.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
 
@@ -385,12 +423,14 @@ private fun FormularioJugadorContenido(
             etiqueta = "Apellidos",
             error = errores[CampoJugador.APELLIDOS],
         )
-        CampoFormulario(
-            valor = datos.fechaNacimiento,
+        CampoFecha(
+            valorIso = datos.fechaNacimiento,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.FECHA_NACIMIENTO) { copy(fechaNacimiento = v) } },
-            etiqueta = "Fecha de nacimiento (AAAA-MM-DD)",
+            etiqueta = "Fecha de nacimiento",
             error = errores[CampoJugador.FECHA_NACIMIENTO],
-            teclado = KeyboardType.Number,
+            ayuda = "Entre ${ValidacionJugador.EDAD_MINIMA} y ${ValidacionJugador.EDAD_MAXIMA} años",
+            fechaMinima = ValidacionJugador.fechaNacimientoMinima(),
+            fechaMaxima = ValidacionJugador.fechaNacimientoMaxima(),
         )
 
         Seccion("Equipo y posición")
@@ -461,25 +501,54 @@ private fun FormularioJugadorContenido(
             teclado = KeyboardType.Email,
         )
 
-        Seccion("Contacto de emergencia")
+        val esMenor = ValidacionJugador.esMenor(datos.fechaNacimiento)
+        Seccion(if (esMenor) "Apoderado (obligatorio para menores de edad)" else "Contacto de emergencia")
+        if (esMenor) {
+            Text(
+                "El jugador quedará registrado cuando su apoderado se vincule con el código que genera la app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         CampoFormulario(
             valor = datos.emergenciaNombre,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.EMERGENCIA_NOMBRE) { copy(emergenciaNombre = v) } },
             etiqueta = "Nombre completo",
             error = errores[CampoJugador.EMERGENCIA_NOMBRE],
         )
-        CampoFormulario(
-            valor = datos.emergenciaParentesco,
-            onCambio = { v -> viewModel.onCampoChanged(CampoJugador.EMERGENCIA_PARENTESCO) { copy(emergenciaParentesco = v) } },
-            etiqueta = "Parentesco (ej. Madre)",
-            error = errores[CampoJugador.EMERGENCIA_PARENTESCO],
-        )
+        if (esMenor) {
+            Text("Parentesco", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReglasApoderado.PARENTESCOS_APODERADO.forEach { parentesco ->
+                    FilterChip(
+                        selected = datos.emergenciaParentesco == parentesco,
+                        onClick = { viewModel.onCampoChanged(CampoJugador.EMERGENCIA_PARENTESCO) { copy(emergenciaParentesco = parentesco) } },
+                        label = { Text(parentesco) },
+                    )
+                }
+            }
+            errores[CampoJugador.EMERGENCIA_PARENTESCO]?.let { ErrorTexto(it) }
+        } else {
+            CampoFormulario(
+                valor = datos.emergenciaParentesco,
+                onCambio = { v -> viewModel.onCampoChanged(CampoJugador.EMERGENCIA_PARENTESCO) { copy(emergenciaParentesco = v) } },
+                etiqueta = "Parentesco (ej. Madre)",
+                error = errores[CampoJugador.EMERGENCIA_PARENTESCO],
+            )
+        }
         CampoFormulario(
             valor = datos.emergenciaTelefono,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.EMERGENCIA_TELEFONO) { copy(emergenciaTelefono = v) } },
-            etiqueta = "Teléfono de emergencia",
+            etiqueta = if (esMenor) "Teléfono del apoderado" else "Teléfono de emergencia",
             error = errores[CampoJugador.EMERGENCIA_TELEFONO],
             teclado = KeyboardType.Phone,
+        )
+        CampoFormulario(
+            valor = datos.apoderadoCorreo,
+            onCambio = { v -> viewModel.onCampoChanged(CampoJugador.APODERADO_CORREO) { copy(apoderadoCorreo = v) } },
+            etiqueta = if (esMenor) "Correo del apoderado" else "Correo del contacto (opcional)",
+            error = errores[CampoJugador.APODERADO_CORREO],
+            teclado = KeyboardType.Email,
         )
 
         Row(

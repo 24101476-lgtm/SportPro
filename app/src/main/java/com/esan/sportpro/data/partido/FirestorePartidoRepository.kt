@@ -143,6 +143,12 @@ class FirestorePartidoRepository @Inject constructor(
                     snap
                         ?.documents
                         .orEmpty()
+                        // Solo jugadores activos y con registro completo: un menor sin apoderado
+                        // vinculado no puede ser convocado (ReglasApoderado).
+                        .filter { doc ->
+                            doc.getBoolean("activo") != false &&
+                                doc.getString("estadoRegistro") != "PENDIENTE_APODERADO"
+                        }
                         .map { doc ->
 
                             JugadorPlantel(

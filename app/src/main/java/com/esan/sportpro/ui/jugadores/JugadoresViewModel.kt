@@ -13,9 +13,11 @@ import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.CampoJugador
 import com.esan.sportpro.domain.jugadores.DatosJugador
+import com.esan.sportpro.domain.jugadores.EstadoRegistro
 import com.esan.sportpro.domain.jugadores.EstadoVinculacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.JugadorRepository
+import com.esan.sportpro.domain.jugadores.ReglasApoderado
 import com.esan.sportpro.domain.jugadores.ReglasVinculacion
 import com.esan.sportpro.domain.jugadores.ValidacionJugador
 import com.esan.sportpro.domain.jugadores.Vinculacion
@@ -224,12 +226,19 @@ class JugadoresViewModel @Inject constructor(
             activo = original?.activo ?: true,
             fotoUrl = original?.fotoUrl.orEmpty(),
         )
+        // Regla del apoderado: un menor no queda registrado hasta tener un apoderado vinculado.
+        val estadoRegistro = ReglasApoderado.estadoPara(jugador, estado.apoderadosDe(jugador.id).size)
+        val jugadorFinal = jugador.copy(estadoRegistro = estadoRegistro.name)
 
         setState { copy(formulario = formulario.copy(guardando = true)) }
         viewModelScope.launch {
             try {
-                val confirmado = jugadorRepository.guardar(jugador, equipoEtiqueta = equipo?.etiqueta ?: jugador.equipoNombre)
-                val texto = "Jugador guardado"
+                val confirmado = jugadorRepository.guardar(jugadorFinal, equipoEtiqueta = equipo?.etiqueta ?: jugador.equipoNombre)
+                val texto = if (estadoRegistro == EstadoRegistro.PENDIENTE_APODERADO) {
+                    "Registro pendiente: entrega el código $codigo al apoderado. El jugador quedará registrado cuando apruebes su vinculación"
+                } else {
+                    "Jugador guardado"
+                }
                 setState {
                     copy(
                         formulario = FormularioJugador(),
@@ -326,8 +335,14 @@ class JugadoresViewModel @Inject constructor(
         val perfil = currentState.perfil ?: return
         if (!currentState.esAdmin) return
         setState { copy(revocando = null) }
-        procesar(vinculacion, "Vinculación revocada: ${vinculacion.padreNombre} ya no ve a ${vinculacion.jugadorNombre}") {
-            vinculacionRepository.revocar(vinculacion, perfil.uid, perfil.nombre)
+        // Si era el único apoderado de un menor, su registro vuelve a quedar pendiente.
+        val jugador = currentState.jugador(vinculacion.jugadorId)
+        val restantes = currentState.apoderadosDe(vinculacion.jugadorId).count { it.id != vinculacion.id }
+        val quedaPendiente = jugador != null && jugador.esMenor() && restantes == 0
+        val texto = "Vinculación revocada: ${vinculacion.padreNombre} ya no ve a ${vinculacion.jugadorNombre}" +
+            if (quedaPendiente) ". Su registro queda pendiente de apoderado" else ""
+        procesar(vinculacion, texto) {
+            vinculacionRepository.revocar(vinculacion, perfil.uid, perfil.nombre, quedaPendiente)
         }
     }
 
@@ -360,6 +375,7 @@ private fun Jugador.aDatos() = DatosJugador(
     emergenciaNombre = contactoEmergenciaNombre,
     emergenciaTelefono = contactoEmergenciaTelefono,
     emergenciaParentesco = contactoEmergenciaParentesco,
+    apoderadoCorreo = apoderadoCorreo,
 )
 
 private fun DatosJugador.aJugador(
@@ -384,5 +400,6 @@ private fun DatosJugador.aJugador(
     contactoEmergenciaNombre = emergenciaNombre,
     contactoEmergenciaTelefono = emergenciaTelefono,
     contactoEmergenciaParentesco = emergenciaParentesco,
+    apoderadoCorreo = apoderadoCorreo,
     creadoPor = creadoPor,
 )

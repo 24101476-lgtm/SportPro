@@ -107,7 +107,7 @@ class FirestoreUsuarioRepository @Inject constructor(
         }
     }
 
-    override suspend fun guardarUsuario(usuario: Usuario) {
+    override suspend fun guardarUsuario(usuario: Usuario, codigoInvitacion: String?) {
         withContext(Dispatchers.IO) {
             val datos = mapOf(
                 "uid" to usuario.uid,
@@ -121,6 +121,8 @@ class FirestoreUsuarioRepository @Inject constructor(
                 "estado" to usuario.estado.name,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
                 "clubId" to usuario.clubId,
+            ) + listOfNotNull(
+                codigoInvitacion?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }?.let { "codigoInvitacion" to it },
             )
             usuarios.document(usuario.uid).set(datos).await()
         }

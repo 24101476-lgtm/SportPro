@@ -36,6 +36,10 @@ data class Jugador(
     val fotoUrl: String = "",
     /** Código de 6 caracteres que la academia entrega al apoderado para pedir la vinculación (US-007). */
     val codigoVinculacion: String = "",
+    /** Correo del apoderado (obligatorio en menores de edad). */
+    val apoderadoCorreo: String = "",
+    /** Nombre de [EstadoRegistro]; vacío en fichas antiguas (= registrado). Ver [ReglasApoderado]. */
+    val estadoRegistro: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
 ) {

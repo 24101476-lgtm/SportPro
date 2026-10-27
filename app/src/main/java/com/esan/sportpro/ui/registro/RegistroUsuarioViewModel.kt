@@ -207,7 +207,8 @@ class RegistroUsuarioViewModel @Inject constructor(
                         clubId = null,
                     )
 
-                    val guardado = runCatching { usuarioRepository.guardarUsuario(usuario) }
+                    val codigo = formulario.codigoInvitacion.takeIf { rol == UserRole.ADMINISTRADOR }
+                    val guardado = runCatching { usuarioRepository.guardarUsuario(usuario, codigo) }
                     if (guardado.isFailure) {
                         setState { copy(isLoading = false) }
                         sendEvent(
@@ -240,11 +241,11 @@ class RegistroUsuarioViewModel @Inject constructor(
         ValidacionRegistro.validarConfirmacion(f.password, f.confirmarPassword)?.let {
             errores[CampoRegistro.CONFIRMAR_PASSWORD] = it
         }
-        ValidacionRegistro.validarFechaNacimiento(f.fechaNacimiento)?.let {
+        val rol = f.rol
+        ValidacionRegistro.validarFechaNacimiento(f.fechaNacimiento, rol)?.let {
             errores[CampoRegistro.FECHA_NACIMIENTO] = it
         }
 
-        val rol = f.rol
         if (rol == null) {
             errores[CampoRegistro.ROL] = MensajesRegistro.ROL_REQUERIDO
         }
@@ -256,12 +257,8 @@ class RegistroUsuarioViewModel @Inject constructor(
             }
         }
 
-        // Solo se pide el apoderado si es Jugador y aún no cumplió 18 años.
-        val necesitaApoderado = rol == UserRole.JUGADOR &&
-            f.fechaNacimiento?.let { ValidacionRegistro.esMenor(it) } == true
-        if (necesitaApoderado && !ValidacionRegistro.esCorreoValido(f.correoApoderado)) {
-            errores[CampoRegistro.CORREO_APODERADO] = MensajesRegistro.APODERADO_REQUERIDO
-        }
+        // Regla del apoderado: un jugador menor de 18 no crea su cuenta (lo registra su academia y
+        // queda registrado cuando se vincula su apoderado). validarFechaNacimiento ya lo rechaza.
 
         return errores
     }

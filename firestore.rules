@@ -34,10 +34,36 @@ service cloud.firestore {
         : get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.clubId;
     }
 
+    // Código de invitación existente, sin usar y sin revocar (registro de Administrador).
+    function codigoInvitacionValido(codigo) {
+      return codigo is string
+        && codigo.size() == 8
+        && exists(/databases/$(database)/documents/codigosInvitacion/$(codigo))
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('usado', false) == false
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('revocado', false) == false;
+    }
+
     // Perfil de cada usuario.
+    // - Cada uno crea solo su propio perfil, ACTIVO y sin academia. Nadie se asigna el rol de
+    //   ADMINISTRADOR sin un código de invitación válido (antes bastaba con escribirlo).
+    // - El usuario edita sus datos, pero no su rol, estado, academia ni la marca de menor de edad;
+    //   eso solo lo cambia un administrador.
     match /usuarios/{uid} {
       allow read: if autenticado();
-      allow write: if autenticado() && request.auth.uid == uid;
+      allow create: if autenticado()
+        && request.auth.uid == uid
+        && request.resource.data.estado == 'ACTIVO'
+        && request.resource.data.get('clubId', null) == null
+        && (request.resource.data.rol in ['ENTRENADOR', 'JUGADOR', 'PADRE_DE_FAMILIA']
+          || (request.resource.data.rol == 'ADMINISTRADOR'
+            && codigoInvitacionValido(request.resource.data.get('codigoInvitacion', ''))));
+      allow update: if autenticado() && (
+        esAdmin()
+        || (request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['uid', 'rol', 'estado', 'clubId', 'esMenor']))
+      );
+      allow delete: if false;
     }
 
     // Catálogo configurable de eventos: todos lo leen; la configuración es del administrador.
@@ -240,12 +266,21 @@ service cloud.firestore {
     }
 
     // US-026/US-027: anuncios y preferencias de notificación.
+    // Publican, editan y archivan el entrenador y el administrador; cualquier usuario puede
+    // marcar un anuncio como leído (agregarse a sí mismo a `lecturas`).
     match /anuncios/{id} {
       allow read: if autenticado();
-      allow write: if autenticado();
+      allow create: if esStaff() && request.resource.data.autorUid == request.auth.uid;
+      allow update: if esStaff()
+        || (autenticado()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lecturas'])
+          && request.resource.data.lecturas.toSet().difference(resource.data.get('lecturas', []).toSet())
+            .hasOnly([request.auth.uid]));
+      allow delete: if false;
     }
-    match /preferencias_notificaciones/{id} {
-      allow read, write: if autenticado();
+    // Preferencias de cada usuario: solo las suyas.
+    match /preferencias_notificaciones/{uid} {
+      allow read, write: if autenticado() && request.auth.uid == uid;
     }
 
     // US-028/US-029/US-030: comunidad, avisos y moderación.
@@ -262,14 +297,29 @@ service cloud.firestore {
       allow read: if autenticado();
       allow write: if autenticado();
     }
+    // Reportes: cualquiera reporta a su nombre y ve sus propios reportes (para no duplicarlos);
+    // solo el administrador ve la bandeja y los resuelve.
     match /reportes/{id} {
-      allow read, write: if autenticado();
+      allow create: if autenticado() && request.resource.data.reportadoPorUid == request.auth.uid;
+      allow read: if esAdmin() || (autenticado() && resource.data.reportadoPorUid == request.auth.uid);
+      allow update: if esAdmin();
+      allow delete: if false;
     }
+    // Bloqueos: id {uidBloqueador}_{uidBloqueado}. Cada uno gestiona los suyos y puede saber quién
+    // lo bloqueó (para ocultar ese contenido en su muro).
     match /bloqueos/{id} {
-      allow read, write: if autenticado();
+      allow read: if autenticado()
+        && (resource.data.uidBloqueador == request.auth.uid || resource.data.uidBloqueado == request.auth.uid);
+      allow create: if autenticado()
+        && request.resource.data.uidBloqueador == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.uidBloqueado;
+      allow delete: if autenticado() && resource.data.uidBloqueador == request.auth.uid;
+      allow update: if false;
     }
-    match /suspensiones/{id} {
-      allow read, write: if autenticado();
+    // Suspensiones: las aplica el administrador; cada usuario puede leer la suya.
+    match /suspensiones/{uid} {
+      allow read: if autenticado();
+      allow write: if esAdmin();
     }
 
     match /partidos/{partidoId} {

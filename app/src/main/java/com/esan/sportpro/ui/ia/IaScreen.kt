@@ -8,7 +8,7 @@ import com.esan.sportpro.ui.common.PlaceholderScreen
 fun IaScreen(modifier: Modifier = Modifier) {
     PlaceholderScreen(
         title = "Resumen IA",
-        relatedUserStories = "US-023, US-024, US-025",
+        relatedUserStories = "Resumen narrativo del partido · US-023 a US-025",
         modifier = modifier,
     )
 }

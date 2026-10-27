@@ -87,9 +87,38 @@ asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísti
 
 La restricción se aplica en tres capas: (1) la pestaña no aparece (`HomeModule.visiblesPara`), (2) el ViewModel valida el rol antes de cargar o escribir, (3) `firestore.rules` rechaza la operación en el servidor. Las reglas de `jugadores` también limitan la lectura a la **misma academia** del usuario.
 
+## Criterio de fechas
+
+Implementado en `core/fecha/FechasSportPro.kt` (corrección de la semana 7). Cada dato se guarda según lo que representa:
+
+| Tipo de dato | Cómo se guarda | Ejemplos |
+|---|---|---|
+| Fecha de calendario (sin hora) | Texto ISO `AAAA-MM-DD` | Nacimiento del jugador, día del entrenamiento |
+| Hora del día | Texto `HH:mm` (24 horas) | Inicio del entrenamiento o del partido |
+| Instante (cuándo ocurrió algo) | `Timestamp` del servidor o milisegundos UTC | Evento del partido (`registradoEnMs`), aprobación de un vínculo, publicación |
+| Minuto de juego | Número entero (`Int`) | Minuto de una falta o un gol |
+
+- Se **muestra** siempre en hora de Perú (`America/Lima`) con `dd/MM/yyyy`, `HH:mm` o `dd/MM/yyyy HH:mm`.
+- Se **ingresa** con calendario y reloj (`CampoFecha`, `CampoHora`), que solo ofrecen fechas dentro del rango válido. Ya no se escriben fechas a mano.
+- Ninguna pantalla crea su propio `SimpleDateFormat`: se reemplazaron 17 formateadores sueltos por `FechasSportPro`.
+
+## Regla del apoderado
+
+**Un jugador menor de 18 años no queda registrado hasta que tenga un apoderado vinculado** (`domain/jugadores/ReglasApoderado.kt`).
+
+1. La ficha de un menor exige los datos del apoderado: nombre, parentesco (Madre, Padre, Tutor legal, Abuelo(a), Tío(a), Hermano(a) mayor), teléfono y correo.
+2. Al guardarla sin apoderado aprobado queda con `estadoRegistro = PENDIENTE_APODERADO`. La app muestra el código de vinculación para entregarlo al apoderado.
+3. Mientras está pendiente **no aparece** en la asistencia, en la convocatoria de partidos ni en los conteos del plantel.
+4. Al aprobar la solicitud del primer apoderado (US-007) pasa a `COMPLETO` en el mismo lote de escritura. Si se revoca su único apoderado, vuelve a `PENDIENTE_APODERADO`.
+5. Un jugador menor **no puede crear su propia cuenta** en el registro: lo registra la academia y accede a través de su apoderado.
+
+Las fichas creadas antes de esta regla no tienen `estadoRegistro` y cuentan como registradas; al editarlas se recalcula el estado.
+
 ## Pendientes conocidos
 
 - **Fotografía del jugador** (US-006): el modelo no incluye `fotoUrl` todavía; se agregará con Cloud Storage.
 - **Notificación push** al personal cuando llega una solicitud de vinculación (US-007, criterio 2): depende del envío de notificaciones (US-027). Mientras tanto, la lista de Jugadores muestra "Solicitudes de vinculación (N pendientes)".
 - **Lectura de `equipos`, `entrenamientos` y `asistencias_entrenamiento`** está abierta a cualquier usuario autenticado (no filtra por academia). Se endurece cuando exista el vínculo con la academia.
-- **Regla de `usuarios`**: hoy un usuario puede escribir su propio documento, incluido el campo `rol`. Hay que restringir la creación de `ADMINISTRADOR` a quien tenga un código de invitación válido (verificación en servidor).
+- ~~Regla de `usuarios`~~ **Resuelto:** nadie puede crear un perfil de `ADMINISTRADOR` sin un código de invitación válido, ni cambiar su propio rol, estado, academia o marca de menor de edad.
+- **Registro como Entrenador**: cualquier persona puede elegir el rol Entrenador al registrarse y así ver datos del plantel. Conviene exigir también un código de invitación para ese rol.
+- **Comunidad** (`publicaciones`, `avisos`, `comentarios`): las reglas siguen abiertas a usuarios autenticados porque la moderación y el contador de reportes los actualizan varios roles; falta restringir por campo.

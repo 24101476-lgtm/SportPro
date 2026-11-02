@@ -12,6 +12,7 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
 import com.esan.sportpro.domain.entrenamientos.CalculoAsistencia
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
+import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.CampoJugador
 import com.esan.sportpro.domain.jugadores.DatosJugador
@@ -38,6 +39,9 @@ sealed interface PantallaJugadores {
 
     /** US-007: bandeja de solicitudes de vinculación de apoderados. */
     data object Solicitudes : PantallaJugadores
+
+    /** US-012: historial de participación del jugador. */
+    data class Historial(val jugadorId: String) : PantallaJugadores
 }
 
 /** Diálogo de rechazo: el motivo es obligatorio (10 a 200 caracteres). */
@@ -121,6 +125,15 @@ data class JugadoresUiState(
     /** Apoderados con vínculo aprobado de un jugador. */
     fun apoderadosDe(jugadorId: String): List<Vinculacion> =
         vinculaciones.filter { it.jugadorId == jugadorId && it.aprobada }
+
+    /**
+     * US-012, criterio 5: el administrador ve a toda la academia y el entrenador, a los jugadores
+     * de los equipos que dirige.
+     */
+    fun puedeVerHistorial(jugador: Jugador): Boolean {
+        val perfil = perfil ?: return false
+        return ReglasHistorial.puedeVer(perfil, jugador, equipos.firstOrNull { it.id == jugador.equipoId })
+    }
 
     /** Historial de asistencia a entrenamientos del jugador (US-009 a US-013). */
     fun asistenciaDe(jugador: Jugador): ResumenAsistencia =
@@ -209,6 +222,18 @@ class JugadoresViewModel @Inject constructor(
             setState { copy(resumenesDeportivos = resumenesDeportivos + (jugadorId to resumen)) }
         }
     }
+
+    /** US-012: abre el historial solo si el perfil puede verlo (criterio 5). */
+    fun abrirHistorial(jugadorId: String) {
+        val jugador = currentState.jugador(jugadorId) ?: return
+        if (!currentState.puedeVerHistorial(jugador)) {
+            sendEvent(JugadoresEvent.Mensaje("Solo puedes ver el historial de los jugadores de los equipos que diriges."))
+            return
+        }
+        setState { copy(pantalla = PantallaJugadores.Historial(jugadorId)) }
+    }
+
+    fun cerrarHistorial(jugadorId: String) = setState { copy(pantalla = PantallaJugadores.Detalle(jugadorId)) }
 
     fun onFotoElegida(uri: String) = setState { copy(formulario = formulario.copy(fotoNueva = uri)) }
 

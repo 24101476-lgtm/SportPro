@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.comunidad.PosicionJugador
+import com.esan.sportpro.domain.entrenamientos.ReglasAsistencia
+import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.CampoJugador
 import com.esan.sportpro.domain.jugadores.EstadoRegistro
@@ -92,6 +94,9 @@ fun JugadoresScreen(
     BackHandler(enabled = state.pantalla == PantallaJugadores.Formulario) { viewModel.cancelarFormulario() }
     BackHandler(enabled = state.pantalla is PantallaJugadores.Detalle) { viewModel.volverALista() }
     BackHandler(enabled = state.pantalla == PantallaJugadores.Solicitudes) { viewModel.volverALista() }
+    (state.pantalla as? PantallaJugadores.Historial)?.let { historial ->
+        BackHandler { viewModel.cerrarHistorial(historial.jugadorId) }
+    }
 
     // US-007: el padre de familia ve aquí a sus hijos vinculados (con su propio ViewModel).
     if (state.esPadre) {
@@ -169,8 +174,36 @@ fun JugadoresScreen(
                             resumenDeportivo = state.resumenesDeportivos[jugador.id],
                             onEditar = { viewModel.editarJugador(jugador) },
                             onCambiarEstado = { viewModel.cambiarEstado(jugador) },
+                            onVerHistorial = { viewModel.abrirHistorial(jugador.id) },
                             modifier = Modifier.padding(padding),
                             apoderados = { SeccionApoderados(state = state, jugador = jugador, viewModel = viewModel) },
+                        )
+                    }
+                }
+            }
+
+            is PantallaJugadores.Historial -> {
+                val jugador = state.jugador(pantalla.jugadorId)
+                Scaffold(
+                    modifier = modifier,
+                    topBar = {
+                        BarraSuperiorSportPro(
+                            title = { Text("Historial · ${jugador?.nombreCompleto.orEmpty()}") },
+                            navigationIcon = {
+                                IconButton(onClick = { viewModel.cerrarHistorial(pantalla.jugadorId) }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                                }
+                            },
+                        )
+                    },
+                ) { padding ->
+                    if (jugador == null || !state.puedeVerHistorial(jugador)) {
+                        EmptyStateMessage("No tienes acceso al historial de este jugador.", Modifier.padding(padding))
+                    } else {
+                        HistorialParticipacion(
+                            jugador = jugador,
+                            entrenamientos = state.entrenamientos,
+                            modifier = Modifier.padding(padding),
                         )
                     }
                 }
@@ -315,6 +348,7 @@ private fun DetalleJugador(
     onEditar: () -> Unit,
     onCambiarEstado: () -> Unit,
     modifier: Modifier = Modifier,
+    onVerHistorial: () -> Unit = {},
     apoderados: @Composable () -> Unit = {},
 ) {
     Column(
@@ -393,9 +427,17 @@ private fun DetalleJugador(
         if (resumen.registrados == 0) {
             Text("Todavía no hay entrenamientos con asistencia registrada.", style = MaterialTheme.typography.bodyMedium)
         } else {
-            FilaDato("Participación", "${resumen.porcentaje}% (${resumen.participaciones} de ${resumen.registrados})")
+            FilaDato(
+                "Participación",
+                "${ReglasAsistencia.formatearPorcentaje(ReglasHistorial.porcentaje(resumen.participaciones, resumen.registrados))} " +
+                    "(${resumen.participaciones} de ${resumen.registrados})",
+            )
             FilaDato("Presente / Tarde", "${resumen.presentes} / ${resumen.tardes}")
             FilaDato("Justificado / Ausente", "${resumen.justificados} / ${resumen.ausentes}")
+        }
+        // US-012: historial completo con filtros y gráfico mensual.
+        OutlinedButton(onClick = onVerHistorial, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver historial de participación")
         }
 
         apoderados()

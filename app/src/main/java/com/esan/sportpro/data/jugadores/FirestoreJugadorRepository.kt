@@ -55,6 +55,9 @@ class FirestoreJugadorRepository @Inject constructor(
             "contactoEmergenciaTelefono" to jugador.contactoEmergenciaTelefono.trim(),
             "contactoEmergenciaParentesco" to jugador.contactoEmergenciaParentesco.trim(),
             "codigoVinculacion" to jugador.codigoVinculacion,
+            "apoderadoCorreo" to jugador.apoderadoCorreo.trim().lowercase(),
+            // Regla del apoderado: un menor sin apoderado vinculado queda PENDIENTE_APODERADO.
+            "estadoRegistro" to jugador.estadoRegistro,
         )
         val nuevo = jugador.id.isBlank()
         val documento = if (nuevo) coleccion.document() else coleccion.document(jugador.id)

@@ -22,9 +22,84 @@ object ReglasPartido {
     fun cronologia(eventos: List<EventoPartido>): List<EventoPartido> =
         eventos.filter { it.estado != EstadoEvento.REEMPLAZADO }.ordenados()
 
-    /** Orden por minuto del partido, conservando la hora real de registro como desempate. */
-    fun List<EventoPartido>.ordenados(): List<EventoPartido> =
-        sortedWith(compareBy<EventoPartido> { it.minuto }.thenBy { it.registradoEnMs ?: Long.MAX_VALUE })
+    /**
+     * Orden de la cronología: primero por tiempo (1.º / 2.º), luego por minuto y, a igual minuto,
+     * el inicio de un tiempo va primero y su final al último. La hora real de registro desempata.
+     * Así el tiempo añadido del 1.er tiempo (p. ej. 45+15' guardado como 60) queda antes del
+     * inicio del 2.º tiempo (45').
+     */
+    fun List<EventoPartido>.ordenados(): List<EventoPartido> {
+        val todos = this
+        return sortedWith(
+            compareBy<EventoPartido> { periodoDe(it, todos) }
+                .thenBy { it.minuto }
+                .thenBy { rangoControl(it.tipoId) }
+                .thenBy { it.registradoEnMs ?: Long.MAX_VALUE },
+        )
+    }
+
+    private fun rangoControl(tipoId: String): Int = when (tipoId) {
+        TiposEvento.INICIO_PARTIDO, TiposEvento.INICIO_SEGUNDO_TIEMPO -> 0
+        TiposEvento.FIN_PRIMER_TIEMPO, TiposEvento.FIN_PARTIDO -> 2
+        else -> 1
+    }
+
+    /**
+     * Tiempo (1 o 2) de un evento. Usa el campo guardado y, en eventos antiguos que no lo tienen,
+     * lo deduce: los eventos de control tienen tiempo fijo y el resto se compara con la hora en
+     * que se registró el inicio del 2.º tiempo.
+     */
+    fun periodoDe(evento: EventoPartido, eventos: List<EventoPartido>): Int {
+        evento.periodo?.let { return it }
+        when (evento.tipoId) {
+            TiposEvento.INICIO_PARTIDO, TiposEvento.FIN_PRIMER_TIEMPO -> return 1
+            TiposEvento.INICIO_SEGUNDO_TIEMPO, TiposEvento.FIN_PARTIDO -> return 2
+        }
+        val inicio2 = eventos
+            .filter { it.tipoId == TiposEvento.INICIO_SEGUNDO_TIEMPO && it.estado != EstadoEvento.ANULADO }
+            .minOfOrNull { it.registradoEnMs ?: Long.MAX_VALUE }
+            ?: return 1
+        val registrado = evento.registradoEnMs ?: return 2
+        return if (registrado >= inicio2) 2 else 1
+    }
+
+    /**
+     * Tiempo en el que cae un evento nuevo según el estado del partido: el 2.º tiempo empieza con
+     * su propio evento de inicio; un fin de partido sin 2.º tiempo (p. ej. suspendido) también es 2.
+     */
+    fun periodoParaRegistro(tipoId: String, partido: Partido?, eventos: List<EventoPartido>): Int = when {
+        tipoId == TiposEvento.INICIO_SEGUNDO_TIEMPO || tipoId == TiposEvento.FIN_PARTIDO -> 2
+        tipoId == TiposEvento.INICIO_PARTIDO || tipoId == TiposEvento.FIN_PRIMER_TIEMPO -> 1
+        partido?.inicioSegundoTiempoMs != null || existeVigente(TiposEvento.INICIO_SEGUNDO_TIEMPO, eventos) -> 2
+        else -> 1
+    }
+
+    /**
+     * Minuto tal como lo anota el árbitro: el tiempo añadido se escribe como "45+3'" o "90+2'".
+     * [duracion] es la duración de cada tiempo del partido.
+     */
+    fun textoMinuto(minuto: Int, periodo: Int, duracion: Int): String {
+        val fin = if (periodo == 1) duracion else 2 * duracion
+        return if (minuto > fin) "$fin+${minuto - fin}'" else "$minuto'"
+    }
+
+    /**
+     * "Registro fuera de orden" (US-019): el minuto es anterior al del último evento vigente del
+     * mismo tiempo. El 2.º tiempo vuelve a empezar en 45', así que no se compara con el 1.º.
+     */
+    fun esFueraDeOrden(minuto: Int, periodo: Int, eventos: List<EventoPartido>): Boolean {
+        val maximo = vigentes(eventos).filter { periodoDe(it, eventos) == periodo }.maxOfOrNull { it.minuto }
+        return maximo != null && minuto < maximo
+    }
+
+    /** Valida que el minuto tenga sentido para el tiempo en curso. */
+    fun validarMinutoPeriodo(minuto: Int, periodo: Int, duracion: Int): String? = when {
+        periodo == 1 && minuto > duracion + ADICION_MAX ->
+            "En el 1.er tiempo el minuto va de 0 a ${duracion + ADICION_MAX} (incluye el tiempo añadido)"
+        periodo == 2 && minuto < duracion ->
+            "En el 2.º tiempo el minuto empieza en $duracion'"
+        else -> null
+    }
 
     fun marcador(eventos: List<EventoPartido>, catalogo: List<TipoEvento>): Marcador {
         val sumaMarcador = catalogo.filter { it.sumaMarcador }.map { it.id }.toSet()
@@ -71,7 +146,6 @@ object ReglasPartido {
     fun pendientesDeSincronizar(eventos: List<EventoPartido>): Int =
         eventos.count { it.pendienteSincronizar }
 
-    fun minutoMaximo(eventos: List<EventoPartido>): Int? = vigentes(eventos).maxOfOrNull { it.minuto }
 
     fun existeVigente(tipoId: String, eventos: List<EventoPartido>): Boolean =
         vigentes(eventos).any { it.tipoId == tipoId }

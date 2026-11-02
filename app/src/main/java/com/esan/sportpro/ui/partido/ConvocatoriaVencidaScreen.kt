@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.partido
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -39,10 +40,7 @@ fun ConvocatoriaVencidaScreen(
     val state by viewModel.uiState.collectAsState()
 
     val formatoFecha =
-        SimpleDateFormat(
-            "dd/MM/yyyy",
-            Locale.getDefault()
-        )
+        FechasSportPro.formatoFecha()
 
     Scaffold { padding ->
 

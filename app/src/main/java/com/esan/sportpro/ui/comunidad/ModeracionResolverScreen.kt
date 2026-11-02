@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,7 +54,7 @@ fun ModeracionResolverScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text("Resolver reporte") },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.cerrarReporte(); onVolver() }) {

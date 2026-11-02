@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.comunidad
 
+import kotlinx.coroutines.flow.catch
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.comunidad.ModeracionRepository
@@ -17,9 +19,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ModeracionUiState(
-    // TODO(US-003): reemplazar por el rol real del usuario autenticado; solo ADMINISTRADOR
-    // debería llegar a esta sección (criterio: "Como administrador deseo revisar...").
-    val rolActual: UserRole = UserRole.ADMINISTRADOR,
+    // Solo el ADMINISTRADOR modera (criterio: "Como administrador deseo revisar..."). Hasta leer
+    // el perfil real se asume el rol de menor privilegio.
+    val rolActual: UserRole = UserRole.JUGADOR,
     val bandeja: List<Reporte> = emptyList(),
     val isLoadingBandeja: Boolean = true,
     val reporteSeleccionado: Reporte? = null,
@@ -40,20 +42,27 @@ sealed interface ModeracionEvent {
 class ModeracionViewModel @Inject constructor(
     private val repository: ModeracionRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<ModeracionUiState, ModeracionEvent>(ModeracionUiState()) {
 
     init {
-        if (currentState.puedeModerar) {
-            repository.observarBandeja()
-                .onEach { lista -> setState { copy(bandeja = lista, isLoadingBandeja = false) } }
-                .launchIn(viewModelScope)
+        viewModelScope.launch {
+            sesionRepository.perfilActual()?.let { perfil -> setState { copy(rolActual = perfil.rol) } }
+            if (currentState.puedeModerar) {
+                repository.observarBandeja()
+                    .onEach { lista -> setState { copy(bandeja = lista, isLoadingBandeja = false) } }
+                    .catch { setState { copy(isLoadingBandeja = false) } }
+                    .launchIn(viewModelScope)
+            }
         }
         firebaseAuth.currentUser?.uid?.let { uid ->
             repository.observarSuspensionActiva(uid)
                 .onEach { suspension -> setState { copy(suspensionActual = suspension) } }
+                .catch { }
                 .launchIn(viewModelScope)
             repository.observarBloqueadosPor(uid)
                 .onEach { lista -> setState { copy(bloqueados = lista) } }
+                .catch { }
                 .launchIn(viewModelScope)
         }
     }

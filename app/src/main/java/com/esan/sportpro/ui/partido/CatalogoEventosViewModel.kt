@@ -3,16 +3,14 @@ package com.esan.sportpro.ui.partido
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.domain.partido.AmbitoEvento
+import com.esan.sportpro.domain.partido.CatalogoBase
 import com.esan.sportpro.domain.partido.PartidoRepository
 import com.esan.sportpro.domain.partido.TipoEvento
+import com.esan.sportpro.domain.partido.TiposEvento
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 
 data class CatalogoEventosUiState(
     val cargando: Boolean = true,
@@ -60,12 +58,8 @@ class CatalogoEventosViewModel @Inject constructor(
             return false
         }
 
-        if (nombre.isBlank()) {
-            setState {
-                copy(
-                    error = "El nombre del evento es obligatorio."
-                )
-            }
+        validarNombre(nombre, idActual = null)?.let { error ->
+            setState { copy(error = error) }
             return false
         }
 
@@ -119,21 +113,27 @@ class CatalogoEventosViewModel @Inject constructor(
             return false
         }
 
-        if (nombre.isBlank()) {
-            setState {
-                copy(
-                    error = "El nombre del evento es obligatorio."
-                )
-            }
+        validarNombre(nombre, idActual = original.id)?.let { error ->
+            setState { copy(error = error) }
             return false
         }
 
+        // Los eventos base sostienen la lógica del partido (reloj, marcador, cambios, tarjetas):
+        // se les pueden agregar campos, pero no quitar los obligatorios de origen ni cambiar si
+        // suman al marcador. Los de control del tiempo, además, no se desactivan.
+        val base = CatalogoBase.porId(original.id)
+        if (base != null && !activo && original.id in EVENTOS_CONTROL_TIEMPO) {
+            setState { copy(error = "\"${base.nombre}\" controla el reloj del partido y no se puede desactivar.") }
+            return false
+        }
+        val obligatorios = if (base != null) (base.camposObligatorios + camposObligatorios).distinct() else camposObligatorios
+
         val actualizado = original.copy(
             nombre = nombre.trim(),
-            ambito = ambito,
-            camposObligatorios = camposObligatorios,
-            camposOpcionales = camposOpcionales,
-            sumaMarcador = sumaMarcador,
+            ambito = base?.ambito ?: ambito,
+            camposObligatorios = obligatorios,
+            camposOpcionales = camposOpcionales.filterNot { it in obligatorios },
+            sumaMarcador = base?.sumaMarcador ?: sumaMarcador,
             activo = activo,
             icono = icono.ifBlank { "sports_soccer" },
             color = color.ifBlank { "#2E7D32" },
@@ -149,6 +149,29 @@ class CatalogoEventosViewModel @Inject constructor(
         }
 
         return true
+    }
+
+    /** US-013: nombre de 3 a 30 caracteres y único dentro del catálogo (sin distinguir mayúsculas). */
+    private fun validarNombre(nombre: String, idActual: String?): String? {
+        val limpio = nombre.trim()
+        if (limpio.length !in NOMBRE_MIN..NOMBRE_MAX) {
+            return "El nombre debe tener entre $NOMBRE_MIN y $NOMBRE_MAX caracteres."
+        }
+        val repetido = uiState.value.eventos.any {
+            it.id != idActual && it.nombre.trim().equals(limpio, ignoreCase = true)
+        }
+        return if (repetido) "Ya existe un evento con ese nombre." else null
+    }
+
+    private companion object {
+        const val NOMBRE_MIN = 3
+        const val NOMBRE_MAX = 30
+        val EVENTOS_CONTROL_TIEMPO = setOf(
+            TiposEvento.INICIO_PARTIDO,
+            TiposEvento.FIN_PRIMER_TIEMPO,
+            TiposEvento.INICIO_SEGUNDO_TIEMPO,
+            TiposEvento.FIN_PARTIDO,
+        )
     }
 
     private fun observarCatalogo() {

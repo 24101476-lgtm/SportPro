@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,12 +59,12 @@ fun AvisoNuevoScreen(
     var contacto by remember { mutableStateOf("") }
     var errorMensaje by remember { mutableStateOf<String?>(null) }
 
-    val formato = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es", "PE")).apply { isLenient = false } }
+    val formato = remember { FechasSportPro.formatoFecha().apply { isLenient = false } }
 
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text("Nuevo aviso") },
                 navigationIcon = {
                     IconButton(onClick = onCancelar) {

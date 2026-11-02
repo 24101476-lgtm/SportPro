@@ -1,5 +1,10 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.data.partido.describirErrorFirestore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.catch
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.comunidad.AvisoRepository
@@ -20,8 +25,8 @@ data class AvisosUiState(
     val filtro: FiltroAvisos = FiltroAvisos(),
     val avisos: List<Aviso> = emptyList(),
     val isLoading: Boolean = true,
-    // TODO(academia): reemplazar por la academia real y su estado de verificación (ver TODO en Aviso.kt).
-    val academiaId: String = "academia-demo",
+    /** Academia del perfil autenticado. La verificación de la academia sigue pendiente (ver Aviso.kt). */
+    val academiaId: String = PerfilActual.ACADEMIA_POR_DEFECTO,
     val academiaNombre: String = "Mi academia",
     val academiaVerificada: Boolean = true,
 )
@@ -38,15 +43,23 @@ class AvisosViewModel @Inject constructor(
     private val repository: AvisoRepository,
     private val moderacionRepository: ModeracionRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
 ) : BaseViewModel<AvisosUiState, AvisosEvent>(AvisosUiState()) {
 
+    private var trabajoAvisos: Job? = null
+
     init {
+        viewModelScope.launch {
+            sesionRepository.perfilActual()?.let { perfil -> setState { copy(academiaId = perfil.academiaId) } }
+        }
         observar()
     }
 
     private fun observar() {
-        repository.observarAvisos(currentState.filtro)
+        trabajoAvisos?.cancel()
+        trabajoAvisos = repository.observarAvisos(currentState.filtro)
             .onEach { lista -> setState { copy(avisos = lista, isLoading = false) } }
+            .catch { e -> setState { copy(isLoading = false) }; sendEvent(AvisosEvent.Error(describirErrorFirestore(e))) }
             .launchIn(viewModelScope)
     }
 

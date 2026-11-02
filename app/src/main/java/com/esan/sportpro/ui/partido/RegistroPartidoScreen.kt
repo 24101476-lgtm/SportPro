@@ -196,6 +196,7 @@ fun RegistroPartidoScreen(
                     EventoItem(
                         evento = evento,
                         partido = partido,
+                        textoMinuto = minutoEvento(evento, state.eventos, partido),
                         puedeCorregir = state.puedeCorregir,
                         esUltimo = evento.id == cronologia.lastOrNull()?.id,
                         onEditar = { viewModel.editarEvento(evento) },
@@ -314,7 +315,11 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
                         Spacer(Modifier.width(10.dp))
                         Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(alpha = 0.18f)) {
                             Text(
-                                "min ${reloj.minuto}'",
+                                "min " + ReglasPartido.textoMinuto(
+                                    reloj.minuto,
+                                    if (partido.inicioSegundoTiempoMs != null) 2 else 1,
+                                    partido.duracionTiempoMin,
+                                ),
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelLarge,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -659,18 +664,23 @@ fun EventoItem(
     onEditar: () -> Unit,
     onAnular: () -> Unit,
     onHistorial: () -> Unit,
+    /** Minuto ya formateado (p. ej. "45+3'"). */
+    textoMinuto: String = "${evento.minuto}'",
 ) {
     val anulado = evento.estado == EstadoEvento.ANULADO
     var menu by remember { mutableStateOf(false) }
     val lineaColor = MaterialTheme.colorScheme.outlineVariant
     val esRival = evento.equipo == EquipoEvento.RIVAL
+    // El 2.º tiempo no puede quedar "fuera de orden": empieza siempre en su minuto reglamentario.
+    // Partidos antiguos lo marcaban así cuando el 1.er tiempo tuvo tiempo añadido.
+    val fueraDeOrden = evento.fueraDeOrden && evento.tipoId != TiposEvento.INICIO_SEGUNDO_TIEMPO
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
                 // Línea vertical de la línea de tiempo, a la altura del ícono.
-                val x = 52.dp.toPx() + 18.dp.toPx()
+                val x = 64.dp.toPx() + 18.dp.toPx()
                 drawLine(
                     color = lineaColor,
                     start = Offset(x, 36.dp.toPx()),
@@ -680,12 +690,13 @@ fun EventoItem(
             },
     ) {
         Text(
-            "${evento.minuto}'",
-            style = MaterialTheme.typography.titleMedium,
+            textoMinuto,
+            style = if (textoMinuto.length > 4) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.End,
+            maxLines = 1,
             modifier = Modifier
-                .width(44.dp)
+                .width(56.dp)
                 .padding(top = 8.dp),
         )
         Spacer(Modifier.width(8.dp))
@@ -732,7 +743,7 @@ fun EventoItem(
                     evento.observacion?.let {
                         Text("“$it”", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (anulado || evento.incompleto || evento.fueraDeOrden || evento.excedeCambios || evento.version > 1) {
+                    if (anulado || evento.incompleto || fueraDeOrden || evento.excedeCambios || evento.version > 1) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -740,7 +751,7 @@ fun EventoItem(
                         ) {
                             if (anulado) Etiqueta("Anulado", ColoresPartido.Gris)
                             if (evento.incompleto && !anulado) Etiqueta("Incompleto", ColoresPartido.Naranja)
-                            if (evento.fueraDeOrden) Etiqueta("Fuera de orden", ColoresPartido.Morado)
+                            if (fueraDeOrden) Etiqueta("Fuera de orden", ColoresPartido.Morado)
                             if (evento.excedeCambios) Etiqueta("Excede cambios", ColoresPartido.Rojo)
                             if (evento.version > 1) Etiqueta("Corregido v${evento.version}", ColoresPartido.Azul)
                         }

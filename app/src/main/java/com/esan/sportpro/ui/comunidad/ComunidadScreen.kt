@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -15,7 +17,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,7 +28,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.ui.partido.ColoresPartido
 import com.esan.sportpro.domain.comunidad.Aviso
 import com.esan.sportpro.domain.comunidad.MotivoReporte
 import com.esan.sportpro.domain.comunidad.Publicacion
@@ -50,7 +54,7 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
         Scaffold(
             modifier = modifier,
             topBar = {
-                TopAppBar(
+                BarraSuperiorSportPro(
                     title = { Text("Usuarios bloqueados") },
                     navigationIcon = {
                         IconButton(onClick = { mostrarBloqueados = false }) {
@@ -71,12 +75,34 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
     }
 
     Column(modifier = modifier.fillMaxSize()) {
+        EncabezadoModulo(
+            titulo = "Comunidad",
+            subtitulo = "Muro, avisos y moderación de tu academia",
+            icono = Icons.Default.Forum,
+            modifier = Modifier.padding(16.dp),
+        )
         moderacionState.suspensionActual?.let { UsuarioSuspendidoBanner(suspension = it) }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TabRow(selectedTabIndex = seccion, modifier = Modifier.weight(1f)) {
+            TabRow(
+                selectedTabIndex = seccion,
+                modifier = Modifier.weight(1f),
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                contentColor = ColoresPartido.Verde,
+            ) {
                 titulos.forEachIndexed { index, titulo ->
-                    Tab(selected = seccion == index, onClick = { seccion = index }, text = { Text(titulo) })
+                    Tab(
+                        selected = seccion == index,
+                        onClick = { seccion = index },
+                        selectedContentColor = ColoresPartido.Verde,
+                        unselectedContentColor = androidx.compose.ui.graphics.Color.Gray,
+                        text = {
+                            Text(
+                                titulo,
+                                fontWeight = if (seccion == index) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                            )
+                        },
+                    )
                 }
             }
             IconButton(onClick = { mostrarBloqueados = true }) {

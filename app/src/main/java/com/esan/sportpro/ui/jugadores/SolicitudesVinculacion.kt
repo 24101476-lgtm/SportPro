@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.jugadores
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -85,7 +86,7 @@ private fun TarjetaSolicitud(
     puedeRevocar: Boolean,
     viewModel: JugadoresViewModel,
 ) {
-    val formato = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-PE"))
+    val formato = FechasSportPro.formatoFechaHora()
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

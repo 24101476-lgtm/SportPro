@@ -1,5 +1,9 @@
 package com.esan.sportpro.ui.registro
 
+import com.esan.sportpro.ui.common.MarcaSportPro
+import com.esan.sportpro.ui.common.TonoEstado
+import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.TarjetaSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -105,7 +109,7 @@ fun RegistroUsuarioScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = "Crear cuenta", style = MaterialTheme.typography.titleLarge)
+            MarcaSportPro(subtitulo = "Crea tu cuenta")
 
             CampoTexto(
                 valor = state.nombres,
@@ -204,15 +208,20 @@ fun RegistroUsuarioScreen(
                 )
             }
 
-            // Solo para Jugador menor de 18 años.
+            // Jugador menor de 18: no puede registrarse solo (regla del apoderado).
             if (state.mostrarCampoApoderado) {
-                CampoTexto(
-                    valor = state.correoApoderado,
-                    onValorCambiado = viewModel::onCorreoApoderadoChanged,
-                    etiqueta = "Correo del apoderado",
-                    error = state.errores[CampoRegistro.CORREO_APODERADO],
-                    teclado = KeyboardType.Email,
-                )
+                TarjetaSportPro(modifier = Modifier.padding(top = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        ChipEstado("Menor de edad", TonoEstado.ADVERTENCIA)
+                        Text(
+                            "Los jugadores menores de 18 años no crean su cuenta. Tu academia registra tu ficha y " +
+                                "quedas registrado cuando tu apoderado crea su cuenta de Padre de familia y se " +
+                                "vincula con el código de jugador que le entrega la academia.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
             }
 
             state.errorGeneral?.let {
@@ -255,12 +264,17 @@ fun RegistroUsuarioScreen(
     }
 
     if (datePickerAbierto) {
+        // Solo fechas entre hace 100 años y hoy: no se puede elegir un año imposible.
+        val hoyUtc = java.time.LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         val datePickerState = androidx.compose.material3.rememberDatePickerState(
             initialSelectedDateMillis = state.fechaNacimiento
                 ?.atStartOfDay(ZoneOffset.UTC)
                 ?.toInstant()
-                ?.toEpochMilli()
-                ?: System.currentTimeMillis(),
+                ?.toEpochMilli(),
+            yearRange = ValidacionRegistro.anioMinimoNacimiento()..java.time.LocalDate.now().year,
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= hoyUtc
+            },
         )
         DatePickerDialog(
             onDismissRequest = { datePickerAbierto = false },

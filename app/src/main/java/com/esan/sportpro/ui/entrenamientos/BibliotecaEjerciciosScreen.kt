@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,7 +49,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -106,7 +106,7 @@ fun BibliotecaEjerciciosScreen(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            BarraSuperiorSportPro(
                 title = { Text(titulo) },
                 navigationIcon = {
                     IconButton(onClick = atras) {

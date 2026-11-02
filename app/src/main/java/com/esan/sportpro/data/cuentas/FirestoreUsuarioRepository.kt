@@ -77,7 +77,7 @@ class FirestoreUsuarioRepository @Inject constructor(
                 // Se comparan los códigos literales: varias constantes FirebaseAuth.ERROR_*
                 // están ocultas por deprecación en el SDK actual.
                 when (e.errorCode) {
-                    CODIGO_CORREO_YA_EXISTE -> ResultadoAuth.CorreoYaRegistrado
+                    CODIGO_CORREO_EN_USO, CODIGO_CORREO_YA_EXISTE -> ResultadoAuth.CorreoYaRegistrado
                     CODIGO_PASSWORD_DEBIL -> ResultadoAuth.Error(MSG_PASSWORD_DEBE)
                     CODIGO_SIN_RED -> ResultadoAuth.Error(MSG_SIN_CONEXION)
                     CODIGO_LOGIN_NO_PERMITIDO ->
@@ -100,6 +100,22 @@ class FirestoreUsuarioRepository @Inject constructor(
         }
     }
 
+    override suspend fun recuperarCuentaSinPerfil(correo: String, password: String): String? =
+        withContext(Dispatchers.IO) {
+            val uid = runCatching {
+                auth.signInWithEmailAndPassword(correo.trim(), password).await().user?.uid
+            }.getOrNull() ?: return@withContext null
+
+            val tienePerfil = runCatching { usuarios.document(uid).get().await().exists() }
+                .getOrDefault(true)
+            if (tienePerfil) {
+                auth.signOut()
+                null
+            } else {
+                uid
+            }
+        }
+
     override suspend fun enviarCorreoVerificacion() {
         withContext(Dispatchers.IO) {
             val usuario = auth.currentUser ?: error("No hay una sesión activa para verificar el correo")
@@ -107,7 +123,7 @@ class FirestoreUsuarioRepository @Inject constructor(
         }
     }
 
-    override suspend fun guardarUsuario(usuario: Usuario) {
+    override suspend fun guardarUsuario(usuario: Usuario, codigoInvitacion: String?) {
         withContext(Dispatchers.IO) {
             val datos = mapOf(
                 "uid" to usuario.uid,
@@ -121,6 +137,8 @@ class FirestoreUsuarioRepository @Inject constructor(
                 "estado" to usuario.estado.name,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
                 "clubId" to usuario.clubId,
+            ) + listOfNotNull(
+                codigoInvitacion?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }?.let { "codigoInvitacion" to it },
             )
             usuarios.document(usuario.uid).set(datos).await()
         }
@@ -157,6 +175,8 @@ class FirestoreUsuarioRepository @Inject constructor(
             "La contraseña debe tener mínimo 8 caracteres, una mayúscula, un número y un carácter especial"
 
         // Códigos de error de Firebase Auth (constantes literales: las oficiales están ocultas).
+        // Firebase Auth en Android devuelve ERROR_EMAIL_ALREADY_IN_USE al registrar un correo existente.
+        private const val CODIGO_CORREO_EN_USO = "ERROR_EMAIL_ALREADY_IN_USE"
         private const val CODIGO_CORREO_YA_EXISTE = "ERROR_EMAIL_ALREADY_EXISTS"
         private const val CODIGO_PASSWORD_DEBIL = "ERROR_WEAK_PASSWORD"
         private const val CODIGO_SIN_RED = "ERROR_NETWORK_REQUEST_FAILED"

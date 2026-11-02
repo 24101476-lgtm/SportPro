@@ -76,6 +76,7 @@ class ValidacionJugadorTest {
         emergenciaNombre = "Rosa Rojas",
         emergenciaTelefono = "987654321",
         emergenciaParentesco = "Madre",
+        apoderadoCorreo = "rosa.rojas@correo.com",
     )
 
     @Test

@@ -17,6 +17,7 @@ enum class CampoJugador {
     EMERGENCIA_NOMBRE,
     EMERGENCIA_TELEFONO,
     EMERGENCIA_PARENTESCO,
+    APODERADO_CORREO,
 }
 
 /** Valores del formulario del jugador tal como los escribe el usuario (todo texto). */
@@ -34,6 +35,8 @@ data class DatosJugador(
     val emergenciaNombre: String = "",
     val emergenciaTelefono: String = "",
     val emergenciaParentesco: String = "",
+    /** Correo del apoderado: obligatorio si el jugador es menor de edad. */
+    val apoderadoCorreo: String = "",
 )
 
 /** Reglas de validación del perfil del jugador. Sin dependencias de Android ni Firebase. */
@@ -54,7 +57,7 @@ object ValidacionJugador {
         val nacimiento = FechasJugador.parsear(datos.fechaNacimiento)
         when {
             nacimiento == null ->
-                errores[CampoJugador.FECHA_NACIMIENTO] = "Usa el formato AAAA-MM-DD (ej. 2012-05-30)."
+                errores[CampoJugador.FECHA_NACIMIENTO] = "Elige la fecha de nacimiento."
             nacimiento.isAfter(hoy) ->
                 errores[CampoJugador.FECHA_NACIMIENTO] = "La fecha de nacimiento no puede ser futura."
             FechasJugador.edad(nacimiento, hoy) !in EDAD_MINIMA..EDAD_MAXIMA ->
@@ -94,16 +97,40 @@ object ValidacionJugador {
             errores[CampoJugador.CORREO] = "Ingresa un correo válido."
         }
 
-        // Contacto de emergencia: obligatorio para todos los jugadores, no solo para menores.
+        // Contacto de emergencia: obligatorio para todos los jugadores. Si es menor de edad, ese
+        // contacto es su apoderado y se exigen además un parentesco válido y su correo.
+        val menor = nacimiento != null && !nacimiento.isAfter(hoy) && FechasJugador.edad(nacimiento, hoy) < Jugador.EDAD_MAYORIA
         validarNombre(datos.emergenciaNombre, 3, 60)?.let { errores[CampoJugador.EMERGENCIA_NOMBRE] = it }
         if (!REGEX_TELEFONO.matches(datos.emergenciaTelefono.trim())) {
-            errores[CampoJugador.EMERGENCIA_TELEFONO] = "El teléfono de emergencia debe tener 9 dígitos y empezar con 9."
+            errores[CampoJugador.EMERGENCIA_TELEFONO] = "El teléfono debe tener 9 dígitos y empezar con 9."
         }
-        if (datos.emergenciaParentesco.trim().length !in 2..30) {
-            errores[CampoJugador.EMERGENCIA_PARENTESCO] = "Indica el parentesco (2 a 30 caracteres)."
+        val parentesco = datos.emergenciaParentesco.trim()
+        when {
+            menor && parentesco !in ReglasApoderado.PARENTESCOS_APODERADO ->
+                errores[CampoJugador.EMERGENCIA_PARENTESCO] = "Elige el parentesco del apoderado."
+            !menor && parentesco.length !in 2..30 ->
+                errores[CampoJugador.EMERGENCIA_PARENTESCO] = "Indica el parentesco (2 a 30 caracteres)."
+        }
+        val correoApoderado = datos.apoderadoCorreo.trim()
+        when {
+            menor && correoApoderado.isEmpty() ->
+                errores[CampoJugador.APODERADO_CORREO] = "El correo del apoderado es obligatorio para menores de edad."
+            correoApoderado.isNotEmpty() && !REGEX_CORREO.matches(correoApoderado) ->
+                errores[CampoJugador.APODERADO_CORREO] = "Ingresa un correo válido."
         }
         return errores
     }
+
+    /** El jugador es menor de edad según la fecha escrita en el formulario (falso si no es válida). */
+    fun esMenor(fechaNacimiento: String, hoy: LocalDate = LocalDate.now()): Boolean {
+        val nacimiento = FechasJugador.parsear(fechaNacimiento) ?: return false
+        return !nacimiento.isAfter(hoy) && FechasJugador.edad(nacimiento, hoy) < Jugador.EDAD_MAYORIA
+    }
+
+    /** Rango que ofrece el calendario de la fecha de nacimiento (entre 4 y 60 años). */
+    fun fechaNacimientoMinima(hoy: LocalDate = LocalDate.now()): LocalDate = hoy.minusYears(EDAD_MAXIMA.toLong() + 1).plusDays(1)
+
+    fun fechaNacimientoMaxima(hoy: LocalDate = LocalDate.now()): LocalDate = hoy.minusYears(EDAD_MINIMA.toLong())
 
     /** Acepta coma o punto decimal ("45,5" o "45.5"). */
     fun parsearPeso(texto: String): Double? = texto.trim().replace(',', '.').toDoubleOrNull()

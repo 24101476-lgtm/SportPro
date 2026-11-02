@@ -40,13 +40,13 @@ object ValidacionEntrenamiento {
 
         val fecha = parsearFecha(datos.fecha)
         when {
-            fecha == null -> errores[CampoEntrenamiento.FECHA] = "Usa el formato AAAA-MM-DD (ej. 2026-10-15)."
+            fecha == null -> errores[CampoEntrenamiento.FECHA] = "Elige la fecha de la sesión."
             !permitirPasado && fecha.isBefore(hoy) ->
                 errores[CampoEntrenamiento.FECHA] = "La fecha no puede ser anterior a hoy."
         }
 
         if (parsearHora(datos.hora) == null) {
-            errores[CampoEntrenamiento.HORA] = "Usa el formato HH:mm de 24 horas (ej. 16:30)."
+            errores[CampoEntrenamiento.HORA] = "Elige la hora de inicio."
         }
 
         if (datos.lugar.trim().length > 80) errores[CampoEntrenamiento.LUGAR] = "El lugar no puede superar 80 caracteres."

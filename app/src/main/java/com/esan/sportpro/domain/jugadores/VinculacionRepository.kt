@@ -30,12 +30,18 @@ interface VinculacionRepository {
     /** Todas las solicitudes de la academia (pendientes y resueltas). */
     fun observarSolicitudes(academiaId: String): Flow<List<Vinculacion>>
 
+    /** Además completa el registro del jugador si estaba pendiente de apoderado ([ReglasApoderado]). */
     suspend fun aprobar(vinculacion: Vinculacion, uid: String, nombre: String): Boolean
 
     suspend fun rechazar(vinculacion: Vinculacion, motivo: String, uid: String, nombre: String): Boolean
 
     /** Solo el administrador; el padre pierde el acceso en cuanto el cambio llega al servidor. */
-    suspend fun revocar(vinculacion: Vinculacion, uid: String, nombre: String): Boolean
+    suspend fun revocar(
+        vinculacion: Vinculacion,
+        uid: String,
+        nombre: String,
+        jugadorQuedaPendiente: Boolean = false,
+    ): Boolean
 
     /**
      * Asigna el código de vinculación a un jugador que todavía no lo tiene.

@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import com.esan.sportpro.domain.jugadores.ReglasApoderado
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.red.ConectividadObserver
 import com.esan.sportpro.core.viewmodel.BaseViewModel
@@ -83,7 +84,8 @@ data class AsistenciaUiState(
         get() {
             val sesion = entrenamiento ?: return emptyList()
             return jugadores
-                .filter { (it.activo && it.equipoId == sesion.equipoId) || it.id in sesion.asistencia }
+                // Un menor pendiente de apoderado todavía no está registrado (ReglasApoderado).
+                .filter { (ReglasApoderado.participa(it) && it.equipoId == sesion.equipoId) || it.id in sesion.asistencia }
                 .sortedWith(compareBy<Jugador>({ it.dorsal ?: Int.MAX_VALUE }, { it.apellidos.lowercase() }))
         }
 

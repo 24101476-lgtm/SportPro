@@ -12,6 +12,8 @@ data class PerfilActual(
     val nombre: String,
     val rol: UserRole,
     val academiaId: String,
+    /** Jugador menor de edad (campo `esMenor` del perfil); Comunidad lo usa para proteger su contenido. */
+    val esMenor: Boolean = false,
 ) {
     /** Administrador y entrenador gestionan el plantel; jugador y padre solo consultan. */
     val esStaff: Boolean get() = rol == UserRole.ADMINISTRADOR || rol == UserRole.ENTRENADOR

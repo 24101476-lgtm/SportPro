@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.comunidad
 
+import com.esan.sportpro.core.fecha.FechasSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -89,7 +90,7 @@ private fun ReporteCard(reporte: Reporte, onClick: () -> Unit) {
             }
             reporte.fechaReporte?.let {
                 Text(
-                    SimpleDateFormat("d MMM, HH:mm", Locale("es", "PE")).format(it),
+                    FechasSportPro.formatoDiaMesHora().format(it),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                 )

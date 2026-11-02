@@ -155,7 +155,19 @@ class RegistroUsuarioViewModel @Inject constructor(
 
             val rol = formulario.rol
 
-            when (val resultado = usuarioRepository.crearCuentaEnAuth(formulario.correo, formulario.password)) {
+            var resultado = usuarioRepository.crearCuentaEnAuth(formulario.correo, formulario.password)
+            // Un registro anterior pudo crear la cuenta de Auth sin llegar a guardar el perfil:
+            // con la misma contraseña se completa ese registro en lugar de bloquear el correo.
+            // Una cuenta así no es "nueva", así que no se elimina si algo falla después.
+            var cuentaRecuperada = false
+            if (resultado is ResultadoAuth.CorreoYaRegistrado) {
+                usuarioRepository.recuperarCuentaSinPerfil(formulario.correo, formulario.password)?.let {
+                    resultado = ResultadoAuth.Exito(it)
+                    cuentaRecuperada = true
+                }
+            }
+
+            when (val r = resultado) {
                 is ResultadoAuth.CorreoYaRegistrado -> setState {
                     copy(
                         isLoading = false,
@@ -165,11 +177,11 @@ class RegistroUsuarioViewModel @Inject constructor(
 
                 is ResultadoAuth.Error -> {
                     setState { copy(isLoading = false) }
-                    sendEvent(RegistroEvent.Snackbar(resultado.mensaje))
+                    sendEvent(RegistroEvent.Snackbar(r.mensaje))
                 }
 
                 is ResultadoAuth.Exito -> {
-                    val uid = resultado.uid
+                    val uid = r.uid
 
                     // La cuenta de Auth ya existe (el usuario quedó autenticado), así que recién
                     // ahora se puede leer el código de invitación. Si no sirve, la cuenta recién
@@ -179,7 +191,7 @@ class RegistroUsuarioViewModel @Inject constructor(
                             usuarioRepository.codigoInvitacionValido(formulario.codigoInvitacion)
                         }.getOrDefault(false)
                         if (!codigoValido) {
-                            usuarioRepository.eliminarCuentaEnAuth(uid)
+                            if (!cuentaRecuperada) runCatching { usuarioRepository.eliminarCuentaEnAuth(uid) }
                             setState {
                                 copy(
                                     isLoading = false,
@@ -207,8 +219,12 @@ class RegistroUsuarioViewModel @Inject constructor(
                         clubId = null,
                     )
 
-                    val guardado = runCatching { usuarioRepository.guardarUsuario(usuario) }
+                    val codigo = formulario.codigoInvitacion.takeIf { rol == UserRole.ADMINISTRADOR }
+                    val guardado = runCatching { usuarioRepository.guardarUsuario(usuario, codigo) }
                     if (guardado.isFailure) {
+                        // Sin perfil la cuenta no puede iniciar sesión ni volver a registrarse:
+                        // se elimina la cuenta de Auth recién creada para no dejarla huérfana.
+                        if (!cuentaRecuperada) runCatching { usuarioRepository.eliminarCuentaEnAuth(uid) }
                         setState { copy(isLoading = false) }
                         sendEvent(
                             RegistroEvent.Snackbar("No se pudo guardar el perfil. Inténtalo nuevamente"),
@@ -240,11 +256,11 @@ class RegistroUsuarioViewModel @Inject constructor(
         ValidacionRegistro.validarConfirmacion(f.password, f.confirmarPassword)?.let {
             errores[CampoRegistro.CONFIRMAR_PASSWORD] = it
         }
-        ValidacionRegistro.validarFechaNacimiento(f.fechaNacimiento)?.let {
+        val rol = f.rol
+        ValidacionRegistro.validarFechaNacimiento(f.fechaNacimiento, rol)?.let {
             errores[CampoRegistro.FECHA_NACIMIENTO] = it
         }
 
-        val rol = f.rol
         if (rol == null) {
             errores[CampoRegistro.ROL] = MensajesRegistro.ROL_REQUERIDO
         }
@@ -256,12 +272,8 @@ class RegistroUsuarioViewModel @Inject constructor(
             }
         }
 
-        // Solo se pide el apoderado si es Jugador y aún no cumplió 18 años.
-        val necesitaApoderado = rol == UserRole.JUGADOR &&
-            f.fechaNacimiento?.let { ValidacionRegistro.esMenor(it) } == true
-        if (necesitaApoderado && !ValidacionRegistro.esCorreoValido(f.correoApoderado)) {
-            errores[CampoRegistro.CORREO_APODERADO] = MensajesRegistro.APODERADO_REQUERIDO
-        }
+        // Regla del apoderado: un jugador menor de 18 no crea su cuenta (lo registra su academia y
+        // queda registrado cuando se vincula su apoderado). validarFechaNacimiento ya lo rechaza.
 
         return errores
     }

@@ -1,5 +1,7 @@
 package com.esan.sportpro.ui.mensualidades
 
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +17,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,13 +44,13 @@ fun MensualidadHistorialScreen(
     viewModel: MensualidadHistorialViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
-    val formato = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es")) }
+    val formato = remember { FechasSportPro.formatoFecha() }
 
     LaunchedEffect(jugadorId) { viewModel.cargar(jugadorId, jugadorNombre) }
 
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text("Historial · ${state.jugadorNombre}") }) },
+        topBar = { BarraSuperiorSportPro(title = { Text("Historial · ${state.jugadorNombre}") }) },
     ) { padding ->
         when {
             state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

@@ -1,5 +1,11 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import com.esan.sportpro.domain.entrenamientos.EstadoSesion
+import com.esan.sportpro.ui.common.EncabezadoModulo
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.ui.common.CampoHora
+import com.esan.sportpro.ui.common.CampoFecha
+import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +46,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -121,7 +126,7 @@ fun EntrenamientosScreen(
                     modifier = modifier,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     topBar = {
-                        TopAppBar(
+                        BarraSuperiorSportPro(
                             title = { Text("Entrenamiento") },
                             navigationIcon = {
                                 IconButton(onClick = viewModel::volverALista) {
@@ -149,7 +154,7 @@ fun EntrenamientosScreen(
                 modifier = modifier,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
-                    TopAppBar(
+                    BarraSuperiorSportPro(
                         title = { Text(if (state.formulario.id == null) "Nuevo entrenamiento" else "Editar entrenamiento") },
                         navigationIcon = {
                             IconButton(onClick = viewModel::cancelarFormulario) {
@@ -182,6 +187,13 @@ private fun ListaEntrenamientos(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        val programadas = state.entrenamientos.count { it.estadoSesion == EstadoSesion.PROGRAMADA }
+        EncabezadoModulo(
+            titulo = "Entrenamientos",
+            subtitulo = "$programadas ${if (programadas == 1) "sesión programada" else "sesiones programadas"}",
+            icono = Icons.Default.FitnessCenter,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        )
         if (state.puedeGestionar) {
             OutlinedButton(
                 onClick = viewModel::abrirGestionBiblioteca,
@@ -369,19 +381,20 @@ private fun FormularioEntrenamientoContenido(
         }
         errores[CampoEntrenamiento.EQUIPO]?.let { ErrorTexto(it) }
 
-        CampoFormulario(
-            valor = datos.fecha,
+        // Una sesión nueva no puede quedar en el pasado; al editar se respeta la fecha original.
+        CampoFecha(
+            valorIso = datos.fecha,
             onCambio = { v -> viewModel.onCampoChanged(CampoEntrenamiento.FECHA) { copy(fecha = v) } },
-            etiqueta = "Fecha (AAAA-MM-DD)",
+            etiqueta = "Fecha",
             error = errores[CampoEntrenamiento.FECHA],
-            teclado = KeyboardType.Number,
+            fechaMinima = if (formulario.id == null) FechasSportPro.hoy() else null,
+            fechaMaxima = FechasSportPro.hoy().plusYears(1),
         )
-        CampoFormulario(
+        CampoHora(
             valor = datos.hora,
             onCambio = { v -> viewModel.onCampoChanged(CampoEntrenamiento.HORA) { copy(hora = v) } },
-            etiqueta = "Hora (HH:mm)",
+            etiqueta = "Hora de inicio",
             error = errores[CampoEntrenamiento.HORA],
-            teclado = KeyboardType.Number,
         )
         CampoFormulario(
             valor = datos.lugar,

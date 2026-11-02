@@ -3,7 +3,6 @@ package com.esan.sportpro.data.comunidad
 import com.esan.sportpro.domain.comunidad.Aviso
 import com.esan.sportpro.domain.comunidad.FiltroAvisos
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.toObject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -33,13 +32,13 @@ class AvisoRepository @Inject constructor(
     fun observarAvisos(filtro: FiltroAvisos): Flow<List<Aviso>> = callbackFlow {
         val registro = coleccion
             .whereEqualTo("oculto", false)
-            .orderBy("fechaPrueba", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val ahora = Date()
                 val lista = snapshot?.documents
                     ?.mapNotNull { it.toObject<Aviso>() }
                     ?.filterNot { it.expiradoRespectoDe(ahora) }
+                    ?.sortedBy { it.fechaPrueba }
                     ?.filter { coincideConFiltro(it, filtro) }
                     .orEmpty()
                 trySend(lista)

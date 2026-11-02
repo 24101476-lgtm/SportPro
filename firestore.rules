@@ -34,18 +34,53 @@ service cloud.firestore {
         : get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.clubId;
     }
 
+    // Código de invitación existente, sin usar y sin revocar (registro de Administrador).
+    function codigoInvitacionValido(codigo) {
+      return codigo is string
+        && codigo.size() == 8
+        && exists(/databases/$(database)/documents/codigosInvitacion/$(codigo))
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('usado', false) == false
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('revocado', false) == false;
+    }
+
     // Perfil de cada usuario.
+    // - Cada uno crea solo su propio perfil, ACTIVO y sin academia. Nadie se asigna el rol de
+    //   ADMINISTRADOR sin un código de invitación válido (antes bastaba con escribirlo).
+    // - El usuario edita sus datos, pero no su rol, estado, academia ni la marca de menor de edad;
+    //   eso solo lo cambia un administrador.
     match /usuarios/{uid} {
       allow read: if autenticado();
-      allow write: if autenticado() && request.auth.uid == uid;
+      allow create: if autenticado()
+        && request.auth.uid == uid
+        && request.resource.data.estado == 'ACTIVO'
+        && request.resource.data.get('clubId', null) == null
+        && (request.resource.data.rol in ['ENTRENADOR', 'JUGADOR', 'PADRE_DE_FAMILIA']
+          || (request.resource.data.rol == 'ADMINISTRADOR'
+            && codigoInvitacionValido(request.resource.data.get('codigoInvitacion', ''))));
+      allow update: if autenticado() && (
+        esAdmin()
+        || (request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['uid', 'rol', 'estado', 'clubId', 'esMenor']))
+      );
+      allow delete: if false;
     }
 
     // Catálogo configurable de eventos: todos lo leen; la configuración es del administrador.
     // Se permite crear el catálogo base la primera vez desde la app.
     match /catalogoEventos/{tipoId} {
       allow read: if autenticado();
-      allow create: if autenticado();
-      allow update, delete: if esAdmin();
+      // Cualquier usuario autenticado puede sembrar los 14 eventos base (CatalogoBase); los
+      // eventos personalizados solo los crea el administrador (US-013).
+      allow create: if esAdmin()
+        || (autenticado() && tipoId in [
+             'inicio_partido', 'fin_primer_tiempo', 'inicio_segundo_tiempo', 'fin_partido',
+             'gol', 'falta', 'tarjeta_amarilla', 'tarjeta_roja', 'cambio', 'penal',
+             'tiro_esquina', 'fuera_de_juego', 'saque_lateral', 'saque_meta'
+           ]);
+      // No se borran: un tipo ya usado en partidos solo se desactiva.
+      allow update: if esAdmin();
+      allow delete: if false;
     }
 
     // US-001/US-004: códigos de invitación de 8 caracteres para crear cuentas de Administrador.
@@ -240,12 +275,21 @@ service cloud.firestore {
     }
 
     // US-026/US-027: anuncios y preferencias de notificación.
+    // Publican, editan y archivan el entrenador y el administrador; cualquier usuario puede
+    // marcar un anuncio como leído (agregarse a sí mismo a `lecturas`).
     match /anuncios/{id} {
       allow read: if autenticado();
-      allow write: if autenticado();
+      allow create: if esStaff() && request.resource.data.autorUid == request.auth.uid;
+      allow update: if esStaff()
+        || (autenticado()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lecturas'])
+          && request.resource.data.lecturas.toSet().difference(resource.data.get('lecturas', []).toSet())
+            .hasOnly([request.auth.uid]));
+      allow delete: if false;
     }
-    match /preferencias_notificaciones/{id} {
-      allow read, write: if autenticado();
+    // Preferencias de cada usuario: solo las suyas.
+    match /preferencias_notificaciones/{uid} {
+      allow read, write: if autenticado() && request.auth.uid == uid;
     }
 
     // US-028/US-029/US-030: comunidad, avisos y moderación.
@@ -262,14 +306,29 @@ service cloud.firestore {
       allow read: if autenticado();
       allow write: if autenticado();
     }
+    // Reportes: cualquiera reporta a su nombre y ve sus propios reportes (para no duplicarlos);
+    // solo el administrador ve la bandeja y los resuelve.
     match /reportes/{id} {
-      allow read, write: if autenticado();
+      allow create: if autenticado() && request.resource.data.reportadoPorUid == request.auth.uid;
+      allow read: if esAdmin() || (autenticado() && resource.data.reportadoPorUid == request.auth.uid);
+      allow update: if esAdmin();
+      allow delete: if false;
     }
+    // Bloqueos: id {uidBloqueador}_{uidBloqueado}. Cada uno gestiona los suyos y puede saber quién
+    // lo bloqueó (para ocultar ese contenido en su muro).
     match /bloqueos/{id} {
-      allow read, write: if autenticado();
+      allow read: if autenticado()
+        && (resource.data.uidBloqueador == request.auth.uid || resource.data.uidBloqueado == request.auth.uid);
+      allow create: if autenticado()
+        && request.resource.data.uidBloqueador == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.uidBloqueado;
+      allow delete: if autenticado() && resource.data.uidBloqueador == request.auth.uid;
+      allow update: if false;
     }
-    match /suspensiones/{id} {
-      allow read, write: if autenticado();
+    // Suspensiones: las aplica el administrador; cada usuario puede leer la suya.
+    match /suspensiones/{uid} {
+      allow read: if autenticado();
+      allow write: if esAdmin();
     }
 
     match /partidos/{partidoId} {
@@ -307,6 +366,32 @@ service cloud.firestore {
       match /convocados/{jugadorId} {
         allow read: if autenticado();
         allow write: if puedeOperar();
+      }
+
+      // US-014: historial de la programación (inicial, reprogramaciones y cancelación).
+      // Solo se agregan entradas; nunca se editan ni se borran.
+      match /historial/{registroId} {
+        allow read: if autenticado();
+        allow create: if puedeOperar() && request.resource.data.realizadoPor == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // US-014/US-015: respuesta de cada convocado. El personal publica la convocatoria y envía
+      // recordatorios; el jugador o su apoderado solo escriben su respuesta, a su nombre y antes
+      // de la fecha límite.
+      match /respuestasConvocatoria/{jugadorId} {
+        allow read: if autenticado();
+        allow create: if puedeOperar();
+        allow update: if puedeOperar()
+          || (autenticado()
+            && request.resource.data.respondidoPorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'estado', 'motivo', 'respondidoPorUid', 'respondidoPorNombre', 'fechaRespuesta'
+               ])
+            && request.resource.data.estado in ['CONFIRMADO', 'NO_DISPONIBLE']
+            && (get(/databases/$(database)/documents/partidos/$(partidoId)).data.get('fechaLimiteRespuesta', null) == null
+              || request.time <= get(/databases/$(database)/documents/partidos/$(partidoId)).data.fechaLimiteRespuesta));
+        allow delete: if false;
       }
 
       // Eventos del partido: nunca se eliminan físicamente.

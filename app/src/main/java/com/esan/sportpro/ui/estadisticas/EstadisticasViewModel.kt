@@ -1,5 +1,10 @@
 package com.esan.sportpro.ui.estadisticas
 
+import kotlinx.coroutines.flow.first
+import com.esan.sportpro.domain.cuentas.SesionRepository
+import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.academia.EquipoRepository
+import com.esan.sportpro.domain.academia.Equipo
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.estadisticas.StatsRepository
@@ -27,14 +32,19 @@ data class EstadisticasUiState(
     /**
      * US-026, criterio 8: un padre de familia solo ve las estadísticas de su(s) jugador(es)
      * vinculado(s) y las del equipo. `null` = sin restricción (Entrenador/Administrador).
-     * TODO(US-003): reemplazar [rolActual] por el rol real del usuario autenticado.
+     * Se toma del perfil autenticado; hasta cargarlo se asume el rol de menor privilegio.
      */
-    val rolActual: UserRole = UserRole.ENTRENADOR,
+    val rolActual: UserRole = UserRole.JUGADOR,
+    /** Equipos que el usuario puede consultar (el padre, solo los de sus hijos vinculados). */
+    val equipos: List<Equipo> = emptyList(),
+    val equipoSeleccionadoId: String? = null,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
 ) {
     val sinPartidosEnPeriodo: Boolean
         get() = !isLoading && resumenEquipo.partidosJugados == 0
+
+    val sinEquipos: Boolean get() = !isLoading && equipos.isEmpty()
 }
 
 /** US-026 — Frames 121 a 125 (Estadísticas de equipo y jugadores). */
@@ -43,19 +53,58 @@ class EstadisticasViewModel @Inject constructor(
     private val repository: StatsRepository,
     private val firestore: FirebaseFirestore,
     private val firebaseAuth: FirebaseAuth,
+    private val sesionRepository: SesionRepository,
+    private val equipoRepository: EquipoRepository,
 ) : BaseViewModel<EstadisticasUiState, Unit>(EstadisticasUiState()) {
 
-    // TODO(academia/equipo): reemplazar por el equipoId real del usuario autenticado.
-    private val equipoIdActual = "equipo-demo"
+    /** Equipo real elegido (antes era un valor fijo "equipo-demo" que no existía en Firestore). */
+    private val equipoIdActual: String get() = currentState.equipoSeleccionadoId.orEmpty()
 
     init {
+        viewModelScope.launch {
+            val perfil = sesionRepository.perfilActual()
+            if (perfil != null) setState { copy(rolActual = perfil.rol) }
+            val equipos = perfil?.let { equiposVisibles(it) }.orEmpty()
+            setState { copy(equipos = equipos, equipoSeleccionadoId = equipos.firstOrNull()?.id) }
+            if (equipos.isEmpty()) {
+                setState { copy(isLoading = false) }
+                return@launch
+            }
+            cargarTemporadas()
+            recargar()
+        }
+    }
+
+    fun seleccionarEquipo(equipoId: String) {
+        if (equipoId == currentState.equipoSeleccionadoId) return
+        setState { copy(equipoSeleccionadoId = equipoId, isLoading = true) }
         cargarTemporadas()
         recargar()
     }
 
+    /** Equipos activos de la academia; para el padre, solo los equipos de sus hijos vinculados. */
+    private suspend fun equiposVisibles(perfil: PerfilActual): List<Equipo> {
+        val activos = runCatching { equipoRepository.observarEquipos(perfil.academiaId).first() }
+            .getOrDefault(emptyList())
+            .filter { it.activo }
+        if (perfil.rol != UserRole.PADRE_DE_FAMILIA) return activos
+        val equiposDeHijos = runCatching {
+            firestore.collection("vinculaciones")
+                .whereEqualTo("padreUid", perfil.uid)
+                .whereEqualTo("estado", "APROBADA")
+                .get()
+                .await()
+                .documents
+                .mapNotNull { it.getString("equipoId") }
+                .toSet()
+        }.getOrDefault(emptySet())
+        return activos.filter { it.id in equiposDeHijos }
+    }
+
     private fun cargarTemporadas() {
+        if (equipoIdActual.isEmpty()) return
         viewModelScope.launch {
-            val temporadas = repository.obtenerTemporadasDisponibles(equipoIdActual)
+            val temporadas = runCatching { repository.obtenerTemporadasDisponibles(equipoIdActual) }.getOrDefault(emptyList())
             setState { copy(temporadasDisponibles = temporadas) }
         }
     }
@@ -80,6 +129,7 @@ class EstadisticasViewModel @Inject constructor(
     }
 
     private fun recargar() {
+        if (equipoIdActual.isEmpty()) return
         viewModelScope.launch {
             val jugadorIdsPermitidos = jugadorIdsPermitidosParaRolActual()
             val filtro = currentState.filtro

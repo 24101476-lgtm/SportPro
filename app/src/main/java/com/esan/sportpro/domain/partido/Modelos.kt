@@ -227,6 +227,9 @@ data class Partido(
 
     /** Marca de tiempo del servidor del fin del primer tiempo. */
     val finPrimerTiempoMs: Long? = null,
+
+    /** Último recordatorio de convocatoria (US-014: la acción Recordar se habilita cada 12 h). */
+    val ultimoRecordatorioMs: Long? = null,
 )
 
 
@@ -303,6 +306,16 @@ data class EventoPartido(
 
     /** true mientras la escritura está solo en el dispositivo. */
     val pendienteSincronizar: Boolean,
+
+    /**
+     * Tiempo del partido en que ocurrió (1 o 2). Los eventos antiguos no lo guardan y se deduce
+     * con [ReglasPartido.periodoDe]. Permite que el tiempo añadido del 1.er tiempo (45+3')
+     * quede antes del inicio del 2.º tiempo aunque su número de minuto sea mayor.
+     */
+    val periodo: Int? = null,
+
+    /** Cuándo esta versión fue reemplazada por una corrección. */
+    val reemplazadoEnMs: Long? = null,
 )
 
 
@@ -323,4 +336,7 @@ data class BorradorEvento(
     val secundarioNombre: String?,
     val resultadoPenal: ResultadoPenal?,
     val observacion: String?,
+
+    /** 1 o 2; null deja que el repositorio no lo guarde (eventos sin tiempo definido). */
+    val periodo: Int? = null,
 )

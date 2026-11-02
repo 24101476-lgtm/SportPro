@@ -38,6 +38,8 @@ vinculaciones/{id}/auditoria/{registroId}   cada acción: accion (SOLICITUD | AP
 entrenamientos/{entrenamientoId}       (US-009 a US-013)
    academiaId, equipoId, equipoNombre
    fecha (AAAA-MM-DD), hora (HH:mm), lugar, objetivo
+   duracionPlanificadaMin (US-010, 15-240; 0 en sesiones antiguas = suma de ejercicios)
+   motivoCancelacion, canceladaPor, canceladaPorNombre, canceladaEn   (US-010, estado CANCELADA)
    ejercicios[] { nombre, descripcion, duracionMin, ejercicioId }   (copia; ejercicioId = id en la biblioteca o "")
    asistencia { jugadorId: PRESENTE | TARDE | JUSTIFICADO | AUSENTE }   (ausente del mapa = "Sin marcar")
    asistenciaDetalle { jugadorId: { estado, minutosRetraso?, motivo, marcadoPor, marcadoPorNombre, marcadoEn (hora servidor) } }

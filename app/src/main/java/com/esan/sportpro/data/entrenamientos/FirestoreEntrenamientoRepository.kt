@@ -67,6 +67,7 @@ class FirestoreEntrenamientoRepository @Inject constructor(
             "hora" to entrenamiento.hora.trim(),
             "lugar" to entrenamiento.lugar.trim(),
             "objetivo" to entrenamiento.objetivo.trim(),
+            "duracionPlanificadaMin" to entrenamiento.duracionPlanificadaMin,
             "ejercicios" to entrenamiento.ejercicios.map {
                 mapOf(
                     "nombre" to it.nombre.trim(),
@@ -90,6 +91,17 @@ class FirestoreEntrenamientoRepository @Inject constructor(
             entrenamientos.document(entrenamiento.id).update(datos).esperarConfirmacion()
         }
     }
+
+    override suspend fun cancelar(entrenamiento: Entrenamiento, motivo: String, uid: String, nombre: String): Boolean =
+        entrenamientos.document(entrenamiento.id).update(
+            mapOf(
+                "estado" to EstadoSesion.CANCELADA.name,
+                "motivoCancelacion" to motivo.trim(),
+                "canceladaPor" to uid,
+                "canceladaPorNombre" to nombre,
+                "canceladaEn" to FieldValue.serverTimestamp(),
+            ),
+        ).esperarConfirmacion()
 
     // ---- Asistencia (US-011) --------------------------------------------------------------
 

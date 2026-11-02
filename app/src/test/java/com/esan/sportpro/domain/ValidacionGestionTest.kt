@@ -164,6 +164,7 @@ class ValidacionEntrenamientoTest {
         equipoId = "e1",
         fecha = "2026-10-10",
         hora = "16:30",
+        duracion = "90",
         objetivo = "Mejorar la salida con balón",
         ejercicios = listOf(ejercicio),
     )
@@ -180,10 +181,10 @@ class ValidacionEntrenamientoTest {
     }
 
     @Test
-    fun sesionMuyLarga_esRechazada() {
-        val largos = listOf(Ejercicio("A", "", 150), Ejercicio("B", "", 150))
-        val errores = ValidacionEntrenamiento.validar(datosValidos().copy(ejercicios = largos), hoy)
-        assertTrue(CampoEntrenamiento.EJERCICIOS in errores)
+    fun ejerciciosQueSuperanLaDuracion_noBloqueanElGuardado() {
+        // US-010, criterio 4: es una advertencia (ReglasPlanificacion.avisoExceso), no un error.
+        val largos = listOf(Ejercicio("A", "", 60), Ejercicio("B", "", 60))
+        assertTrue(ValidacionEntrenamiento.validar(datosValidos().copy(ejercicios = largos), hoy).isEmpty())
     }
 
     @Test

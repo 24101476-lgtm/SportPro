@@ -16,6 +16,7 @@ import com.esan.sportpro.domain.entrenamientos.Ejercicio
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.FiltroBiblioteca
+import com.esan.sportpro.domain.entrenamientos.ReglasPlanificacion
 import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.catch
@@ -42,6 +43,12 @@ data class FormularioEntrenamiento(
     val guardando: Boolean = false,
 )
 
+/** US-010, criterio 9: cancelar con motivo. */
+data class DialogoCancelacion(val entrenamiento: Entrenamiento, val motivo: String = "", val error: String? = null)
+
+/** US-010, criterio 8: duplicar la sesión hacia otra fecha. */
+data class DialogoDuplicar(val entrenamiento: Entrenamiento, val fecha: String = "", val error: String? = null)
+
 /**
  * Diálogo para agregar a la sesión un ejercicio escrito solo para ella. Los ejercicios
  * reutilizables se crean en la Biblioteca (US-009), que pide la ficha completa.
@@ -67,7 +74,15 @@ data class EntrenamientosUiState(
     val mostrarBiblioteca: Boolean = false,
     /** Texto del buscador del selector "Desde biblioteca". */
     val busquedaBiblioteca: String = "",
+    /** US-010, criterio 6: sesión del mismo equipo que se cruza con el horario elegido. */
+    val sesionSolapada: Entrenamiento? = null,
+    val dialogoCancelacion: DialogoCancelacion? = null,
+    val dialogoDuplicar: DialogoDuplicar? = null,
+    val procesando: Boolean = false,
 ) {
+    /** US-010, criterio 4: advertencia que no bloquea el guardado. */
+    val avisoExceso: String? get() = ReglasPlanificacion.avisoExceso(formulario.datos)
+
     /** Administrador y entrenador planifican y toman asistencia; el jugador solo consulta. */
     val puedeGestionar: Boolean get() = perfil?.esStaff == true
 
@@ -141,7 +156,9 @@ class EntrenamientosViewModel @Inject constructor(
         val equipoInicial = currentState.filtroEquipoId.orEmpty()
         setState {
             copy(
-                formulario = FormularioEntrenamiento(datos = DatosEntrenamiento(equipoId = equipoInicial)),
+                formulario = FormularioEntrenamiento(
+                    datos = DatosEntrenamiento(equipoId = equipoInicial, duracion = DURACION_POR_DEFECTO.toString()),
+                ),
                 pantalla = PantallaEntrenamientos.Formulario,
             )
         }
@@ -157,6 +174,7 @@ class EntrenamientosViewModel @Inject constructor(
                         equipoId = entrenamiento.equipoId,
                         fecha = entrenamiento.fecha,
                         hora = entrenamiento.hora,
+                        duracion = entrenamiento.duracionSesionMin.toString(),
                         lugar = entrenamiento.lugar,
                         objetivo = entrenamiento.objetivo,
                         ejercicios = entrenamiento.ejercicios,
@@ -218,7 +236,11 @@ class EntrenamientosViewModel @Inject constructor(
         setState { copy(mostrarBiblioteca = false) }
     }
 
-    fun guardar() {
+    /**
+     * @param ignorarSolapamiento `true` cuando el usuario eligió "Continuar" en el diálogo de
+     * sesión solapada (criterio 6).
+     */
+    fun guardar(ignorarSolapamiento: Boolean = false) {
         val estado = currentState
         val perfil = estado.perfil ?: return
         val formulario = estado.formulario
@@ -229,9 +251,25 @@ class EntrenamientosViewModel @Inject constructor(
             permitirPasado = formulario.id != null,
         )
         if (errores.isNotEmpty()) {
-            setState { copy(formulario = formulario.copy(errores = errores)) }
+            setState { copy(formulario = formulario.copy(errores = errores), sesionSolapada = null) }
             return
         }
+
+        if (!ignorarSolapamiento) {
+            val solapada = ReglasPlanificacion.sesionSolapada(
+                equipoId = formulario.datos.equipoId,
+                fecha = formulario.datos.fecha,
+                hora = formulario.datos.hora,
+                duracionMin = formulario.datos.duracion.trim().toInt(),
+                sesiones = estado.entrenamientos,
+                idEditando = formulario.id,
+            )
+            if (solapada != null) {
+                setState { copy(sesionSolapada = solapada) }
+                return
+            }
+        }
+        setState { copy(sesionSolapada = null) }
 
         val datos = formulario.datos
         val equipo = estado.equipos.firstOrNull { it.id == datos.equipoId }
@@ -245,6 +283,7 @@ class EntrenamientosViewModel @Inject constructor(
             lugar = datos.lugar,
             objetivo = datos.objetivo,
             ejercicios = datos.ejercicios,
+            duracionPlanificadaMin = datos.duracion.trim().toInt(),
             creadoPor = perfil.uid,
         )
 
@@ -258,10 +297,96 @@ class EntrenamientosViewModel @Inject constructor(
                         pantalla = if (formulario.id != null) PantallaEntrenamientos.Detalle(formulario.id) else PantallaEntrenamientos.Lista,
                     )
                 }
-                val texto = "Entrenamiento guardado"
+                val texto = if (formulario.id == null) "Sesión programada" else "Entrenamiento guardado"
                 sendEvent(EntrenamientosEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
             } catch (e: Exception) {
                 setState { copy(formulario = formulario.copy(guardando = false)) }
+                sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    fun cerrarAvisoSolapamiento() = setState { copy(sesionSolapada = null) }
+
+    fun continuarPeseASolapamiento() = guardar(ignorarSolapamiento = true)
+
+    // ---- Ejercicios de la sesión (criterio 3) --------------------------------------------------
+
+    /** Reordenar por arrastre: mueve el ejercicio de [desde] a [hasta]. */
+    fun moverEjercicio(desde: Int, hasta: Int) = onCampoChanged(CampoEntrenamiento.EJERCICIOS) {
+        copy(ejercicios = ReglasPlanificacion.mover(ejercicios, desde, hasta))
+    }
+
+    /** Ajusta la duración del ejercicio solo en esta sesión; la biblioteca no cambia. */
+    fun ajustarDuracionEjercicio(indice: Int, delta: Int) = onCampoChanged(CampoEntrenamiento.EJERCICIOS) {
+        val actual = ejercicios.getOrNull(indice)?.duracionMin ?: return@onCampoChanged this
+        val nueva = (actual + delta).coerceIn(1, ValidacionEntrenamiento.DURACION_EJERCICIO_MAX)
+        copy(ejercicios = ReglasPlanificacion.ajustarDuracion(ejercicios, indice, nueva))
+    }
+
+    // ---- Cancelar (criterio 9) -----------------------------------------------------------------
+
+    fun abrirCancelacion(entrenamiento: Entrenamiento) {
+        if (!currentState.puedeGestionar) return
+        setState { copy(dialogoCancelacion = DialogoCancelacion(entrenamiento)) }
+    }
+
+    fun onMotivoCancelacion(motivo: String) =
+        setState { copy(dialogoCancelacion = dialogoCancelacion?.copy(motivo = motivo, error = null)) }
+
+    fun cerrarCancelacion() = setState { copy(dialogoCancelacion = null) }
+
+    fun confirmarCancelacion() {
+        val dialogo = currentState.dialogoCancelacion ?: return
+        val perfil = currentState.perfil ?: return
+        if (currentState.procesando) return
+        ReglasPlanificacion.validarCancelacion(dialogo.entrenamiento, dialogo.motivo)?.let { error ->
+            setState { copy(dialogoCancelacion = dialogo.copy(error = error)) }
+            return
+        }
+        setState { copy(procesando = true) }
+        viewModelScope.launch {
+            try {
+                val confirmado = entrenamientoRepository.cancelar(dialogo.entrenamiento, dialogo.motivo, perfil.uid, perfil.nombre)
+                setState { copy(dialogoCancelacion = null, procesando = false) }
+                val texto = "Sesión cancelada. Queda en el historial con su motivo"
+                sendEvent(EntrenamientosEvent.Mensaje(if (confirmado) "$texto." else "$texto. Se sincronizará cuando vuelva la conexión."))
+            } catch (e: Exception) {
+                setState { copy(procesando = false) }
+                sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    // ---- Duplicar (criterio 8) -----------------------------------------------------------------
+
+    fun abrirDuplicar(entrenamiento: Entrenamiento) {
+        if (!currentState.puedeGestionar) return
+        setState { copy(dialogoDuplicar = DialogoDuplicar(entrenamiento)) }
+    }
+
+    fun onFechaDuplicado(fecha: String) = setState { copy(dialogoDuplicar = dialogoDuplicar?.copy(fecha = fecha, error = null)) }
+
+    fun cerrarDuplicar() = setState { copy(dialogoDuplicar = null) }
+
+    fun confirmarDuplicar() {
+        val dialogo = currentState.dialogoDuplicar ?: return
+        val perfil = currentState.perfil ?: return
+        if (currentState.procesando) return
+        ReglasPlanificacion.validarFechaDuplicado(dialogo.fecha)?.let { error ->
+            setState { copy(dialogoDuplicar = dialogo.copy(error = error)) }
+            return
+        }
+        val copia = ReglasPlanificacion.duplicar(dialogo.entrenamiento, dialogo.fecha, perfil.uid)
+        setState { copy(procesando = true) }
+        viewModelScope.launch {
+            try {
+                val confirmado = entrenamientoRepository.guardar(copia)
+                setState { copy(dialogoDuplicar = null, procesando = false, pantalla = PantallaEntrenamientos.Lista) }
+                val texto = "Sesión duplicada para el ${dialogo.fecha}"
+                sendEvent(EntrenamientosEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
+            } catch (e: Exception) {
+                setState { copy(procesando = false) }
                 sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))
             }
         }
@@ -281,4 +406,8 @@ class EntrenamientosViewModel @Inject constructor(
 
     fun volverADetalle(entrenamientoId: String) =
         setState { copy(pantalla = PantallaEntrenamientos.Detalle(entrenamientoId)) }
+
+    private companion object {
+        const val DURACION_POR_DEFECTO = 90
+    }
 }

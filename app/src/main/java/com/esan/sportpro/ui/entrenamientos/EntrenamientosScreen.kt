@@ -62,6 +62,7 @@ import com.esan.sportpro.domain.entrenamientos.Ejercicio
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EstadoAsistencia
 import com.esan.sportpro.domain.entrenamientos.ReglasAsistencia
+import com.esan.sportpro.domain.entrenamientos.ValidacionEntrenamiento
 import com.esan.sportpro.ui.common.CampoFormulario
 import com.esan.sportpro.ui.common.EmptyStateMessage
 
@@ -144,6 +145,8 @@ fun EntrenamientosScreen(
                             puedeGestionar = state.puedeGestionar,
                             onEditar = { viewModel.editarEntrenamiento(entrenamiento) },
                             onAsistencia = { viewModel.abrirAsistencia(entrenamiento) },
+                            onDuplicar = { viewModel.abrirDuplicar(entrenamiento) },
+                            onCancelar = { viewModel.abrirCancelacion(entrenamiento) },
                             modifier = Modifier.padding(padding),
                         )
                     }
@@ -177,6 +180,8 @@ fun EntrenamientosScreen(
             )
         }
     }
+
+    DialogosPlanificacion(state = state, viewModel = viewModel)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -256,7 +261,7 @@ private fun EntrenamientoCard(entrenamiento: Entrenamiento, onClick: () -> Unit)
             Text(entrenamiento.objetivo, style = MaterialTheme.typography.bodyMedium)
             Text(
                 listOfNotNull(
-                    "${entrenamiento.ejercicios.size} ejercicios · ${entrenamiento.duracionTotalMin} min",
+                    "${entrenamiento.ejercicios.size} ejercicios · ${entrenamiento.duracionSesionMin} min",
                     entrenamiento.estadoSesion.etiqueta,
                     entrenamiento.porcentajeAsistencia?.let { "Asistencia ${ReglasAsistencia.formatearPorcentaje(it)}" },
                 ).joinToString(" · "),
@@ -272,6 +277,8 @@ private fun DetalleEntrenamiento(
     puedeGestionar: Boolean,
     onEditar: () -> Unit,
     onAsistencia: () -> Unit,
+    onDuplicar: () -> Unit,
+    onCancelar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -279,13 +286,24 @@ private fun DetalleEntrenamiento(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(entrenamiento.equipoNombre, style = MaterialTheme.typography.titleLarge)
-        Text("${entrenamiento.fecha} a las ${entrenamiento.hora}", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "${entrenamiento.fecha} a las ${entrenamiento.hora} · ${entrenamiento.duracionSesionMin} min",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        if (entrenamiento.estadoSesion == EstadoSesion.CANCELADA) {
+            Text(
+                "Cancelada" + entrenamiento.canceladaPorNombre.takeIf { it.isNotBlank() }?.let { " por $it" }.orEmpty() +
+                    ": ${entrenamiento.motivoCancelacion}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         if (entrenamiento.lugar.isNotBlank()) Text("Lugar: ${entrenamiento.lugar}", style = MaterialTheme.typography.bodyMedium)
 
         Subtitulo("Objetivo")
         Text(entrenamiento.objetivo, style = MaterialTheme.typography.bodyMedium)
 
-        Subtitulo("Ejercicios (${entrenamiento.duracionTotalMin} min en total)")
+        Subtitulo("Ejercicios (${entrenamiento.duracionTotalMin} min)")
         entrenamiento.ejercicios.forEachIndexed { indice, ejercicio ->
             EjercicioItem(numero = indice + 1, ejercicio = ejercicio)
         }
@@ -306,15 +324,30 @@ private fun DetalleEntrenamiento(
         }
 
         if (puedeGestionar) {
+            val programada = entrenamiento.estadoSesion == EstadoSesion.PROGRAMADA
+            if (entrenamiento.estadoSesion != EstadoSesion.CANCELADA) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (programada) {
+                        OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f)) { Text("Editar") }
+                    }
+                    Button(onClick = onAsistencia, modifier = Modifier.weight(1f)) {
+                        Text(if (entrenamiento.realizada) "Ver asistencia" else "Tomar asistencia")
+                    }
+                }
+            }
+            // US-010: duplicar hacia otra fecha (criterio 8) y cancelar con motivo (criterio 9).
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (!entrenamiento.realizada) {
-                    OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f)) { Text("Editar") }
-                }
-                Button(onClick = onAsistencia, modifier = Modifier.weight(1f)) {
-                    Text(if (entrenamiento.realizada) "Ver asistencia" else "Tomar asistencia")
+                OutlinedButton(onClick = onDuplicar, modifier = Modifier.weight(1f)) { Text("Duplicar") }
+                if (programada) {
+                    OutlinedButton(onClick = onCancelar, modifier = Modifier.weight(1f)) {
+                        Text("Cancelar sesión", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }
@@ -397,6 +430,14 @@ private fun FormularioEntrenamientoContenido(
             error = errores[CampoEntrenamiento.HORA],
         )
         CampoFormulario(
+            valor = datos.duracion,
+            onCambio = { v -> viewModel.onCampoChanged(CampoEntrenamiento.DURACION) { copy(duracion = v) } },
+            etiqueta = "Duración total (minutos)",
+            error = errores[CampoEntrenamiento.DURACION],
+            ayuda = "Entre ${ValidacionEntrenamiento.DURACION_SESION_MIN} y ${ValidacionEntrenamiento.DURACION_SESION_MAX} minutos",
+            teclado = KeyboardType.Number,
+        )
+        CampoFormulario(
             valor = datos.lugar,
             onCambio = { v -> viewModel.onCampoChanged(CampoEntrenamiento.LUGAR) { copy(lugar = v) } },
             etiqueta = "Lugar (opcional)",
@@ -413,10 +454,24 @@ private fun FormularioEntrenamientoContenido(
 
         val total = datos.ejercicios.sumOf { it.duracionMin }
         Subtitulo("Ejercicios ($total min)")
-        datos.ejercicios.forEachIndexed { indice, ejercicio ->
-            EjercicioItem(numero = indice + 1, ejercicio = ejercicio, onQuitar = { viewModel.quitarEjercicio(indice) })
+        if (datos.ejercicios.size > 1) {
+            Text(
+                "Mantén presionado ⠿ y arrastra para cambiar el orden. La duración que ajustes aquí no cambia la biblioteca.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        ListaEjerciciosReordenable(
+            ejercicios = datos.ejercicios,
+            onMover = viewModel::moverEjercicio,
+            onAjustar = viewModel::ajustarDuracionEjercicio,
+            onQuitar = viewModel::quitarEjercicio,
+        )
         errores[CampoEntrenamiento.EJERCICIOS]?.let { ErrorTexto(it) }
+        // US-010, criterio 4: advertencia que no bloquea el guardado.
+        state.avisoExceso?.let { aviso ->
+            Text(aviso, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = viewModel::abrirDialogoEjercicio, modifier = Modifier.weight(1f)) {
                 Text("Nuevo ejercicio")
@@ -438,7 +493,7 @@ private fun FormularioEntrenamientoContenido(
                 modifier = Modifier.weight(1f),
             ) { Text("Cancelar") }
             Button(
-                onClick = viewModel::guardar,
+                onClick = { viewModel.guardar() },
                 enabled = !formulario.guardando,
                 modifier = Modifier.weight(1f),
             ) {

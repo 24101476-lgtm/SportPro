@@ -164,7 +164,7 @@ private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
             if (aviso.posicionesBuscadas.isNotEmpty()) {
                 Text(
                     "Buscamos: " + aviso.posicionesBuscadas.joinToString(", ") { nombre ->
-                        runCatching { com.esan.sportpro.domain.comunidad.PosicionJugador.valueOf(nombre).etiqueta }.getOrDefault(nombre)
+                        com.esan.sportpro.domain.comunidad.PosicionJugador.desde(nombre)?.etiqueta ?: nombre
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

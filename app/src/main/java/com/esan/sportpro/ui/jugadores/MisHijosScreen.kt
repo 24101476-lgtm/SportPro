@@ -51,6 +51,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.jugadores.EstadoVinculacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.ReglasVinculacion
+import com.esan.sportpro.domain.jugadores.ValidacionJugador
+import com.esan.sportpro.domain.jugadores.VisibilidadJugador
 import com.esan.sportpro.domain.jugadores.Vinculacion
 import com.esan.sportpro.ui.common.CampoFormulario
 import com.esan.sportpro.ui.common.EmptyStateMessage
@@ -87,6 +89,7 @@ fun MisHijosScreen(
                             PantallaMisHijos.Lista -> "Mis hijos"
                             PantallaMisHijos.Solicitar -> "Vincular jugador"
                             is PantallaMisHijos.Detalle -> state.jugadorDetalle?.nombreCompleto ?: "Jugador"
+                            is PantallaMisHijos.Restringido -> pantalla.vinculacion.jugadorNombre
                         },
                     )
                 },
@@ -126,6 +129,7 @@ fun MisHijosScreen(
                         else -> PerfilHijo(jugador, state, contenido)
                     }
                 }
+                is PantallaMisHijos.Restringido -> PerfilRestringido(pantalla.vinculacion, contenido)
             }
         }
     }
@@ -298,11 +302,14 @@ private fun PerfilHijo(jugador: Jugador, state: MisHijosUiState, modifier: Modif
         SeccionHijo("Datos deportivos")
         DatoHijo("Equipo", jugador.equipoNombre)
         DatoHijo("Posición", jugador.posicion)
+        DatoHijo("Posición secundaria", jugador.posicionSecundaria)
+        DatoHijo("Pie hábil", jugador.pieHabil)
         DatoHijo("Dorsal", jugador.dorsal?.toString())
 
         SeccionHijo("Datos personales y físicos")
+        DatoHijo("Documento de identidad", jugador.documentoIdentidad)
         DatoHijo("Fecha de nacimiento", jugador.fechaNacimiento)
-        DatoHijo("Estatura", jugador.estaturaCm?.let { "$it cm" })
+        DatoHijo("Estatura", jugador.estaturaCm?.let { "${ValidacionJugador.centimetrosAMetros(it)} m" })
         DatoHijo("Peso", jugador.pesoKg?.let { "$it kg" })
 
         SeccionHijo("Contacto de emergencia")
@@ -324,6 +331,42 @@ private fun PerfilHijo(jugador: Jugador, state: MisHijosUiState, modifier: Modif
             "Sus convocatorias, estadísticas y el estado de sus mensualidades están en las pestañas Partido, Estadísticas y Mensualidades.",
             style = MaterialTheme.typography.bodyMedium,
         )
+    }
+}
+
+/**
+ * US-006, criterio 8: sin vínculo aprobado, el padre ve nombre y categoría; los datos físicos,
+ * el documento y los contactos aparecen como "Información restringida".
+ */
+@Composable
+private fun PerfilRestringido(vinculacion: Vinculacion, modifier: Modifier) {
+    val restringido = VisibilidadJugador.TEXTO_RESTRINGIDO
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(vinculacion.jugadorNombre, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            EstadoVinculacionChip(vinculacion.estadoVinculacion)
+        }
+        Text(vinculacion.equipoNombre, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            when (vinculacion.estadoVinculacion) {
+                EstadoVinculacion.PENDIENTE -> "Tu solicitud está pendiente. Verás el perfil completo cuando la academia la apruebe."
+                EstadoVinculacion.RECHAZADA -> "La academia rechazó la solicitud: ${vinculacion.motivoRechazo}"
+                EstadoVinculacion.REVOCADA -> "La academia revocó esta vinculación."
+                EstadoVinculacion.APROBADA -> ""
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+        SeccionHijo("Datos personales y físicos")
+        DatoHijo("Documento de identidad", restringido)
+        DatoHijo("Fecha de nacimiento", restringido)
+        DatoHijo("Estatura", restringido)
+        DatoHijo("Peso", restringido)
+        SeccionHijo("Contacto de emergencia")
+        DatoHijo("Nombre", restringido)
+        DatoHijo("Teléfono", restringido)
     }
 }
 

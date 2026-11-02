@@ -12,7 +12,6 @@ import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.DirectorioJugador
-import com.esan.sportpro.domain.jugadores.EstadoVinculacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.ReglasVinculacion
 import com.esan.sportpro.domain.jugadores.Vinculacion
@@ -27,6 +26,9 @@ sealed interface PantallaMisHijos {
     data object Lista : PantallaMisHijos
     data object Solicitar : PantallaMisHijos
     data class Detalle(val jugadorId: String) : PantallaMisHijos
+
+    /** US-006, criterio 8: ficha sin vínculo aprobado, con los datos sensibles ocultos. */
+    data class Restringido(val vinculacion: Vinculacion) : PantallaMisHijos
 }
 
 /** Criterio 1: el padre identifica al jugador con el código de la academia o desde la lista de su equipo. */
@@ -134,18 +136,14 @@ class MisHijosViewModel @Inject constructor(
     fun abrirSolicitar() = setState { copy(pantalla = PantallaMisHijos.Solicitar, formulario = FormularioSolicitud()) }
 
     /**
-     * Criterios 5 y 6: solo con el vínculo aprobado se abre el perfil. Pendiente, rechazado o
-     * revocado: el padre solo ve el nombre y la categoría en la lista.
+     * Criterios 5 y 6 de US-007: solo con el vínculo aprobado se abre el perfil completo.
+     * Pendiente, rechazado o revocado: el padre ve nombre y categoría, y el resto como
+     * "Información restringida" (US-006, criterio 8).
      */
     fun abrirDetalle(vinculacion: Vinculacion) {
         if (!vinculacion.aprobada) {
-            val texto = when (vinculacion.estadoVinculacion) {
-                EstadoVinculacion.PENDIENTE -> "Tu solicitud está pendiente de aprobación por la academia."
-                EstadoVinculacion.RECHAZADA -> "La academia rechazó la solicitud: ${vinculacion.motivoRechazo}"
-                EstadoVinculacion.REVOCADA -> "La academia revocó esta vinculación."
-                EstadoVinculacion.APROBADA -> return
-            }
-            sendEvent(MisHijosEvent.Mensaje(texto))
+            detalleJob?.cancel()
+            setState { copy(pantalla = PantallaMisHijos.Restringido(vinculacion), jugadorDetalle = null) }
             return
         }
         detalleJob?.cancel()
@@ -159,10 +157,16 @@ class MisHijosViewModel @Inject constructor(
 
     /** Criterio 8: si la academia revoca el vínculo mientras el padre mira el perfil, se cierra al instante. */
     private fun verificarAccesoDetalle() {
-        val pantalla = currentState.pantalla as? PantallaMisHijos.Detalle ?: return
-        if (currentState.vinculacionCon(pantalla.jugadorId)?.aprobada != true) {
-            volverALista()
-            sendEvent(MisHijosEvent.Mensaje("Tu acceso a este jugador fue revocado por la academia."))
+        when (val pantalla = currentState.pantalla) {
+            is PantallaMisHijos.Detalle -> if (currentState.vinculacionCon(pantalla.jugadorId)?.aprobada != true) {
+                volverALista()
+                sendEvent(MisHijosEvent.Mensaje("Tu acceso a este jugador fue revocado por la academia."))
+            }
+            // Si la academia aprueba mientras el padre mira la ficha restringida, se abre la completa.
+            is PantallaMisHijos.Restringido -> currentState.vinculacionCon(pantalla.vinculacion.jugadorId)
+                ?.takeIf { it.aprobada }
+                ?.let { abrirDetalle(it) }
+            else -> Unit
         }
     }
 

@@ -5,7 +5,9 @@ import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
+import com.esan.sportpro.data.estadisticas.StatsRepository
 import com.esan.sportpro.domain.cuentas.PerfilActual
+import com.esan.sportpro.domain.estadisticas.FiltroEstadisticas
 import com.esan.sportpro.domain.cuentas.SesionRepository
 import com.esan.sportpro.domain.entrenamientos.CalculoAsistencia
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
@@ -51,6 +53,22 @@ data class FormularioJugador(
     val datos: DatosJugador = DatosJugador(),
     val errores: Map<CampoJugador, String> = emptyMap(),
     val guardando: Boolean = false,
+    /** Foto ya guardada (al editar). */
+    val fotoActual: String = "",
+    /** US-006: URI local de una foto nueva (cámara o galería), todavía sin subir. */
+    val fotoNueva: String? = null,
+) {
+    val fotoVisible: String? get() = fotoNueva ?: fotoActual.takeIf { it.isNotBlank() }
+}
+
+/** US-006, criterio 10: resumen deportivo calculado a partir de los eventos de partidos finalizados. */
+data class ResumenDeportivo(
+    val partidos: Int = 0,
+    val minutos: Int = 0,
+    val goles: Int = 0,
+    val asistencias: Int = 0,
+    val amarillas: Int = 0,
+    val rojas: Int = 0,
 )
 
 data class JugadoresUiState(
@@ -64,6 +82,8 @@ data class JugadoresUiState(
     val mostrarInactivos: Boolean = false,
     val pantalla: PantallaJugadores = PantallaJugadores.Lista,
     val formulario: FormularioJugador = FormularioJugador(),
+    /** US-006: resumen deportivo por jugador (`null` mientras se calcula). */
+    val resumenesDeportivos: Map<String, ResumenDeportivo> = emptyMap(),
     /** US-007: solicitudes de vinculación de la academia, en cualquier estado. */
     val vinculaciones: List<Vinculacion> = emptyList(),
     val mostrarHistorialSolicitudes: Boolean = false,
@@ -122,6 +142,7 @@ class JugadoresViewModel @Inject constructor(
     private val equipoRepository: EquipoRepository,
     private val entrenamientoRepository: EntrenamientoRepository,
     private val vinculacionRepository: VinculacionRepository,
+    private val statsRepository: StatsRepository,
 ) : BaseViewModel<JugadoresUiState, JugadoresEvent>(JugadoresUiState()) {
 
     init {
@@ -163,7 +184,35 @@ class JugadoresViewModel @Inject constructor(
 
     fun onMostrarInactivos(valor: Boolean) = setState { copy(mostrarInactivos = valor) }
 
-    fun abrirDetalle(jugadorId: String) = setState { copy(pantalla = PantallaJugadores.Detalle(jugadorId)) }
+    fun abrirDetalle(jugadorId: String) {
+        setState { copy(pantalla = PantallaJugadores.Detalle(jugadorId)) }
+        cargarResumenDeportivo(jugadorId)
+    }
+
+    /** Reutiliza el cálculo de Estadísticas (US-026): solo eventos vigentes de partidos finalizados. */
+    private fun cargarResumenDeportivo(jugadorId: String) {
+        val jugador = currentState.jugador(jugadorId) ?: return
+        viewModelScope.launch {
+            val estadistica = runCatching {
+                statsRepository.obtenerEstadisticaJugador(jugador.equipoId, jugadorId, FiltroEstadisticas())
+            }.getOrNull()
+            val resumen = estadistica?.let {
+                ResumenDeportivo(
+                    partidos = it.partidosJugados,
+                    minutos = it.minutosJugados,
+                    goles = it.goles,
+                    asistencias = it.asistencias,
+                    amarillas = it.tarjetasAmarillas,
+                    rojas = it.tarjetasRojas,
+                )
+            } ?: ResumenDeportivo()
+            setState { copy(resumenesDeportivos = resumenesDeportivos + (jugadorId to resumen)) }
+        }
+    }
+
+    fun onFotoElegida(uri: String) = setState { copy(formulario = formulario.copy(fotoNueva = uri)) }
+
+    fun quitarFotoNueva() = setState { copy(formulario = formulario.copy(fotoNueva = null)) }
 
     fun volverALista() = setState { copy(pantalla = PantallaJugadores.Lista) }
 
@@ -180,7 +229,7 @@ class JugadoresViewModel @Inject constructor(
     fun editarJugador(jugador: Jugador) {
         setState {
             copy(
-                formulario = FormularioJugador(id = jugador.id, datos = jugador.aDatos()),
+                formulario = FormularioJugador(id = jugador.id, datos = jugador.aDatos(), fotoActual = jugador.fotoUrl),
                 pantalla = PantallaJugadores.Formulario,
             )
         }
@@ -205,7 +254,11 @@ class JugadoresViewModel @Inject constructor(
         val formulario = estado.formulario
         if (!estado.tieneAcceso || formulario.guardando) return
 
-        val errores = ValidacionJugador.validar(formulario.datos)
+        val errores = ValidacionJugador.validar(
+            datos = formulario.datos,
+            jugadoresDelEquipo = estado.jugadores,
+            idEditando = formulario.id,
+        )
         if (errores.isNotEmpty()) {
             setState { copy(formulario = formulario.copy(errores = errores)) }
             return
@@ -216,8 +269,10 @@ class JugadoresViewModel @Inject constructor(
         // US-007: todo jugador tiene un código único de 6 caracteres para la vinculación.
         val codigo = original?.codigoVinculacion?.takeIf { it.isNotBlank() }
             ?: ReglasVinculacion.generarCodigo(estado.jugadores.map { it.codigoVinculacion }.toSet())
+        // El id de una ficha nueva se genera antes para guardar su foto en jugadores/{id}/foto.jpg.
+        val id = formulario.id ?: jugadorRepository.nuevoId()
         val jugador = formulario.datos.aJugador(
-            id = formulario.id.orEmpty(),
+            id = id,
             academiaId = perfil.academiaId,
             equipoNombre = equipo?.nombre.orEmpty(),
             creadoPor = original?.creadoPor ?: perfil.uid,
@@ -225,6 +280,7 @@ class JugadoresViewModel @Inject constructor(
             codigoVinculacion = codigo,
             activo = original?.activo ?: true,
             fotoUrl = original?.fotoUrl.orEmpty(),
+            usuarioUid = original?.usuarioUid.orEmpty(),
         )
         // Regla del apoderado: un menor no queda registrado hasta tener un apoderado vinculado.
         val estadoRegistro = ReglasApoderado.estadoPara(jugador, estado.apoderadosDe(jugador.id).size)
@@ -233,16 +289,29 @@ class JugadoresViewModel @Inject constructor(
         setState { copy(formulario = formulario.copy(guardando = true)) }
         viewModelScope.launch {
             try {
-                val confirmado = jugadorRepository.guardar(jugadorFinal, equipoEtiqueta = equipo?.etiqueta ?: jugador.equipoNombre)
-                val texto = if (estadoRegistro == EstadoRegistro.PENDIENTE_APODERADO) {
-                    "Registro pendiente: entrega el código $codigo al apoderado. El jugador quedará registrado cuando apruebes su vinculación"
-                } else {
-                    "Jugador guardado"
+                val confirmado = jugadorRepository.guardar(
+                    jugadorFinal,
+                    equipoEtiqueta = equipo?.etiqueta ?: jugador.equipoNombre,
+                    nuevo = formulario.id == null,
+                )
+                // US-006, criterio 7: la foto se sube después de guardar la ficha. Si no se puede
+                // (sin conexión o sin Cloud Storage), la ficha queda guardada sin foto.
+                val fotoFallida = formulario.fotoNueva?.let { jugadorRepository.subirFoto(id, it) == null } ?: false
+                val texto = buildString {
+                    append(
+                        if (estadoRegistro == EstadoRegistro.PENDIENTE_APODERADO) {
+                            "Registro pendiente: entrega el código $codigo al apoderado. El jugador quedará registrado cuando apruebes su vinculación"
+                        } else {
+                            "Jugador guardado"
+                        },
+                    )
+                    if (fotoFallida) append(". No se pudo subir la foto; inténtalo de nuevo más tarde")
                 }
                 setState {
                     copy(
                         formulario = FormularioJugador(),
                         pantalla = if (formulario.id != null) PantallaJugadores.Detalle(formulario.id) else PantallaJugadores.Lista,
+                        resumenesDeportivos = resumenesDeportivos - id,
                     )
                 }
                 sendEvent(JugadoresEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
@@ -367,8 +436,11 @@ private fun Jugador.aDatos() = DatosJugador(
     fechaNacimiento = fechaNacimiento,
     equipoId = equipoId,
     posicion = posicion,
+    posicionSecundaria = posicionSecundaria,
+    pieHabil = pieHabil,
+    documento = documentoIdentidad,
     dorsal = dorsal?.toString().orEmpty(),
-    estatura = estaturaCm?.toString().orEmpty(),
+    estatura = ValidacionJugador.centimetrosAMetros(estaturaCm),
     peso = pesoKg?.toString().orEmpty(),
     telefono = telefono,
     correo = correo,
@@ -392,8 +464,11 @@ private fun DatosJugador.aJugador(
     apellidos = apellidos,
     fechaNacimiento = fechaNacimiento,
     posicion = posicion,
+    posicionSecundaria = posicionSecundaria,
+    pieHabil = pieHabil,
+    documentoIdentidad = documento.trim().uppercase(),
     dorsal = dorsal.trim().toIntOrNull(),
-    estaturaCm = estatura.trim().toIntOrNull(),
+    estaturaCm = estatura.takeIf { it.isNotBlank() }?.let { ValidacionJugador.estaturaACentimetros(it) },
     pesoKg = ValidacionJugador.parsearPeso(peso),
     telefono = telefono,
     correo = correo,

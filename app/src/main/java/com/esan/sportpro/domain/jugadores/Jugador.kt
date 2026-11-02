@@ -24,7 +24,14 @@ data class Jugador(
     val apellidos: String = "",
     val fechaNacimiento: String = "",
     val posicion: String = "",
+    /** US-006: posición secundaria (etiqueta del catálogo) o vacía. */
+    val posicionSecundaria: String = "",
+    /** US-006: etiqueta de [PieHabil] o vacía. */
+    val pieHabil: String = "",
+    /** US-006: DNI o carné de extranjería. Dato sensible: misma visibilidad que los físicos. */
+    val documentoIdentidad: String = "",
     val dorsal: Int? = null,
+    /** Se guarda en centímetros (datos anteriores); la ficha la muestra y pide en metros (US-006). */
     val estaturaCm: Int? = null,
     val pesoKg: Double? = null,
     val telefono: String = "",
@@ -40,6 +47,11 @@ data class Jugador(
     val apoderadoCorreo: String = "",
     /** Nombre de [EstadoRegistro]; vacío en fichas antiguas (= registrado). Ver [ReglasApoderado]. */
     val estadoRegistro: String = "",
+    /**
+     * Cuenta de usuario (rol Jugador) enlazada a esta ficha; vacía si el jugador no tiene cuenta.
+     * Permite que el propio jugador vea su perfil y edite foto, teléfono y pie hábil (US-006).
+     */
+    val usuarioUid: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
 ) {
@@ -71,4 +83,11 @@ object FechasJugador {
     }
 
     fun edad(nacimiento: LocalDate, hoy: LocalDate): Int = ChronoUnit.YEARS.between(nacimiento, hoy).toInt()
+}
+
+/** Pie hábil del jugador (US-006). */
+enum class PieHabil(val etiqueta: String) {
+    DERECHO("Derecho"),
+    IZQUIERDO("Izquierdo"),
+    AMBIDIESTRO("Ambidiestro"),
 }

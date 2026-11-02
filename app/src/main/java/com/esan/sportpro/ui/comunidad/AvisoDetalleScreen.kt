@@ -70,7 +70,7 @@ fun AvisoDetalleScreen(
             Detalle("Categoría", aviso.categoria)
             Detalle(
                 "Posiciones buscadas",
-                aviso.posicionesBuscadas.mapNotNull { nombre -> runCatching { PosicionJugador.valueOf(nombre) }.getOrNull()?.etiqueta }
+                aviso.posicionesBuscadas.mapNotNull { nombre -> PosicionJugador.desde(nombre)?.etiqueta }
                     .joinToString(", "),
             )
             aviso.fechaPrueba?.let { Detalle("Fecha de la prueba", FechasSportPro.formatoFechaCorta().format(it)) }

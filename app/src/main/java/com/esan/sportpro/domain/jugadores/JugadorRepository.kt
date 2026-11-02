@@ -15,7 +15,22 @@ interface JugadorRepository {
      * @param equipoEtiqueta equipo y categoría para el directorio ("Barcelona FC · Sub-13").
      * @return `true` si el servidor confirmó, `false` si quedó pendiente por falta de conexión.
      */
-    suspend fun guardar(jugador: Jugador, equipoEtiqueta: String = jugador.equipoNombre): Boolean
+    suspend fun guardar(
+        jugador: Jugador,
+        equipoEtiqueta: String = jugador.equipoNombre,
+        nuevo: Boolean = jugador.id.isBlank(),
+    ): Boolean
+
+    /** Id para una ficha nueva, generado en el dispositivo (funciona sin conexión). */
+    fun nuevoId(): String
+
+    /**
+     * US-006, criterio 7: comprime la foto a 1024 px por lado, la sube a Cloud Storage en
+     * `jugadores/{jugadorId}/foto.jpg` y guarda su URL en la ficha.
+     * @param uriLocal URI local (`content://…`) de la cámara o la galería.
+     * @return la URL, o `null` si no se pudo subir (sin conexión o Storage no habilitado).
+     */
+    suspend fun subirFoto(jugadorId: String, uriLocal: String): String?
 
     /** Activa o desactiva un jugador (nunca se borra); un jugador inactivo no acepta solicitudes. */
     suspend fun cambiarEstado(jugador: Jugador, activo: Boolean): Boolean

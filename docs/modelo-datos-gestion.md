@@ -17,7 +17,9 @@ equipos/{equipoId}                     (US-004/US-005)
 jugadores/{jugadorId}                  (US-006/US-007)
    academiaId, equipoId, equipoNombre
    nombre (denormalizado para Estadísticas), nombres, apellidos, fechaNacimiento (AAAA-MM-DD)
-   posicion, dorsal?, estaturaCm?, pesoKg?
+   posicion, posicionSecundaria, pieHabil (Derecho | Izquierdo | Ambidiestro), documentoIdentidad   (US-006)
+   dorsal? (1-99, único entre los activos del equipo), estaturaCm? (se ingresa en metros 1,00-2,30), pesoKg? (20-150)
+   fotoUrl (Cloud Storage jugadores/{id}/foto.jpg, 1024 px), usuarioUid (cuenta del propio jugador, si tiene)
    telefono, correo
    contactoEmergenciaNombre, contactoEmergenciaTelefono, contactoEmergenciaParentesco
    codigoVinculacion (6 caracteres, único en la academia; US-007), fotoUrl
@@ -116,7 +118,8 @@ Las fichas creadas antes de esta regla no tienen `estadoRegistro` y cuentan como
 
 ## Pendientes conocidos
 
-- **Fotografía del jugador** (US-006): el modelo no incluye `fotoUrl` todavía; se agregará con Cloud Storage.
+- **Fotografía del jugador** (US-006): implementada (cámara o galería, 1024 px, `jugadores/{id}/foto.jpg`), pero Cloud Storage exige el plan Blaze; con el plan Spark la ficha se guarda sin foto y la app lo avisa.
+- **Edición por el propio jugador** (US-006, criterio 9): la regla está en `VisibilidadJugador`, falta enlazar la cuenta del jugador con su ficha (`usuarioUid`).
 - **Notificación push** al personal cuando llega una solicitud de vinculación (US-007, criterio 2): depende del envío de notificaciones (US-027). Mientras tanto, la lista de Jugadores muestra "Solicitudes de vinculación (N pendientes)".
 - **Lectura de `equipos`, `entrenamientos` y `asistencias_entrenamiento`** está abierta a cualquier usuario autenticado (no filtra por academia). Se endurece cuando exista el vínculo con la academia.
 - ~~Regla de `usuarios`~~ **Resuelto:** nadie puede crear un perfil de `ADMINISTRADOR` sin un código de invitación válido, ni cambiar su propio rol, estado, academia o marca de menor de edad.

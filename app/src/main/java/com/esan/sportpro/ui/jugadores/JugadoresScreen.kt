@@ -53,6 +53,7 @@ import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.CampoJugador
 import com.esan.sportpro.domain.jugadores.EstadoRegistro
 import com.esan.sportpro.domain.jugadores.Jugador
+import com.esan.sportpro.domain.jugadores.PieHabil
 import com.esan.sportpro.domain.jugadores.ReglasApoderado
 import com.esan.sportpro.domain.jugadores.ValidacionJugador
 import com.esan.sportpro.core.fecha.FechasSportPro
@@ -165,6 +166,7 @@ fun JugadoresScreen(
                         DetalleJugador(
                             jugador = jugador,
                             resumen = state.asistenciaDe(jugador),
+                            resumenDeportivo = state.resumenesDeportivos[jugador.id],
                             onEditar = { viewModel.editarJugador(jugador) },
                             onCambiarEstado = { viewModel.cambiarEstado(jugador) },
                             modifier = Modifier.padding(padding),
@@ -309,6 +311,7 @@ private fun JugadorCard(jugador: Jugador, onClick: () -> Unit) {
 private fun DetalleJugador(
     jugador: Jugador,
     resumen: ResumenAsistencia,
+    resumenDeportivo: ResumenDeportivo?,
     onEditar: () -> Unit,
     onCambiarEstado: () -> Unit,
     modifier: Modifier = Modifier,
@@ -321,15 +324,57 @@ private fun DetalleJugador(
         if (ReglasApoderado.pendiente(jugador)) {
             AvisoRegistroPendiente(jugador)
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            FotoJugador(jugador.fotoUrl, jugador.iniciales, tamano = 80.dp)
+            Column {
+                Text(jugador.nombreCompleto, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    listOfNotNull(jugador.dorsal?.let { "#$it" }, jugador.posicion.ifBlank { null }).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         Seccion("Datos deportivos")
         FilaDato("Equipo", jugador.equipoNombre)
-        FilaDato("Posición", jugador.posicion)
+        FilaDato("Posición principal", jugador.posicion)
+        if (PosicionJugador.entries.none { it.etiqueta == jugador.posicion } && jugador.posicion.isNotBlank()) {
+            Text(
+                "Posición del catálogo anterior: edita la ficha para elegir una de las 9 posiciones actuales.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        FilaDato("Posición secundaria", jugador.posicionSecundaria.ifBlank { null })
+        FilaDato("Pie hábil", jugador.pieHabil.ifBlank { null })
         FilaDato("Dorsal", jugador.dorsal?.toString())
 
+        // US-006, criterio 10: resumen calculado a partir de los eventos registrados.
+        Seccion("Resumen deportivo")
+        if (resumenDeportivo == null) {
+            Text("Calculando…", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            FilaDato("Partidos jugados", resumenDeportivo.partidos.toString())
+            FilaDato("Minutos acumulados", resumenDeportivo.minutos.toString())
+            FilaDato("Goles", resumenDeportivo.goles.toString())
+            FilaDato("Asistencias", resumenDeportivo.asistencias.toString())
+            FilaDato("Tarjetas amarillas", resumenDeportivo.amarillas.toString())
+            FilaDato("Tarjetas rojas", resumenDeportivo.rojas.toString())
+            if (resumenDeportivo.partidos == 0) {
+                Text(
+                    "Se completa con los partidos finalizados en los que participe.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         Seccion("Datos personales y físicos")
+        FilaDato("Documento de identidad", jugador.documentoIdentidad.ifBlank { null })
         FilaDato("Fecha de nacimiento", FechasSportPro.fechaIso(jugador.fechaNacimiento))
         FilaDato("Edad", jugador.edad()?.let { "$it años" })
-        FilaDato("Estatura", jugador.estaturaCm?.let { "$it cm" })
+        FilaDato("Estatura", jugador.estaturaCm?.let { "${ValidacionJugador.centimetrosAMetros(it)} m" })
         FilaDato("Peso", jugador.pesoKg?.let { "$it kg" })
 
         Seccion("Contacto")
@@ -410,6 +455,14 @@ private fun FormularioJugadorContenido(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Seccion("Fotografía")
+        SelectorFotoJugador(
+            fotoVisible = formulario.fotoVisible,
+            iniciales = listOf(datos.nombres, datos.apellidos).mapNotNull { it.trim().firstOrNull()?.uppercaseChar() }.joinToString(""),
+            onFotoElegida = viewModel::onFotoElegida,
+            onQuitarFotoNueva = if (formulario.fotoNueva != null) viewModel::quitarFotoNueva else null,
+        )
+
         Seccion("Datos personales")
         CampoFormulario(
             valor = datos.nombres,
@@ -432,6 +485,12 @@ private fun FormularioJugadorContenido(
             fechaMinima = ValidacionJugador.fechaNacimientoMinima(),
             fechaMaxima = ValidacionJugador.fechaNacimientoMaxima(),
         )
+        CampoFormulario(
+            valor = datos.documento,
+            onCambio = { v -> viewModel.onCampoChanged(CampoJugador.DOCUMENTO) { copy(documento = v) } },
+            etiqueta = "Documento de identidad (DNI o CE)",
+            error = errores[CampoJugador.DOCUMENTO],
+        )
 
         Seccion("Equipo y posición")
         Text("Equipo", style = MaterialTheme.typography.labelLarge)
@@ -449,7 +508,14 @@ private fun FormularioJugadorContenido(
         }
         errores[CampoJugador.EQUIPO]?.let { ErrorTexto(it) }
 
-        Text("Posición", style = MaterialTheme.typography.labelLarge)
+        Text("Posición principal", style = MaterialTheme.typography.labelLarge)
+        if (datos.posicion.isNotBlank() && PosicionJugador.entries.none { it.etiqueta == datos.posicion }) {
+            Text(
+                "Tenía \"${datos.posicion}\" (catálogo anterior). Elige una de las posiciones actuales.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PosicionJugador.entries.forEach { posicion ->
                 FilterChip(
@@ -461,11 +527,40 @@ private fun FormularioJugadorContenido(
         }
         errores[CampoJugador.POSICION]?.let { ErrorTexto(it) }
 
+        Text("Posición secundaria (opcional)", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PosicionJugador.entries.filter { it.etiqueta != datos.posicion }.forEach { posicion ->
+                FilterChip(
+                    selected = datos.posicionSecundaria == posicion.etiqueta,
+                    onClick = {
+                        viewModel.onCampoChanged(CampoJugador.POSICION_SECUNDARIA) {
+                            copy(posicionSecundaria = if (posicionSecundaria == posicion.etiqueta) "" else posicion.etiqueta)
+                        }
+                    },
+                    label = { Text(posicion.etiqueta) },
+                )
+            }
+        }
+        errores[CampoJugador.POSICION_SECUNDARIA]?.let { ErrorTexto(it) }
+
+        Text("Pie hábil", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PieHabil.entries.forEach { pie ->
+                FilterChip(
+                    selected = datos.pieHabil == pie.etiqueta,
+                    onClick = { viewModel.onCampoChanged(CampoJugador.PIE_HABIL) { copy(pieHabil = pie.etiqueta) } },
+                    label = { Text(pie.etiqueta) },
+                )
+            }
+        }
+        errores[CampoJugador.PIE_HABIL]?.let { ErrorTexto(it) }
+
         CampoFormulario(
             valor = datos.dorsal,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.DORSAL) { copy(dorsal = v) } },
-            etiqueta = "Dorsal (opcional)",
+            etiqueta = "Número de camiseta (opcional)",
             error = errores[CampoJugador.DORSAL],
+            ayuda = "De 1 a 99, único en el equipo",
             teclado = KeyboardType.Number,
         )
 
@@ -473,15 +568,17 @@ private fun FormularioJugadorContenido(
         CampoFormulario(
             valor = datos.estatura,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.ESTATURA) { copy(estatura = v) } },
-            etiqueta = "Estatura (cm)",
+            etiqueta = "Estatura (m)",
             error = errores[CampoJugador.ESTATURA],
-            teclado = KeyboardType.Number,
+            ayuda = "Entre 1,00 y 2,30 m (ej. 1,65)",
+            teclado = KeyboardType.Decimal,
         )
         CampoFormulario(
             valor = datos.peso,
             onCambio = { v -> viewModel.onCampoChanged(CampoJugador.PESO) { copy(peso = v) } },
             etiqueta = "Peso (kg)",
             error = errores[CampoJugador.PESO],
+            ayuda = "Entre 20 y 150 kg",
             teclado = KeyboardType.Decimal,
         )
 
@@ -502,7 +599,7 @@ private fun FormularioJugadorContenido(
         )
 
         val esMenor = ValidacionJugador.esMenor(datos.fechaNacimiento)
-        Seccion(if (esMenor) "Apoderado (obligatorio para menores de edad)" else "Contacto de emergencia")
+        Seccion(if (esMenor) "Apoderado (obligatorio para menores de edad)" else "Contacto de emergencia (opcional)")
         if (esMenor) {
             Text(
                 "El jugador quedará registrado cuando su apoderado se vincule con el código que genera la app.",

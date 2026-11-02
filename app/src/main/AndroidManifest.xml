@@ -24,6 +24,17 @@
             </intent-filter>
         </activity>
 
+        <!-- US-006: permite a la app de cámara guardar la foto del jugador en la caché de SportPro. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.archivos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/rutas_archivos" />
+        </provider>
+
         <service
             android:name=".messaging.SportProMessagingService"
             android:exported="false">

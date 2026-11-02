@@ -1,14 +1,19 @@
 package com.esan.sportpro.data.jugadores
 
+import android.net.Uri
 import com.esan.sportpro.data.esperarConfirmacion
+import com.esan.sportpro.data.imagenes.CompresorImagen
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.toObject
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,6 +21,8 @@ import javax.inject.Singleton
 @Singleton
 class FirestoreJugadorRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage,
+    private val compresor: CompresorImagen,
 ) : JugadorRepository {
 
     private val coleccion get() = firestore.collection("jugadores")
@@ -35,7 +42,7 @@ class FirestoreJugadorRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
-    override suspend fun guardar(jugador: Jugador, equipoEtiqueta: String): Boolean {
+    override suspend fun guardar(jugador: Jugador, equipoEtiqueta: String, nuevo: Boolean): Boolean {
         // Se escribe un mapa explícito (y no el objeto) para no persistir propiedades calculadas.
         val datos = mapOf(
             "equipoId" to jugador.equipoId,
@@ -46,6 +53,9 @@ class FirestoreJugadorRepository @Inject constructor(
             "apellidos" to jugador.apellidos.trim(),
             "fechaNacimiento" to jugador.fechaNacimiento.trim(),
             "posicion" to jugador.posicion,
+            "posicionSecundaria" to jugador.posicionSecundaria,
+            "pieHabil" to jugador.pieHabil,
+            "documentoIdentidad" to jugador.documentoIdentidad.trim().uppercase(),
             "dorsal" to jugador.dorsal,
             "estaturaCm" to jugador.estaturaCm,
             "pesoKg" to jugador.pesoKg,
@@ -59,8 +69,7 @@ class FirestoreJugadorRepository @Inject constructor(
             // Regla del apoderado: un menor sin apoderado vinculado queda PENDIENTE_APODERADO.
             "estadoRegistro" to jugador.estadoRegistro,
         )
-        val nuevo = jugador.id.isBlank()
-        val documento = if (nuevo) coleccion.document() else coleccion.document(jugador.id)
+        val documento = if (jugador.id.isBlank()) coleccion.document() else coleccion.document(jugador.id)
         val lote = firestore.batch()
         if (nuevo) {
             lote.set(
@@ -99,5 +108,22 @@ class FirestoreJugadorRepository @Inject constructor(
             SetOptions.merge(),
         )
         return lote.commit().esperarConfirmacion()
+    }
+
+    override fun nuevoId(): String = coleccion.document().id
+
+    override suspend fun subirFoto(jugadorId: String, uriLocal: String): String? = runCatching {
+        val bytes = compresor.comprimir(Uri.parse(uriLocal)) ?: return null
+        val url = withTimeoutOrNull(TIEMPO_MAXIMO_SUBIDA_MS) {
+            val referencia = storage.reference.child("jugadores/$jugadorId/foto.jpg")
+            referencia.putBytes(bytes).await()
+            referencia.downloadUrl.await().toString()
+        } ?: return null
+        coleccion.document(jugadorId).update("fotoUrl", url).esperarConfirmacion()
+        url
+    }.getOrNull()
+
+    private companion object {
+        const val TIEMPO_MAXIMO_SUBIDA_MS = 20_000L
     }
 }

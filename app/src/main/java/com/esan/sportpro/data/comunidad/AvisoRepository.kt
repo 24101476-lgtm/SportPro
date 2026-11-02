@@ -2,6 +2,7 @@ package com.esan.sportpro.data.comunidad
 
 import com.esan.sportpro.domain.comunidad.Aviso
 import com.esan.sportpro.domain.comunidad.FiltroAvisos
+import com.esan.sportpro.domain.comunidad.PosicionJugador
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObject
 import kotlinx.coroutines.channels.awaitClose
@@ -48,7 +49,8 @@ class AvisoRepository @Inject constructor(
 
     private fun coincideConFiltro(aviso: Aviso, filtro: FiltroAvisos): Boolean {
         if (filtro.categoria != null && aviso.categoria != filtro.categoria) return false
-        if (filtro.posicion != null && filtro.posicion.name !in aviso.posicionesBuscadas) return false
+        // Compara con el catálogo actual: los avisos antiguos pueden guardar nombres anteriores (PORTERO…).
+        if (filtro.posicion != null && aviso.posicionesBuscadas.none { PosicionJugador.desde(it) == filtro.posicion }) return false
         if (filtro.distrito != null && !aviso.ubicacionDistrito.equals(filtro.distrito, ignoreCase = true)) return false
         val fechaPrueba = aviso.fechaPrueba?.toInstant()?.atZone(ZoneId.systemDefault())?.toLocalDate()
         if (filtro.fechaDesde != null && (fechaPrueba == null || fechaPrueba.isBefore(filtro.fechaDesde))) return false

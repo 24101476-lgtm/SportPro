@@ -139,7 +139,8 @@ class ValidacionJugadorTest {
 
     @Test
     fun posicionFueraDelCatalogo_esRechazada() {
-        val errores = ValidacionJugador.validar(datosValidos().copy(posicion = "Arquero"), hoy)
+        // "Arquero" es válido desde US-006; "Líbero" no está en el catálogo.
+        val errores = ValidacionJugador.validar(datosValidos().copy(posicion = "Líbero"), hoy)
         assertTrue(CampoJugador.POSICION in errores)
     }
 

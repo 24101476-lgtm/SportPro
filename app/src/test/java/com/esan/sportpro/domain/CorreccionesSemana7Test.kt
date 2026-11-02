@@ -73,7 +73,7 @@ class ApoderadoEnFichaTest {
         apellidos = "Torres",
         fechaNacimiento = "2014-01-15",
         equipoId = "e1",
-        posicion = "Portero",
+        posicion = "Arquero", // catálogo de US-006 (antes "Portero")
         emergenciaNombre = "Carla Torres",
         emergenciaTelefono = "912345678",
         emergenciaParentesco = "Madre",

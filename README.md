@@ -71,7 +71,7 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Cuentas: registro con rol, login, recuperar contraseña, sesión persistente, cierre de sesión | US-001, US-002 | Implementado |
 | Navegación principal por rol | US-003 | Implementado: barra de 4 pestañas por rol, Inicio con resumen y "Más" (`MenuPrincipal`) |
 | Academia: equipos por categoría | US-004, US-005 | Implementado (alta, edición, desactivar) |
-| Jugadores: perfil con datos físicos, contacto y emergencia | US-006 | Base implementada (sin fotografía); faltan criterios de aceptación |
+| Jugadores: perfil con datos físicos, contacto y emergencia | US-006 | Implementado (foto lista pero requiere Cloud Storage/Blaze; edición por el propio jugador pendiente del enlace cuenta–ficha) |
 | Jugadores: vinculación padre–jugador (código, solicitudes, aprobación, revocación con auditoría) | US-007 | Implementado (notificación push pendiente de US-027) |
 | Entrenamientos: biblioteca de ejercicios | US-009 | Implementado (ficha completa, buscador con filtros, permisos por autor, desactivación) |
 | Entrenamientos: registro de asistencia (sin conexión, historial de cambios, cierre con % del equipo) | US-011 | Implementado |

@@ -10,6 +10,7 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
 import com.esan.sportpro.domain.entrenamientos.CalculoAsistencia
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
+import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.DirectorioJugador
 import com.esan.sportpro.domain.jugadores.Jugador
@@ -29,6 +30,9 @@ sealed interface PantallaMisHijos {
 
     /** US-006, criterio 8: ficha sin vínculo aprobado, con los datos sensibles ocultos. */
     data class Restringido(val vinculacion: Vinculacion) : PantallaMisHijos
+
+    /** US-012: historial de participación del hijo (solo con vínculo aprobado). */
+    data class Historial(val jugadorId: String) : PantallaMisHijos
 }
 
 /** Criterio 1: el padre identifica al jugador con el código de la academia o desde la lista de su equipo. */
@@ -71,6 +75,12 @@ data class MisHijosUiState(
         get() = formulario.equipoId?.let { id -> directorio.filter { it.equipoId == id } }.orEmpty()
 
     fun vinculacionCon(jugadorId: String): Vinculacion? = vinculaciones.firstOrNull { it.jugadorId == jugadorId }
+
+    /** US-012, criterio 5: el padre solo ve el historial de sus hijos con vínculo aprobado. */
+    fun puedeVerHistorial(jugador: Jugador): Boolean {
+        val perfil = perfil ?: return false
+        return ReglasHistorial.puedeVer(perfil, jugador, equipos.firstOrNull { it.id == jugador.equipoId }, vinculaciones)
+    }
 
     /** Asistencia del jugador vinculado (criterio 6). */
     fun asistenciaDe(jugador: Jugador): ResumenAsistencia =
@@ -133,6 +143,19 @@ class MisHijosViewModel @Inject constructor(
         setState { copy(pantalla = PantallaMisHijos.Lista, jugadorDetalle = null) }
     }
 
+    /** US-012: desde el perfil del hijo; conserva el perfil cargado para volver a él. */
+    fun abrirHistorial() {
+        val pantalla = currentState.pantalla as? PantallaMisHijos.Detalle ?: return
+        val jugador = currentState.jugadorDetalle ?: return
+        if (!currentState.puedeVerHistorial(jugador)) return
+        setState { copy(pantalla = PantallaMisHijos.Historial(pantalla.jugadorId)) }
+    }
+
+    fun cerrarHistorial() {
+        val pantalla = currentState.pantalla as? PantallaMisHijos.Historial ?: return
+        setState { copy(pantalla = PantallaMisHijos.Detalle(pantalla.jugadorId)) }
+    }
+
     fun abrirSolicitar() = setState { copy(pantalla = PantallaMisHijos.Solicitar, formulario = FormularioSolicitud()) }
 
     /**
@@ -159,6 +182,10 @@ class MisHijosViewModel @Inject constructor(
     private fun verificarAccesoDetalle() {
         when (val pantalla = currentState.pantalla) {
             is PantallaMisHijos.Detalle -> if (currentState.vinculacionCon(pantalla.jugadorId)?.aprobada != true) {
+                volverALista()
+                sendEvent(MisHijosEvent.Mensaje("Tu acceso a este jugador fue revocado por la academia."))
+            }
+            is PantallaMisHijos.Historial -> if (currentState.vinculacionCon(pantalla.jugadorId)?.aprobada != true) {
                 volverALista()
                 sendEvent(MisHijosEvent.Mensaje("Tu acceso a este jugador fue revocado por la academia."))
             }

@@ -34,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -48,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.esan.sportpro.domain.entrenamientos.ReglasAsistencia
+import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.jugadores.EstadoVinculacion
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.ReglasVinculacion
@@ -75,7 +78,10 @@ fun MisHijosScreen(
             if (evento is MisHijosEvent.Mensaje) snackbarHostState.showSnackbar(evento.texto)
         }
     }
-    BackHandler(enabled = state.pantalla != PantallaMisHijos.Lista) { viewModel.volverALista() }
+    BackHandler(enabled = state.pantalla != PantallaMisHijos.Lista && state.pantalla !is PantallaMisHijos.Historial) {
+        viewModel.volverALista()
+    }
+    BackHandler(enabled = state.pantalla is PantallaMisHijos.Historial) { viewModel.cerrarHistorial() }
 
     val pantalla = state.pantalla
     Scaffold(
@@ -90,12 +96,15 @@ fun MisHijosScreen(
                             PantallaMisHijos.Solicitar -> "Vincular jugador"
                             is PantallaMisHijos.Detalle -> state.jugadorDetalle?.nombreCompleto ?: "Jugador"
                             is PantallaMisHijos.Restringido -> pantalla.vinculacion.jugadorNombre
+                            is PantallaMisHijos.Historial -> "Historial · ${state.jugadorDetalle?.nombreCompleto.orEmpty()}"
                         },
                     )
                 },
                 navigationIcon = {
                     if (pantalla != PantallaMisHijos.Lista) {
-                        IconButton(onClick = viewModel::volverALista) {
+                        IconButton(onClick = {
+                            if (pantalla is PantallaMisHijos.Historial) viewModel.cerrarHistorial() else viewModel.volverALista()
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                         }
                     }
@@ -126,10 +135,18 @@ fun MisHijosScreen(
                             CircularProgressIndicator()
                         }
                         jugador == null -> EmptyStateMessage("No tienes acceso al perfil de este jugador.", contenido)
-                        else -> PerfilHijo(jugador, state, contenido)
+                        else -> PerfilHijo(jugador, state, viewModel::abrirHistorial, contenido)
                     }
                 }
                 is PantallaMisHijos.Restringido -> PerfilRestringido(pantalla.vinculacion, contenido)
+                is PantallaMisHijos.Historial -> {
+                    val jugador = state.jugadorDetalle
+                    if (jugador == null || !state.puedeVerHistorial(jugador)) {
+                        EmptyStateMessage("No tienes acceso al historial de este jugador.", contenido)
+                    } else {
+                        HistorialParticipacion(jugador = jugador, entrenamientos = state.entrenamientos, modifier = contenido)
+                    }
+                }
             }
         }
     }
@@ -293,7 +310,7 @@ private fun FormularioSolicitudContenido(state: MisHijosUiState, viewModel: MisH
 
 /** Criterio 6: perfil, asistencia y accesos a mensualidades y estadísticas del hijo vinculado. */
 @Composable
-private fun PerfilHijo(jugador: Jugador, state: MisHijosUiState, modifier: Modifier) {
+private fun PerfilHijo(jugador: Jugador, state: MisHijosUiState, onVerHistorial: () -> Unit, modifier: Modifier) {
     val resumen = state.asistenciaDe(jugador)
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -321,9 +338,17 @@ private fun PerfilHijo(jugador: Jugador, state: MisHijosUiState, modifier: Modif
         if (resumen.registrados == 0) {
             Text("Todavía no hay sesiones realizadas.", style = MaterialTheme.typography.bodyMedium)
         } else {
-            DatoHijo("Participación", "${resumen.porcentaje}% (${resumen.participaciones} de ${resumen.registrados})")
+            DatoHijo(
+                "Participación",
+                "${ReglasAsistencia.formatearPorcentaje(ReglasHistorial.porcentaje(resumen.participaciones, resumen.registrados))} " +
+                    "(${resumen.participaciones} de ${resumen.registrados})",
+            )
             DatoHijo("Presente / Tarde", "${resumen.presentes} / ${resumen.tardes}")
             DatoHijo("Faltas justificadas / injustificadas", "${resumen.justificados} / ${resumen.ausentes}")
+        }
+        // US-012: historial completo con filtros y gráfico mensual.
+        OutlinedButton(onClick = onVerHistorial, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver historial de participación")
         }
 
         SeccionHijo("Más información")

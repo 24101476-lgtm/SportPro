@@ -75,6 +75,7 @@ asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísti
 | Cada marca de asistencia **se guarda al instante** con la persistencia offline de Firestore | El registro funciona sin conexión; el indicador usa `hasPendingWrites` (MetadataChanges.INCLUDE) para mostrar "Sin conexión…" / "Sincronizado a las HH:mm" (US-011) |
 | Conflictos: **gana la última escritura** que llega al servidor (`marcadoEn` = hora del servidor) | Ambos cambios quedan en `historial_asistencia`; las reglas impiden editar o borrar el historial y cambiar la asistencia de una sesión Realizada |
 | `asistencia` dentro del documento del entrenamiento | Un solo listener alimenta la lista, el detalle y el historial por jugador; contiene solo ids y estados |
+| Historial del jugador (US-012) **calculado en la app** | Sale de las sesiones Realizadas en las que figura el jugador: % = (asistencias + tardanzas) / convocadas, con un decimal; no necesita colecciones, índices ni reglas nuevas. Quién lo ve: `ReglasHistorial.puedeVer` (entrenador según `Equipo.entrenadorNombre`; si el equipo no tiene entrenador asignado, cualquier entrenador de la academia) |
 | `academiaId = clubId` del usuario, o `academia-demo` si es nulo | Es el valor temporal que ya usan Mensualidades y Comunidad, hasta que US-004 vincule usuarios a academias |
 
 ## Privacidad y permisos por rol

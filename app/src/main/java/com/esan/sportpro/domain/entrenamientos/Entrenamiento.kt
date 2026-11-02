@@ -36,6 +36,11 @@ data class Entrenamiento(
     val lugar: String = "",
     val objetivo: String = "",
     val ejercicios: List<Ejercicio> = emptyList(),
+    /** US-010: duración total planificada en minutos (0 en sesiones anteriores = suma de ejercicios). */
+    val duracionPlanificadaMin: Int = 0,
+    /** US-010, criterio 9: motivo y autor de la cancelación. */
+    val motivoCancelacion: String = "",
+    val canceladaPorNombre: String = "",
     val asistencia: Map<String, String> = emptyMap(),
     val asistenciaDetalle: Map<String, MarcaAsistencia> = emptyMap(),
     /** Se mantiene por compatibilidad: `true` una vez cerrada la sesión (lo leen otros módulos). */
@@ -46,9 +51,13 @@ data class Entrenamiento(
     val porcentajeAsistencia: Double? = null,
     val creadoPor: String = "",
 ) {
-    /** Duración total de la sesión: suma de la duración de sus ejercicios. */
+    /** Suma de la duración de los ejercicios. */
     @get:Exclude
     val duracionTotalMin: Int get() = ejercicios.sumOf { it.duracionMin }
+
+    /** Duración de la sesión: la planificada o, en sesiones anteriores a US-010, la de sus ejercicios. */
+    @get:Exclude
+    val duracionSesionMin: Int get() = if (duracionPlanificadaMin > 0) duracionPlanificadaMin else duracionTotalMin
 
     /** Estado de la sesión; las sesiones antiguas con asistencia registrada cuentan como realizadas. */
     @get:Exclude

@@ -15,6 +15,12 @@ interface EntrenamientoRepository {
     /** Crea la sesión si [Entrenamiento.id] está vacío; si no, actualiza su planificación. */
     suspend fun guardar(entrenamiento: Entrenamiento): Boolean
 
+    /**
+     * US-010, criterio 9: la sesión pasa a Cancelada con su motivo y sigue visible en el historial.
+     * La notificación a los convocados depende del envío de push (US-027).
+     */
+    suspend fun cancelar(entrenamiento: Entrenamiento, motivo: String, uid: String, nombre: String): Boolean
+
     // ---- Asistencia (US-011) --------------------------------------------------------------
 
     /**

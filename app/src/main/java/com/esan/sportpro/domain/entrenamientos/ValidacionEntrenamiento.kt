@@ -4,7 +4,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeParseException
 
-enum class CampoEntrenamiento { EQUIPO, FECHA, HORA, LUGAR, OBJETIVO, EJERCICIOS }
+enum class CampoEntrenamiento { EQUIPO, FECHA, HORA, DURACION, LUGAR, OBJETIVO, EJERCICIOS }
 
 enum class CampoEjercicio { NOMBRE, DURACION, DESCRIPCION }
 
@@ -13,6 +13,8 @@ data class DatosEntrenamiento(
     val equipoId: String = "",
     val fecha: String = "",
     val hora: String = "",
+    /** US-010: duración total de la sesión en minutos, como texto. */
+    val duracion: String = "",
     val lugar: String = "",
     val objetivo: String = "",
     val ejercicios: List<Ejercicio> = emptyList(),
@@ -22,8 +24,11 @@ data class DatosEntrenamiento(
 object ValidacionEntrenamiento {
     const val OBJETIVO_MIN = 5
     const val OBJETIVO_MAX = 200
-    const val DURACION_EJERCICIO_MAX = 180
+    const val DURACION_EJERCICIO_MAX = 120
+    const val DURACION_SESION_MIN = 15
     const val DURACION_SESION_MAX = 240
+    const val MSG_FECHA_PASADA = "No puedes programar una sesión en una fecha pasada"
+    const val MSG_SIN_EJERCICIOS = "Agrega al menos un ejercicio"
 
     /**
      * @param permitirPasado `true` al editar una sesión existente (puede ser de una fecha ya vencida);
@@ -41,12 +46,17 @@ object ValidacionEntrenamiento {
         val fecha = parsearFecha(datos.fecha)
         when {
             fecha == null -> errores[CampoEntrenamiento.FECHA] = "Elige la fecha de la sesión."
-            !permitirPasado && fecha.isBefore(hoy) ->
-                errores[CampoEntrenamiento.FECHA] = "La fecha no puede ser anterior a hoy."
+            !permitirPasado && fecha.isBefore(hoy) -> errores[CampoEntrenamiento.FECHA] = MSG_FECHA_PASADA
         }
 
         if (parsearHora(datos.hora) == null) {
             errores[CampoEntrenamiento.HORA] = "Elige la hora de inicio."
+        }
+
+        val duracion = datos.duracion.trim().toIntOrNull()
+        if (duracion == null || duracion !in DURACION_SESION_MIN..DURACION_SESION_MAX) {
+            errores[CampoEntrenamiento.DURACION] =
+                "La duración debe estar entre $DURACION_SESION_MIN y $DURACION_SESION_MAX minutos."
         }
 
         if (datos.lugar.trim().length > 80) errores[CampoEntrenamiento.LUGAR] = "El lugar no puede superar 80 caracteres."
@@ -59,13 +69,11 @@ object ValidacionEntrenamiento {
                 errores[CampoEntrenamiento.OBJETIVO] = "El objetivo no puede superar $OBJETIVO_MAX caracteres."
         }
 
-        val total = datos.ejercicios.sumOf { it.duracionMin }
-        when {
-            datos.ejercicios.isEmpty() ->
-                errores[CampoEntrenamiento.EJERCICIOS] = "Agrega al menos un ejercicio."
-            total > DURACION_SESION_MAX ->
-                errores[CampoEntrenamiento.EJERCICIOS] =
-                    "La sesión dura $total min; el máximo es $DURACION_SESION_MAX min."
+        // US-010, criterio 5. Que los ejercicios superen la duración no bloquea (criterio 4): ver
+        // ReglasPlanificacion.avisoExceso.
+        if (datos.ejercicios.isEmpty()) errores[CampoEntrenamiento.EJERCICIOS] = MSG_SIN_EJERCICIOS
+        if (datos.ejercicios.any { it.duracionMin !in 1..DURACION_EJERCICIO_MAX }) {
+            errores[CampoEntrenamiento.EJERCICIOS] = "Cada ejercicio debe durar entre 1 y $DURACION_EJERCICIO_MAX minutos."
         }
         return errores
     }

@@ -75,7 +75,8 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Jugadores: vinculación padre–jugador (código, solicitudes, aprobación, revocación con auditoría) | US-007 | Implementado (notificación push pendiente de US-027) |
 | Entrenamientos: biblioteca de ejercicios | US-009 | Implementado (ficha completa, buscador con filtros, permisos por autor, desactivación) |
 | Entrenamientos: registro de asistencia (sin conexión, historial de cambios, cierre con % del equipo) | US-011 | Implementado |
-| Entrenamientos: planificación e historial del jugador | US-010, US-012 | Base implementada; faltan criterios de aceptación |
+| Entrenamientos: planificación de sesiones (duración, solapamiento, reordenar, duplicar, cancelar) | US-010 | Implementado (notificación push pendiente de US-027) |
+| Entrenamientos: historial de participación del jugador | US-012 | Base implementada; faltan criterios de aceptación |
 | Partido en vivo, eventos y correcciones | — | Implementado (ver `docs/diseno-tecnico-partido-en-vivo.md`) |
 | Mensualidades, Estadísticas, Anuncios, Comunidad | US-008, US-026 a US-030 | Implementado |
 | Resumen narrativo con IA | — | Diseño listo (`docs/diseno-integracion-ia.md`); implementación en semana 12 |

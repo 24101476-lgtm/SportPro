@@ -1,0 +1,5 @@
+project_id = "ghowgsannwmpuwncwrcc"
+
+# La función valida el ID token de Firebase Auth por su cuenta (ver functions/imagenes/index.ts).
+[functions.imagenes]
+verify_jwt = false

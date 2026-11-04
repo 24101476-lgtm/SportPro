@@ -3,6 +3,8 @@ package com.esan.sportpro.data.imagenes
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +15,8 @@ import javax.inject.Singleton
 
 /**
  * Reduce una imagen elegida por el usuario a un JPEG de máximo [LADO_MAXIMO] px por lado antes de
- * subirla a Cloud Storage. Lo usan la biblioteca de ejercicios (US-009) y la foto del jugador (US-006).
+ * subirla a Supabase Storage. Lo usan la biblioteca de ejercicios (US-009), la foto del jugador (US-006)
+ * y las publicaciones del muro (US-028).
  */
 @Singleton
 class CompresorImagen @Inject constructor(
@@ -27,7 +30,9 @@ class CompresorImagen @Inject constructor(
 
             // 1) Leer solo las dimensiones para decodificar a un tamaño cercano sin agotar memoria.
             val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, limites) } ?: return@withContext null
+            // Con inJustDecodeBounds, decodeStream siempre devuelve null: el resultado está en limites.
+            val flujo = resolver.openInputStream(uri) ?: return@withContext null
+            flujo.use { BitmapFactory.decodeStream(it, null, limites) }
             if (limites.outWidth <= 0 || limites.outHeight <= 0) return@withContext null
 
             var muestreo = 1
@@ -51,12 +56,36 @@ class CompresorImagen @Inject constructor(
                 original
             }
 
+            // 3) Aplicar la orientación EXIF: el JPEG de salida ya no la conserva y las fotos de
+            // celular quedarían de lado.
+            val grados = gradosDeRotacion(uri)
+            val orientada = if (grados == 0f) {
+                escalada
+            } else {
+                val rotacion = Matrix().apply { postRotate(grados) }
+                Bitmap.createBitmap(escalada, 0, 0, escalada.width, escalada.height, rotacion, true)
+            }
+
             val salida = ByteArrayOutputStream()
-            escalada.compress(Bitmap.CompressFormat.JPEG, calidad, salida)
+            orientada.compress(Bitmap.CompressFormat.JPEG, calidad, salida)
+            if (orientada !== escalada) orientada.recycle()
             if (escalada !== original) escalada.recycle()
             original.recycle()
             salida.toByteArray()
         }
+
+    /** Los formatos sin EXIF, como PNG, se tratan como imágenes sin rotación. */
+    private fun gradosDeRotacion(uri: Uri): Float = runCatching {
+        val orientacion = context.contentResolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        }
+        when (orientacion) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+    }.getOrDefault(0f)
 
     companion object {
         const val LADO_MAXIMO = 1024

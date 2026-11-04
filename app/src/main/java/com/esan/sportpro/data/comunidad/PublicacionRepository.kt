@@ -1,6 +1,9 @@
 package com.esan.sportpro.data.comunidad
 
 import android.net.Uri
+import com.esan.sportpro.data.imagenes.CarpetaImagen
+import com.esan.sportpro.data.imagenes.CompresorImagen
+import com.esan.sportpro.data.imagenes.ImagenesSupabase
 import com.esan.sportpro.domain.comunidad.Comentario
 import com.esan.sportpro.domain.comunidad.EstadoPublicacion
 import com.esan.sportpro.domain.comunidad.Publicacion
@@ -10,14 +13,12 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.toObject
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.time.Duration
 import java.time.Instant
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,7 +37,8 @@ const val TAMANO_PAGINA_MURO = 10
 @Singleton
 class PublicacionRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val storage: FirebaseStorage,
+    private val almacenImagenes: ImagenesSupabase,
+    private val compresor: CompresorImagen,
 ) {
     private val coleccion get() = firestore.collection("publicaciones")
     private fun comentarios(publicacionId: String) = coleccion.document(publicacionId).collection("comentarios")
@@ -105,7 +107,7 @@ class PublicacionRepository @Inject constructor(
     }
 
     /**
-     * Sube hasta 3 imágenes a Cloud Storage (`comunidad/publicaciones/{uuid}.jpg`) y publica el
+     * Comprime y sube hasta 3 imágenes a Supabase Storage y publica el
      * texto. Si una imagen falla, se mantiene el texto y se omite esa imagen (criterio 10):
      * [ResultadoPublicarPost.imagenesFallidas] le dice a la pantalla cuántas no se pudieron subir.
      */
@@ -117,9 +119,8 @@ class PublicacionRepository @Inject constructor(
         var fallidas = 0
         for (uri in imagenes) {
             runCatching {
-                val referencia = storage.reference.child("comunidad/publicaciones/${UUID.randomUUID()}.jpg")
-                referencia.putFile(uri).await()
-                referencia.downloadUrl.await().toString()
+                val bytes = requireNotNull(compresor.comprimir(uri)) { "Imagen no legible" }
+                almacenImagenes.subir(CarpetaImagen.PUBLICACIONES, bytes)
             }.onSuccess { urlsSubidas.add(it) }.onFailure { fallidas++ }
         }
 

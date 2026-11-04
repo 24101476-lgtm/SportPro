@@ -25,10 +25,10 @@ interface JugadorRepository {
     fun nuevoId(): String
 
     /**
-     * US-006, criterio 7: comprime la foto a 1024 px por lado, la sube a Cloud Storage en
-     * `jugadores/{jugadorId}/foto.jpg` y guarda su URL en la ficha.
+     * US-006, criterio 7: comprime la foto a 1024 px por lado, la sube a Supabase Storage
+     * y guarda su URL en la ficha, eliminando la foto anterior.
      * @param uriLocal URI local (`content://…`) de la cámara o la galería.
-     * @return la URL, o `null` si no se pudo subir (sin conexión o Storage no habilitado).
+     * @return la URL, o `null` si no se pudo subir (sin conexión o error de Supabase).
      */
     suspend fun subirFoto(jugadorId: String, uriLocal: String): String?
 

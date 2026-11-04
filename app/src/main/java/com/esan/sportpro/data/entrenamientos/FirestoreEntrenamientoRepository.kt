@@ -2,7 +2,9 @@ package com.esan.sportpro.data.entrenamientos
 
 import android.net.Uri
 import com.esan.sportpro.data.esperarConfirmacion
+import com.esan.sportpro.data.imagenes.CarpetaImagen
 import com.esan.sportpro.data.imagenes.CompresorImagen
+import com.esan.sportpro.data.imagenes.ImagenesSupabase
 import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
@@ -19,12 +21,10 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.toObject
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.ZoneId
 import java.util.Date
 import javax.inject.Inject
@@ -32,12 +32,12 @@ import javax.inject.Singleton
 
 /**
  * Entrenamientos (`entrenamientos`) y biblioteca de ejercicios (`ejercicios`) — US-009 a US-013.
- * Las imágenes de la biblioteca se guardan en Cloud Storage: `ejercicios/{ejercicioId}/imagen.jpg`.
+ * Las imágenes de la biblioteca se guardan en Supabase Storage (ver [ImagenesSupabase]).
  */
 @Singleton
 class FirestoreEntrenamientoRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val storage: FirebaseStorage,
+    private val imagenes: ImagenesSupabase,
     private val compresor: CompresorImagen,
 ) : EntrenamientoRepository {
 
@@ -231,16 +231,13 @@ class FirestoreEntrenamientoRepository @Inject constructor(
         quitarImagen: Boolean,
     ): ResultadoGuardarEjercicio {
         val nuevo = ejercicio.id.isBlank()
-        // El id se genera antes para poder guardar la imagen en ejercicios/{id}/imagen.jpg.
         val documento = if (nuevo) biblioteca.document() else biblioteca.document(ejercicio.id)
 
         var imagenUrl = if (quitarImagen) "" else ejercicio.imagenUrl
         var imagenFallida = false
         if (imagenLocal != null) {
-            val subida = subirImagen(documento.id, Uri.parse(imagenLocal))
+            val subida = subirImagen(Uri.parse(imagenLocal))
             if (subida != null) imagenUrl = subida else imagenFallida = true
-        } else if (quitarImagen && ejercicio.imagenUrl.isNotBlank()) {
-            runCatching { imagenEjercicio(documento.id).delete() }
         }
 
         val datos = mapOf(
@@ -264,6 +261,9 @@ class FirestoreEntrenamientoRepository @Inject constructor(
         } else {
             documento.update(datos).esperarConfirmacion()
         }
+        if (ejercicio.imagenUrl.isNotBlank() && ejercicio.imagenUrl != imagenUrl) {
+            runCatching { imagenes.eliminar(ejercicio.imagenUrl) }
+        }
         return ResultadoGuardarEjercicio(confirmado = confirmado, imagenFallida = imagenFallida)
     }
 
@@ -272,27 +272,17 @@ class FirestoreEntrenamientoRepository @Inject constructor(
 
     override suspend fun eliminarEjercicio(ejercicio: EjercicioBiblioteca): Boolean {
         val confirmado = biblioteca.document(ejercicio.id).delete().esperarConfirmacion()
-        if (ejercicio.imagenUrl.isNotBlank()) runCatching { imagenEjercicio(ejercicio.id).delete() }
+        if (ejercicio.imagenUrl.isNotBlank()) runCatching { imagenes.eliminar(ejercicio.imagenUrl) }
         return confirmado
     }
 
-    private fun imagenEjercicio(ejercicioId: String) = storage.reference.child("ejercicios/$ejercicioId/imagen.jpg")
-
     /**
-     * Comprime y sube la imagen. Cloud Storage no tiene cola offline como Firestore: sin conexión
+     * Comprime y sube la imagen. Supabase Storage no tiene cola offline como Firestore: sin conexión
      * la subida falla (o vence el tiempo) y el ejercicio se guarda igual, sin imagen.
      * @return la URL de descarga, o `null` si no se pudo subir.
      */
-    private suspend fun subirImagen(ejercicioId: String, uri: Uri): String? = runCatching {
+    private suspend fun subirImagen(uri: Uri): String? = runCatching {
         val bytes = compresor.comprimir(uri) ?: return null
-        withTimeoutOrNull(TIEMPO_MAXIMO_SUBIDA_MS) {
-            val referencia = imagenEjercicio(ejercicioId)
-            referencia.putBytes(bytes).await()
-            referencia.downloadUrl.await().toString()
-        }
+        imagenes.subir(CarpetaImagen.EJERCICIOS, bytes)
     }.getOrNull()
-
-    private companion object {
-        const val TIEMPO_MAXIMO_SUBIDA_MS = 20_000L
-    }
 }

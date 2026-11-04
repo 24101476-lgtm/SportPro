@@ -23,7 +23,7 @@ data class Publicacion(
     val autorEsMenorDeEdad: Boolean = false,
     /** 1..1000 caracteres (criterio de aceptación 1). */
     val texto: String = "",
-    /** Hasta 3 URLs de descarga de Cloud Storage, máx. 5 MB cada imagen (criterio 1). */
+    /** Hasta 3 URLs públicas de Supabase Storage, máx. 5 MB cada imagen (criterio 1). */
     val imagenesUrls: List<String> = emptyList(),
     val visibilidad: VisibilidadPublicacion = VisibilidadPublicacion.SOLO_ACADEMIA,
     val estado: EstadoPublicacion = EstadoPublicacion.PUBLICADA,

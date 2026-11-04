@@ -27,7 +27,7 @@ import coil.compose.AsyncImage
 
 /**
  * Selector de hasta 3 imágenes locales para una publicación nueva (US-028, criterio 1). La subida
- * real a Cloud Storage ocurre recién al publicar, en [com.esan.sportpro.data.comunidad.PublicacionRepository.publicar].
+ * real a Supabase Storage ocurre recién al publicar, en [com.esan.sportpro.data.comunidad.PublicacionRepository.publicar].
  */
 @Composable
 fun SelectorImagenes(

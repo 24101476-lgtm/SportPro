@@ -39,7 +39,7 @@ data class Jugador(
     val contactoEmergenciaNombre: String = "",
     val contactoEmergenciaTelefono: String = "",
     val contactoEmergenciaParentesco: String = "",
-    /** URL de la foto en Cloud Storage (`jugadores/{id}/foto.jpg`, US-006); vacía si no tiene. */
+    /** URL de la foto en Supabase Storage (US-006); vacía si no tiene. */
     val fotoUrl: String = "",
     /** Código de 6 caracteres que la academia entrega al apoderado para pedir la vinculación (US-007). */
     val codigoVinculacion: String = "",

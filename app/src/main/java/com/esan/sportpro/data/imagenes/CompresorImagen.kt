@@ -13,7 +13,8 @@ import javax.inject.Singleton
 
 /**
  * Reduce una imagen elegida por el usuario a un JPEG de máximo [LADO_MAXIMO] px por lado antes de
- * subirla a Cloud Storage. Lo usan la biblioteca de ejercicios (US-009) y la foto del jugador (US-006).
+ * subirla a Supabase Storage. Lo usan la biblioteca de ejercicios (US-009), la foto del jugador (US-006)
+ * y las publicaciones del muro (US-028).
  */
 @Singleton
 class CompresorImagen @Inject constructor(

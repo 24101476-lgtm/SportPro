@@ -2,18 +2,18 @@ package com.esan.sportpro.data.jugadores
 
 import android.net.Uri
 import com.esan.sportpro.data.esperarConfirmacion
+import com.esan.sportpro.data.imagenes.CarpetaImagen
 import com.esan.sportpro.data.imagenes.CompresorImagen
+import com.esan.sportpro.data.imagenes.ImagenesSupabase
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.toObject
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,7 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class FirestoreJugadorRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val storage: FirebaseStorage,
+    private val imagenes: ImagenesSupabase,
     private val compresor: CompresorImagen,
 ) : JugadorRepository {
 
@@ -114,16 +114,11 @@ class FirestoreJugadorRepository @Inject constructor(
 
     override suspend fun subirFoto(jugadorId: String, uriLocal: String): String? = runCatching {
         val bytes = compresor.comprimir(Uri.parse(uriLocal)) ?: return null
-        val url = withTimeoutOrNull(TIEMPO_MAXIMO_SUBIDA_MS) {
-            val referencia = storage.reference.child("jugadores/$jugadorId/foto.jpg")
-            referencia.putBytes(bytes).await()
-            referencia.downloadUrl.await().toString()
-        } ?: return null
-        coleccion.document(jugadorId).update("fotoUrl", url).esperarConfirmacion()
+        val url = imagenes.subir(CarpetaImagen.JUGADORES, bytes)
+        val documento = coleccion.document(jugadorId)
+        val anterior = runCatching { documento.get().await().getString("fotoUrl") }.getOrNull()
+        documento.update("fotoUrl", url).esperarConfirmacion()
+        if (!anterior.isNullOrBlank()) runCatching { imagenes.eliminar(anterior) }
         url
     }.getOrNull()
-
-    private companion object {
-        const val TIEMPO_MAXIMO_SUBIDA_MS = 20_000L
-    }
 }

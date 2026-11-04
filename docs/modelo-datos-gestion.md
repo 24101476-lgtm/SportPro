@@ -19,7 +19,7 @@ jugadores/{jugadorId}                  (US-006/US-007)
    nombre (denormalizado para Estadísticas), nombres, apellidos, fechaNacimiento (AAAA-MM-DD)
    posicion, posicionSecundaria, pieHabil (Derecho | Izquierdo | Ambidiestro), documentoIdentidad   (US-006)
    dorsal? (1-99, único entre los activos del equipo), estaturaCm? (se ingresa en metros 1,00-2,30), pesoKg? (20-150)
-   fotoUrl (Cloud Storage jugadores/{id}/foto.jpg, 1024 px), usuarioUid (cuenta del propio jugador, si tiene)
+   fotoUrl (Supabase Storage, bucket imagenes, 1024 px), usuarioUid (cuenta del propio jugador, si tiene)
    telefono, correo
    contactoEmergenciaNombre, contactoEmergenciaTelefono, contactoEmergenciaParentesco
    codigoVinculacion (6 caracteres, único en la academia; US-007), fotoUrl
@@ -55,7 +55,7 @@ ejercicios/{ejercicioId}               (US-009) biblioteca reutilizable de la ac
    academiaId, nombre (3-60, único en el club), objetivo, categoria (CategoriaTecnica.name)
    duracionMin (1-120), minJugadores (1-40), materiales, descripcion (20-1000)
    imagenUrl ("" si no tiene), activo, creadoPor
-   Imagen en Cloud Storage: ejercicios/{ejercicioId}/imagen.jpg (JPEG, máx. 1024 px por lado)
+   Imagen en Supabase Storage: bucket imagenes, ejercicios/{uid}/{uuid}.jpg (JPEG, máx. 1024 px por lado)
 
 asistencias_entrenamiento/{entrenamientoId_jugadorId}   consumida por Estadísticas
    entrenamientoId, equipoId, jugadorId, estado, presente (bool), minutosRetraso?, fecha (Timestamp)
@@ -121,7 +121,7 @@ Las fichas creadas antes de esta regla no tienen `estadoRegistro` y cuentan como
 
 ## Pendientes conocidos
 
-- **Fotografía del jugador** (US-006): implementada (cámara o galería, 1024 px, `jugadores/{id}/foto.jpg`), pero Cloud Storage exige el plan Blaze; con el plan Spark la ficha se guarda sin foto y la app lo avisa.
+- **Fotografía del jugador** (US-006): implementada (cámara o galería, 1024 px) en Supabase Storage: bucket `imagenes`, `jugadores/{uid}/{uuid}.jpg`. Si la subida falla, la ficha se guarda sin foto y la app lo avisa.
 - **Edición por el propio jugador** (US-006, criterio 9): la regla está en `VisibilidadJugador`, falta enlazar la cuenta del jugador con su ficha (`usuarioUid`).
 - **Notificación push** al personal cuando llega una solicitud de vinculación (US-007, criterio 2): depende del envío de notificaciones (US-027). Mientras tanto, la lista de Jugadores muestra "Solicitudes de vinculación (N pendientes)".
 - **Lectura de `equipos`, `entrenamientos` y `asistencias_entrenamiento`** está abierta a cualquier usuario autenticado (no filtra por academia). Se endurece cuando exista el vínculo con la academia.

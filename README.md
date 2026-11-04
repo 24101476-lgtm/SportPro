@@ -6,7 +6,8 @@ SportPro - App móvil de gestión de academias deportivas (Desarrollo de Aplicac
 
 - Kotlin + Jetpack Compose (Material 3)
 - Arquitectura MVVM: `ViewModel` + `StateFlow` + Navigation Compose
-- Firebase: Authentication, Cloud Firestore (persistencia offline habilitada), Cloud Storage, Cloud Messaging
+- Firebase: Authentication, Cloud Firestore (persistencia offline habilitada), Cloud Messaging
+- Supabase Storage: imágenes de jugadores, ejercicios y publicaciones
 - Inyección de dependencias con Hilt
 
 ## Requisitos
@@ -24,8 +25,13 @@ incluido en el repo con la app Android registrada (`com.esan.sportpro`). Servici
 
 - Authentication (Email/Password)
 - Cloud Firestore (activar reglas de seguridad por colección antes de manejar datos reales)
-- Cloud Storage
 - Cloud Messaging
+
+## Supabase (imágenes)
+
+Las imágenes se guardan en el bucket `imagenes` del proyecto Supabase `sportpro`. La app no las
+sube directo: llama a la Edge Function `imagenes`, que valida el token de Firebase Auth y es la
+única con la clave secreta. El código está en `supabase/` (función, migración y configuración).
 
 Si necesitas acceso de administrador a la consola de Firebase, pídele al dueño del proyecto
 que te agregue en **Configuración del proyecto → Usuarios y permisos**.
@@ -71,7 +77,7 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Cuentas: registro con rol, login, recuperar contraseña, sesión persistente, cierre de sesión | US-001, US-002 | Implementado |
 | Navegación principal por rol | US-003 | Implementado: barra de 4 pestañas por rol, Inicio con resumen y "Más" (`MenuPrincipal`) |
 | Academia: equipos por categoría | US-004, US-005 | Implementado (alta, edición, desactivar) |
-| Jugadores: perfil con datos físicos, contacto y emergencia | US-006 | Implementado (foto lista pero requiere Cloud Storage/Blaze; edición por el propio jugador pendiente del enlace cuenta–ficha) |
+| Jugadores: perfil con datos físicos, contacto y emergencia | US-006 | Implementado (fotos en Supabase Storage; edición por el propio jugador pendiente del enlace cuenta–ficha) |
 | Jugadores: vinculación padre–jugador (código, solicitudes, aprobación, revocación con auditoría) | US-007 | Implementado (notificación push pendiente de US-027) |
 | Entrenamientos: biblioteca de ejercicios | US-009 | Implementado (ficha completa, buscador con filtros, permisos por autor, desactivación) |
 | Entrenamientos: registro de asistencia (sin conexión, historial de cambios, cierre con % del equipo) | US-011 | Implementado |

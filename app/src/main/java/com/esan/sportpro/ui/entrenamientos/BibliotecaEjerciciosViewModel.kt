@@ -33,7 +33,7 @@ data class FormularioBiblioteca(
     val id: String? = null,
     val datos: DatosEjercicioBiblioteca = DatosEjercicioBiblioteca(),
     val errores: Map<CampoBiblioteca, String> = emptyMap(),
-    /** URL de la imagen ya guardada en Cloud Storage (al editar). */
+    /** URL de la imagen ya guardada en Supabase Storage (al editar). */
     val imagenActual: String = "",
     /** URI local de una imagen recién elegida, todavía sin subir. */
     val imagenNueva: String? = null,

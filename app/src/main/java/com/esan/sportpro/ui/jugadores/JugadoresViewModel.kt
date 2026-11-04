@@ -320,7 +320,7 @@ class JugadoresViewModel @Inject constructor(
                     nuevo = formulario.id == null,
                 )
                 // US-006, criterio 7: la foto se sube después de guardar la ficha. Si no se puede
-                // (sin conexión o sin Cloud Storage), la ficha queda guardada sin foto.
+                // (sin conexión o error de Supabase), la ficha queda guardada sin foto.
                 val fotoFallida = formulario.fotoNueva?.let { jugadorRepository.subirFoto(id, it) == null } ?: false
                 val texto = buildString {
                     append(

@@ -28,7 +28,9 @@ class CompresorImagen @Inject constructor(
 
             // 1) Leer solo las dimensiones para decodificar a un tamaño cercano sin agotar memoria.
             val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, limites) } ?: return@withContext null
+            // Con inJustDecodeBounds, decodeStream siempre devuelve null: el resultado está en limites.
+            val flujo = resolver.openInputStream(uri) ?: return@withContext null
+            flujo.use { BitmapFactory.decodeStream(it, null, limites) }
             if (limites.outWidth <= 0 || limites.outHeight <= 0) return@withContext null
 
             var muestreo = 1

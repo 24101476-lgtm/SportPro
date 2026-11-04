@@ -1,5 +1,6 @@
 package com.esan.sportpro.data.imagenes
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -45,11 +46,11 @@ class ImagenesSupabase @Inject constructor(
         .build()
 
     /** @return la URL pública de la imagen. El nombre es aleatorio: cada subida genera una URL nueva. */
-    suspend fun subir(carpeta: CarpetaImagen, jpeg: ByteArray): String {
+    suspend fun subir(carpeta: CarpetaImagen, jpeg: ByteArray): String = runCatching {
         val url = URL_FUNCION.toHttpUrl().newBuilder().addQueryParameter("carpeta", carpeta.nombre).build()
         val peticion = peticionAutenticada(url).post(jpeg.toRequestBody(TIPO_JPEG)).build()
-        return JSONObject(ejecutar(peticion)).getString("url")
-    }
+        JSONObject(ejecutar(peticion)).getString("url")
+    }.onFailure { Log.w(TAG, "No se pudo subir la imagen a ${carpeta.nombre}", it) }.getOrThrow()
 
     /** Elimina la imagen. La función solo lo permite a quien la subió. */
     suspend fun eliminar(urlImagen: String) {
@@ -73,6 +74,7 @@ class ImagenesSupabase @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "ImagenesSupabase"
         val TIPO_JPEG = "image/jpeg".toMediaType()
     }
 }

@@ -3,6 +3,8 @@ package com.esan.sportpro.data.imagenes
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -54,12 +56,36 @@ class CompresorImagen @Inject constructor(
                 original
             }
 
+            // 3) Aplicar la orientación EXIF: el JPEG de salida ya no la conserva y las fotos de
+            // celular quedarían de lado.
+            val grados = gradosDeRotacion(uri)
+            val orientada = if (grados == 0f) {
+                escalada
+            } else {
+                val rotacion = Matrix().apply { postRotate(grados) }
+                Bitmap.createBitmap(escalada, 0, 0, escalada.width, escalada.height, rotacion, true)
+            }
+
             val salida = ByteArrayOutputStream()
-            escalada.compress(Bitmap.CompressFormat.JPEG, calidad, salida)
+            orientada.compress(Bitmap.CompressFormat.JPEG, calidad, salida)
+            if (orientada !== escalada) orientada.recycle()
             if (escalada !== original) escalada.recycle()
             original.recycle()
             salida.toByteArray()
         }
+
+    /** Los formatos sin EXIF, como PNG, se tratan como imágenes sin rotación. */
+    private fun gradosDeRotacion(uri: Uri): Float = runCatching {
+        val orientacion = context.contentResolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        }
+        when (orientacion) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+    }.getOrDefault(0f)
 
     companion object {
         const val LADO_MAXIMO = 1024

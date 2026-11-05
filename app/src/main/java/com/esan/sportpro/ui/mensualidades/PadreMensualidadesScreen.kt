@@ -49,6 +49,7 @@ fun PadreMensualidadesScreen(
             }
             state.sinJugadoresVinculados -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 EncabezadoModulo(
+                    foto = com.esan.sportpro.ui.common.FotoSportPro.BOTINES,
                     titulo = "Mensualidades de mis hijos",
                     subtitulo = "Estado de pago de cada jugador vinculado",
                     icono = Icons.Default.Payments,
@@ -65,6 +66,7 @@ fun PadreMensualidadesScreen(
             ) {
                 item {
                     EncabezadoModulo(
+                        foto = com.esan.sportpro.ui.common.FotoSportPro.BOTINES,
                         titulo = "Mensualidades de mis hijos",
                         subtitulo = "Estado de pago de cada jugador vinculado",
                         icono = Icons.Default.Payments,

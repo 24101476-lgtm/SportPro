@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -48,6 +49,7 @@ import com.esan.sportpro.ui.common.ChipEstado
 import com.esan.sportpro.ui.common.EmptyStateMessage
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.ErrorSportPro
+import com.esan.sportpro.ui.common.EscudoEquipo
 import com.esan.sportpro.ui.common.IconoCircular
 import com.esan.sportpro.ui.common.TarjetaSportPro
 import com.esan.sportpro.ui.common.TonoEstado
@@ -148,6 +150,8 @@ fun AcademiaScreen(
             onNombre = viewModel::onNombreChanged,
             onCategoria = viewModel::onCategoriaChanged,
             onEntrenador = viewModel::onEntrenadorChanged,
+            onElegirEscudo = viewModel::onEscudoElegido,
+            onQuitarEscudo = viewModel::quitarEscudoNuevo,
             onGuardar = viewModel::guardar,
             onCancelar = viewModel::cerrarFormulario,
         )
@@ -167,7 +171,8 @@ private fun EquipoCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            IconoCircular(Icons.Default.Groups2)
+            // Rediseño: el escudo del equipo (subido o generado) en lugar del ícono genérico.
+            EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl)
             Column(modifier = Modifier.weight(1f)) {
                 Text(equipo.nombre, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -201,14 +206,64 @@ private fun FormularioEquipoDialog(
     onNombre: (String) -> Unit,
     onCategoria: (String) -> Unit,
     onEntrenador: (String) -> Unit,
+    onElegirEscudo: (String) -> Unit,
+    onQuitarEscudo: () -> Unit,
     onGuardar: () -> Unit,
     onCancelar: () -> Unit,
 ) {
+    // Selector de fotos del sistema: no necesita permisos y solo muestra imágenes.
+    val selector = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let { onElegirEscudo(it.toString()) } }
     AlertDialog(
         onDismissRequest = { if (!formulario.guardando) onCancelar() },
         title = { Text(if (formulario.id == null) "Nuevo equipo" else "Editar equipo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    val visible = formulario.escudoVisible
+                    if (visible != null) {
+                        androidx.compose.material3.Surface(
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(64.dp),
+                        ) {
+                            coil.compose.AsyncImage(
+                                model = visible,
+                                contentDescription = "Escudo elegido",
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                modifier = Modifier.padding(6.dp),
+                            )
+                        }
+                    } else {
+                        EscudoEquipo(nombre = formulario.nombre.ifBlank { "Equipo" }, tamano = 64.dp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Escudo", style = MaterialTheme.typography.labelLarge)
+                        Row {
+                            TextButton(
+                                onClick = {
+                                    selector.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                        ),
+                                    )
+                                },
+                                enabled = !formulario.guardando,
+                            ) { Text(if (visible == null) "Elegir escudo" else "Cambiar escudo") }
+                            if (formulario.escudoNuevo != null) {
+                                TextButton(onClick = onQuitarEscudo, enabled = !formulario.guardando) { Text("Quitar") }
+                            }
+                        }
+                        if (visible == null) {
+                            Text(
+                                "Si no eliges uno, se genera con las iniciales y colores del equipo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = formulario.nombre,
                     onValueChange = onNombre,

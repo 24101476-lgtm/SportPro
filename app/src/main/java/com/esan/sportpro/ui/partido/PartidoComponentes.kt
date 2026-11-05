@@ -590,6 +590,7 @@ fun IconoEvento(
  * Escudo genérico
  * con las iniciales del equipo.
  */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun Escudo(
     nombre: String,
@@ -598,68 +599,11 @@ fun Escudo(
     androidx.compose.ui.unit.Dp =
         48.dp
 ) {
-
-    val iniciales =
-        nombre
-            .trim()
-            .split(" ")
-            .filter {
-                it.isNotBlank()
-            }
-            .take(2)
-            .joinToString("") {
-                it.first()
-                    .uppercase()
-            }
-            .ifBlank {
-                "?"
-            }
-
-    Surface(
-        shape =
-            androidx.compose.foundation
-                .shape.CircleShape,
-
-        color =
-            fondo,
-
-        border =
-            androidx.compose.foundation.BorderStroke(
-                2.dp,
-                Color.White.copy(
-                    alpha = 0.7f
-                )
-            ),
-
-        modifier =
-            Modifier.size(
-                tamano
-            ),
-    ) {
-
-        androidx.compose.foundation.layout.Box(
-            contentAlignment =
-                Alignment.Center
-        ) {
-
-            Text(
-                iniciales,
-
-                color =
-                    Color.White,
-
-                fontWeight =
-                    androidx.compose.ui.text.font
-                        .FontWeight.Bold,
-
-                fontSize =
-                    (
-                            tamano.value *
-                                    0.36f
-                            ).sp,
-            )
-        }
-    }
+    // Rediseño: el escudo del equipo (subido, demo o generado). [fondo] se conserva por compatibilidad.
+    com.esan.sportpro.ui.common.EscudoEquipo(
+        nombre = nombre,
+        tamano = tamano,
+    )
 }
 
 /**

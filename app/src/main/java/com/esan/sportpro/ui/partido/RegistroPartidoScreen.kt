@@ -255,16 +255,18 @@ fun TituloSeccion(titulo: String, subtitulo: String? = null) {
 @Composable
 private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> Unit) {
     val reloj = state.reloj
-    val fondo = Brush.linearGradient(listOf(ColoresPartido.VerdeOscuro, ColoresPartido.Verde, ColoresPartido.VerdeClaro))
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 6.dp,
+    // Rediseño: foto del estadio en B/N con velo; el texto sigue siendo blanco.
+    com.esan.sportpro.ui.common.FondoFotoSportPro(
+        foto = com.esan.sportpro.ui.common.FotoSportPro.ESTADIO,
+        forma = RoundedCornerShape(28.dp),
+        velo = Brush.verticalGradient(
+            0f to com.esan.sportpro.core.theme.PaletaSportPro.MusgoProfundo.copy(alpha = 0.55f),
+            1f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.92f),
+        ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier
-                .background(fondo)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onVolver) {
@@ -287,10 +289,9 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
             ) {
                 EquipoMarcador(partido.nombreEquipo, ColoresPartido.Azul, Modifier.weight(1f))
                 Text(
-                    "${state.marcador.propio}  -  ${state.marcador.rival}",
+                    "${state.marcador.propio}  –  ${state.marcador.rival}",
                     color = Color.White,
-                    fontSize = 44.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroGrande.copy(fontSize = 60.sp, lineHeight = 60.sp),
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 EquipoMarcador(partido.nombreRival, ColoresPartido.Rojo, Modifier.weight(1f))
@@ -307,29 +308,28 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
                     Text(
                         textoReloj(partido, reloj),
                         color = Color.White,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
+                        style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano.copy(fontFeatureSettings = "tnum"),
                     )
                     if (partido.estado == EstadoPartido.EN_CURSO && !partido.enDescanso) {
                         Spacer(Modifier.width(10.dp))
-                        Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(alpha = 0.18f)) {
+                        Surface(shape = RoundedCornerShape(50), color = com.esan.sportpro.core.theme.PaletaSportPro.Lima) {
                             Text(
                                 "min " + ReglasPartido.textoMinuto(
                                     reloj.minuto,
                                     if (partido.inicioSegundoTiempoMs != null) 2 else 1,
                                     partido.duracionTiempoMin,
                                 ),
-                                color = Color.White,
+                                color = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
                                 style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                             )
                         }
                     }
                 }
                 LinearProgressIndicator(
                     progress = { reloj.progreso },
-                    color = Color.White,
+                    color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
                     trackColor = Color.White.copy(alpha = 0.25f),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -364,7 +364,7 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
 @Composable
 private fun EquipoMarcador(nombre: String, color: Color, modifier: Modifier) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
-        Escudo(nombre, color, 52.dp)
+        Escudo(nombre, color, 64.dp)
         Text(
             nombre,
             color = Color.White,

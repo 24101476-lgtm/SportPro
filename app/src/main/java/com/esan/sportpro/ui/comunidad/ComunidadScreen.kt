@@ -76,6 +76,7 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
 
     Column(modifier = modifier.fillMaxSize()) {
         EncabezadoModulo(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.CELEBRACION,
             titulo = "Comunidad",
             subtitulo = "Muro, avisos y moderación de tu academia",
             icono = Icons.Default.Forum,

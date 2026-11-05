@@ -14,6 +14,8 @@ data class Equipo(
     val nombre: String = "",
     val categoria: String = "",
     val entrenadorNombre: String = "",
+    /** Escudo subido por el administrador (URL pública de Supabase). Vacío = se muestra uno generado. */
+    val escudoUrl: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
 ) {

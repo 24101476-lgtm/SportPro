@@ -246,6 +246,7 @@ private fun ListaJugadores(
         val registrados = state.jugadores.count { ReglasApoderado.participa(it) }
         val pendientesApoderado = state.jugadores.count { it.activo && ReglasApoderado.pendiente(it) }
         EncabezadoModulo(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.VESTUARIO,
             titulo = "Jugadores",
             subtitulo = "$registrados registrados" +
                 if (pendientesApoderado > 0) " · $pendientesApoderado pendientes de apoderado" else "",
@@ -254,14 +255,36 @@ private fun ListaJugadores(
         )
         // US-007: aviso dentro de la app de las solicitudes pendientes (hasta que exista el push).
         val pendientes = state.solicitudesPendientes.size
-        OutlinedButton(
+        TarjetaSportPro(
             onClick = viewModel::abrirSolicitudes,
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
         ) {
-            Icon(Icons.Default.FamilyRestroom, contentDescription = null)
-            Text(
-                if (pendientes > 0) "  Solicitudes de vinculación ($pendientes pendientes)" else "  Solicitudes de vinculación",
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                com.esan.sportpro.ui.common.IconoCircular(Icons.Default.FamilyRestroom, tamano = 40)
+                Text(
+                    "Solicitudes de vinculación",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (pendientes > 0) {
+                    androidx.compose.material3.Surface(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = com.esan.sportpro.core.theme.SportProTema.colores.acento,
+                        contentColor = com.esan.sportpro.core.theme.SportProTema.colores.sobreAcento,
+                    ) {
+                        Text(
+                            "$pendientes",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -269,12 +292,16 @@ private fun ListaJugadores(
                     selected = state.filtroEquipoId == null,
                     onClick = { viewModel.onFiltroEquipo(null) },
                     label = { Text("Todos") },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
                 )
                 state.equiposActivos.forEach { equipo ->
                     FilterChip(
                         selected = state.filtroEquipoId == equipo.id,
                         onClick = { viewModel.onFiltroEquipo(equipo.id) },
                         label = { Text(equipo.etiqueta) },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
                     )
                 }
             }
@@ -315,15 +342,20 @@ private fun ListaJugadores(
 private fun JugadorCard(jugador: Jugador, onClick: () -> Unit) {
     TarjetaSportPro(onClick = onClick) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            AvatarIniciales(jugador.iniciales)
+            // Rediseño: foto del jugador (o sus iniciales) y el dorsal grande a la derecha.
+            FotoJugador(jugador.fotoUrl, jugador.iniciales, tamano = 56.dp)
             Column(modifier = Modifier.weight(1f)) {
-                Text(jugador.nombreCompleto, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    listOfNotNull(jugador.dorsal?.let { "#$it" }, jugador.posicion, jugador.equipoNombre).joinToString(" · "),
+                    jugador.nombreCompleto,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
+                Text(
+                    listOf(jugador.posicion, jugador.equipoNombre).filter { it.isNotBlank() }.joinToString(", "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -335,6 +367,13 @@ private fun JugadorCard(jugador: Jugador, onClick: () -> Unit) {
                     if (jugador.esMenor()) ChipEstado("Menor", TonoEstado.INFORMACION)
                     if (!jugador.activo) ChipEstado("Inactivo", TonoEstado.ERROR)
                 }
+            }
+            jugador.dorsal?.let { dorsal ->
+                Text(
+                    "$dorsal",
+                    style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroGrande,
+                    color = com.esan.sportpro.core.theme.SportProTema.colores.textoAcento,
+                )
             }
         }
     }
@@ -358,15 +397,47 @@ private fun DetalleJugador(
         if (ReglasApoderado.pendiente(jugador)) {
             AvisoRegistroPendiente(jugador)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            FotoJugador(jugador.fotoUrl, jugador.iniciales, tamano = 80.dp)
-            Column {
-                Text(jugador.nombreCompleto, style = MaterialTheme.typography.titleLarge)
-                Text(
-                    listOfNotNull(jugador.dorsal?.let { "#$it" }, jugador.posicion.ifBlank { null }).joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Rediseño: tarjeta de jugador con foto grande, nombre y el dorsal en lima.
+        com.esan.sportpro.ui.common.FondoFotoSportPro(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.VESTUARIO,
+            velo = androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to com.esan.sportpro.core.theme.PaletaSportPro.MusgoProfundo.copy(alpha = 0.55f),
+                1f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.92f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(18.dp),
+            ) {
+                FotoJugador(jugador.fotoUrl, jugador.iniciales, tamano = 88.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        jugador.nombreCompleto,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = androidx.compose.ui.graphics.Color.White,
+                    )
+                    Text(
+                        jugador.posicion.ifBlank { "Sin posición" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                jugador.dorsal?.let { dorsal ->
+                    androidx.compose.material3.Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                        contentColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                    ) {
+                        Text(
+                            "$dorsal",
+                            style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroGrande,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        )
+                    }
+                }
             }
         }
 

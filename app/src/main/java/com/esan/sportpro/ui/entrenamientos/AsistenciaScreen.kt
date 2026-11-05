@@ -48,6 +48,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -112,17 +116,17 @@ fun AsistenciaScreen(
         },
         bottomBar = {
             if (state.editable && state.plantel.isNotEmpty()) {
-                Button(
+                com.esan.sportpro.ui.common.BotonPrincipalSportPro(
+                    texto = "Cerrar sesión",
                     onClick = viewModel::solicitarCierre,
-                    enabled = !state.cerrando,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                ) {
-                    if (state.cerrando) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Cerrar sesión")
-                    }
-                }
+                    habilitado = !state.cerrando,
+                    cargando = state.cerrando,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(16.dp)
+                        .heightIn(min = 56.dp),
+                )
             }
         },
     ) { padding ->
@@ -184,13 +188,71 @@ private fun BannerSync(indicador: IndicadorSync) {
 @Composable
 private fun Encabezado(state: AsistenciaUiState, viewModel: AsistenciaViewModel) {
     val entrenamiento = state.entrenamiento ?: return
-    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("${entrenamiento.equipoNombre} · ${entrenamiento.fecha} ${entrenamiento.hora}", style = MaterialTheme.typography.titleMedium)
+    val fecha = FechasSportPro.desdeIso(entrenamiento.fecha)
+    val estados = state.plantel.map { state.estadoDe(it.id) }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Rediseño: tarjeta con la foto de los conos, la fecha grande en lima y el objetivo de la sesión.
+        com.esan.sportpro.ui.common.FondoFotoSportPro(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.CONOS,
+            velo = androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to com.esan.sportpro.core.theme.PaletaSportPro.MusgoProfundo.copy(alpha = 0.45f),
+                1f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.92f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(18.dp),
+            ) {
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                    contentColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                    modifier = Modifier.size(width = 64.dp, height = 74.dp),
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(fecha?.dayOfMonth?.toString()?.padStart(2, '0') ?: "–", style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano)
+                        Text(fecha?.let { diaSemana(it) } ?: "", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        entrenamiento.objetivo.ifBlank { "Entrenamiento" },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        listOf(entrenamiento.equipoNombre, entrenamiento.hora).filter { it.isNotBlank() }.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f),
+                    )
+                }
+            }
+        }
+
+        com.esan.sportpro.ui.common.FilaEstadisticas(
+            datos = listOf(
+                com.esan.sportpro.ui.common.DatoEstadistica("${estados.count { it == EstadoAsistencia.PRESENTE }}", "Presentes"),
+                com.esan.sportpro.ui.common.DatoEstadistica("${estados.count { it == EstadoAsistencia.TARDE }}", "Tarde"),
+                com.esan.sportpro.ui.common.DatoEstadistica("${estados.count { it == EstadoAsistencia.JUSTIFICADO || it == EstadoAsistencia.AUSENTE }}", "Faltas"),
+                com.esan.sportpro.ui.common.DatoEstadistica("${state.sinMarcar.size}", "Sin marcar"),
+            ),
+        )
+
         when (entrenamiento.estadoSesion) {
             EstadoSesion.REALIZADA -> Text(
-                "Sesión realizada · Asistencia del equipo: ${ReglasAsistencia.formatearPorcentaje(state.porcentaje)}",
+                "Sesión realizada. Asistencia del equipo: ${ReglasAsistencia.formatearPorcentaje(state.porcentaje)}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = com.esan.sportpro.core.theme.SportProTema.colores.textoAcento,
             )
             EstadoSesion.CANCELADA -> Text(
                 "Sesión cancelada",
@@ -206,42 +268,49 @@ private fun Encabezado(state: AsistenciaUiState, viewModel: AsistenciaViewModel)
                 Text(
                     if (pendientes == 0) "Todos marcados (${state.marcados})" else ReglasAsistencia.mensajeSinMarcar(pendientes),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (pendientes > 0 && state.resaltarSinMarcar) MaterialTheme.colorScheme.error else Color.Unspecified,
+                    color = if (pendientes > 0 && state.resaltarSinMarcar) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
                 )
                 if (state.editable) {
-                    TextButton(onClick = viewModel::marcarTodosPresentes) { Text("Marcar todos como presentes") }
+                    TextButton(onClick = viewModel::marcarTodosPresentes) {
+                        Text("Marcar todos presentes", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private val FORMATO_DIA_SEMANA: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("EEE", java.util.Locale.forLanguageTag("es-PE"))
+
+/** "Sáb", "Jue"… sin el punto que agrega el formato abreviado. */
+private fun diaSemana(fecha: java.time.LocalDate): String =
+    fecha.format(FORMATO_DIA_SEMANA).removeSuffix(".").replaceFirstChar { it.uppercase() }
+
 @Composable
 private fun FilaJugador(state: AsistenciaUiState, jugador: Jugador, viewModel: AsistenciaViewModel) {
     val estado = state.estadoDe(jugador.id)
     val detalle = state.detalleDe(jugador.id)
     val resaltar = estado == null && state.resaltarSinMarcar
-    Card(
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        color = if (resaltar) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
-        colors = if (resaltar) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-        } else {
-            CardDefaults.cardColors()
-        },
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(jugador)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        listOfNotNull(jugador.dorsal?.let { "#$it" }, jugador.nombreCompleto).joinToString("  "),
+                        jugador.nombreCompleto,
                         style = MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     )
                     Text(
                         descripcionEstado(estado, detalle),
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (estado == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                        color = estado?.let { colorEstado(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (jugador.id in state.conConflicto) {
                         Text(
@@ -251,14 +320,18 @@ private fun FilaJugador(state: AsistenciaUiState, jugador: Jugador, viewModel: A
                         )
                     }
                 }
+                jugador.dorsal?.let { dorsal ->
+                    Text("$dorsal", style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano, color = com.esan.sportpro.core.theme.SportProTema.colores.textoAcento)
+                }
             }
             if (state.editable) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     EstadoAsistencia.entries.forEach { opcion ->
-                        FilterChip(
-                            selected = estado == opcion,
+                        BotonEstado(
+                            opcion = opcion,
+                            elegido = estado == opcion,
                             onClick = { viewModel.onEstado(jugador, opcion) },
-                            label = { Text(opcion.etiqueta) },
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
@@ -266,6 +339,58 @@ private fun FilaJugador(state: AsistenciaUiState, jugador: Jugador, viewModel: A
         }
     }
 }
+
+/** Texto corto del botón: los nombres completos ("Falta injustificada") no entran en 4 columnas. */
+private fun etiquetaCorta(estado: EstadoAsistencia): String = when (estado) {
+    EstadoAsistencia.PRESENTE -> "Presente"
+    EstadoAsistencia.TARDE -> "Tarde"
+    EstadoAsistencia.JUSTIFICADO -> "Justificada"
+    EstadoAsistencia.AUSENTE -> "Falta"
+}
+
+/** Presente usa el acento de la marca; los demás, los colores de estado del tema. */
+@Composable
+private fun colorEstado(estado: EstadoAsistencia): Color {
+    val c = com.esan.sportpro.core.theme.SportProTema.colores
+    return when (estado) {
+        EstadoAsistencia.PRESENTE -> c.textoAcento
+        EstadoAsistencia.TARDE -> c.advertencia
+        EstadoAsistencia.JUSTIFICADO -> c.informacion
+        EstadoAsistencia.AUSENTE -> c.error
+    }
+}
+
+@Composable
+private fun BotonEstado(opcion: EstadoAsistencia, elegido: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = com.esan.sportpro.core.theme.SportProTema.colores
+    val relleno = if (opcion == EstadoAsistencia.PRESENTE) c.acento else colorEstado(opcion)
+    val luz = 0.2126f * relleno.red + 0.7152f * relleno.green + 0.0722f * relleno.blue
+    val textoElegido = if (luz > 0.55f) com.esan.sportpro.core.theme.PaletaSportPro.Carbon else Color.White
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = if (elegido) relleno else Color.Transparent,
+        contentColor = if (elegido) textoElegido else MaterialTheme.colorScheme.onSurface,
+        border = if (elegido) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            // Para lectores de pantalla: nombre completo del estado y si está elegido.
+            .semantics {
+                contentDescription = opcion.etiqueta
+                selected = elegido
+            },
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp)) {
+            Text(
+                etiquetaCorta(opcion),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (elegido) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 
 private fun descripcionEstado(estado: EstadoAsistencia?, detalle: MarcaAsistencia?): String = when (estado) {
     null -> "Sin marcar"

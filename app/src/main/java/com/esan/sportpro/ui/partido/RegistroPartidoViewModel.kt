@@ -91,6 +91,13 @@ data class RegistroUiState(
     val puedeReabrirActa: Boolean
         get() = partido?.let { ReglasActa.puedeReabrir(rol, it, ahoraMs) } ?: false
 
+    /** US-023: quien puede generar el resumen con IA (aunque el acta ya esté cerrada). */
+    val puedeResumir: Boolean
+        get() {
+            val p = partido ?: return false
+            return rol == ROL_ADMIN || (uid != null && uid in listOfNotNull(p.operadorUid, p.entrenadorUid, p.creadoPor))
+        }
+
     /** Solo el operador asignado, el entrenador responsable y el administrador corrigen o anulan. */
     val puedeCorregir: Boolean
         get() {

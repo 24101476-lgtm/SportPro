@@ -4,6 +4,8 @@ Módulo **IA** de SportPro. Este documento plantea cómo se genera el resumen na
 
 > Alcance fijado por el proyecto: la IA **solo** genera el resumen narrativo. No hay sugerencias de alineación ni chatbot RAG.
 
+> **Implementación de US-023 (cambios respecto a este diseño).** Sin plan Blaze de Firebase, la función intermedia es una **Edge Function de Supabase** (`supabase/functions/resumen-ia`) y el proveedor es **Gemini** (API gratuita de Google AI Studio). Lo que cambia: (1) la función no usa el Admin SDK; con el ID token del usuario lee `usuarios/{uid}` y `partidos/{id}` por la API REST de Firestore, de modo que las reglas de seguridad también aplican, y exige rol ENTRENADOR o ADMINISTRADOR, ser responsable del partido y acta cerrada; (2) el insumo lo arma la app (`ConstructorInsumo`) y la función lo vuelve a depurar (solo alias, sin correos ni teléfonos); (3) la verificación se hace en la app (`ReglasResumen.verificar`) y las menciones dudosas se marcan "Dato no verificado" en lugar de reintentar; (4) las versiones las escribe la app en `partidos/{id}/resumenes`, con reglas que solo permiten crear un BORRADOR con el acta cerrada; (5) App Check no está activado. Ver la sección 13.
+
 ## 1. Objetivos y no objetivos
 
 | Objetivo | Cómo se resuelve |
@@ -188,3 +190,28 @@ Los campos de texto libre (`observacion`) provienen de personas. Controles:
 - Confirmar el proveedor y habilitar el plan Blaze (o elegir Cloud Run).
 - Definir quién del equipo actúa como entrenador en la evaluación de las semanas 15 y 16.
 - Decidir si el resumen aprobado se comparte también en la Comunidad (por ahora no: solo dentro del equipo).
+
+## 13. Implementación de US-023 (Supabase + Gemini)
+
+Flujo: `ResumenIaScreen` → `ResumenIaViewModel` → `ConstructorInsumo` → `SupabaseGeneradorResumen` (Edge Function `resumen-ia` → Gemini) → `ReglasResumen.verificar` → `FirestoreResumenRepository.guardarBorrador`.
+
+| Criterio de US-023 | Dónde se cumple |
+|---|---|
+| 1. Solo con el partido finalizado | `ReglasResumen.motivoNoGenerar` exige acta cerrada; la función y las reglas de Firestore lo vuelven a comprobar |
+| 2 y 3. Insumo mínimo y menores | `ConstructorInsumo`: eventos vigentes, alineación, marcador y equipos. Jugadores como alias `J09` (dorsal); las observaciones cambian nombres por alias y ocultan teléfonos, documentos y correos. La función depura otra vez |
+| 4. Instrucción explícita | `INSTRUCCION` en `supabase/functions/resumen-ia/index.ts` (solo los hechos entregados, sin inventar jugadas, jugadores, minutos ni resultados, omitir lo que falte). El texto de `<datos_del_partido>` se trata como dato |
+| 5. Tres bloques | `ReglasResumen.armarBloques`: Hechos registrados, Desarrollo del partido e Interpretación del entrenador (vacío) |
+| 6. Máximo 400 palabras | El prompt pide 300; la función y `ReglasResumen.dentroDelLimite` rechazan más de 400 |
+| 7. Dato no verificado | `ReglasResumen.verificar` compara alias, minutos, marcadores parciales, nombres propios y citas de eventos; `segmentar` resalta cada mención en pantalla |
+| 8. Menos de 3 eventos | `MOTIVO_POCOS_EVENTOS`; no se llama al proveedor (ni desde la app ni desde la función) |
+| 9. Sin clave en el cliente | El secreto `GEMINI_API_KEY` solo existe en Supabase |
+| 10. Fallo o más de 30 s | `OkHttp` con 30 s de tope; mensaje "No se pudo generar el resumen. Inténtalo nuevamente" con Reintentar; los eventos no se tocan |
+| 11. Versión guardada | `partidos/{id}/resumenes`: modelo, versión del prompt, `solicitadoPor`, `creadoEn`, texto, menciones y eventos usados |
+
+**Verificación de la salida.** Alias fuera de la alineación, minutos sin evento (con `45+3'` se suma), marcadores que nunca ocurrieron (se aceptan los parciales por los que pasó el partido), nombres propios que no son equipo, categoría ni tipo de evento, y hechos sin cita de un evento real. Es una barrera automática, no una garantía: por eso US-024 exige corregir cada mención marcada antes de aprobar.
+
+**Límites conocidos.**
+- El tope de frecuencia es en memoria de la instancia (un intento cada 15 s por usuario); no hay tope diario por academia.
+- Un cliente modificado podría escribir un borrador falso directamente en Firestore; las reglas solo comprueban rol, acta cerrada y estado BORRADOR. El texto sigue sin ser visible para jugadores y padres hasta que US-024 lo apruebe.
+- Los nombres de pila se reponen en el teléfono del entrenador: el proveedor nunca los recibe.
+- Con el plan gratuito de Gemini, Google puede usar los datos enviados para mejorar sus productos. Por eso solo salen alias, dorsales y eventos.

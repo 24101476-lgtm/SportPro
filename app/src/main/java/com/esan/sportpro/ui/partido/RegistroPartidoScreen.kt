@@ -91,6 +91,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RegistroPartidoScreen(
     onVolver: () -> Unit,
+    onResumenIa: () -> Unit = {},
     viewModel: RegistroPartidoViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -189,6 +190,7 @@ fun RegistroPartidoScreen(
                             onCerrarActa = viewModel::pedirCierreActa,
                             onVerActa = viewModel::verActa,
                             onReabrirActa = viewModel::pedirReapertura,
+                            onResumenIa = onResumenIa,
                         )
                     }
                 }
@@ -642,6 +644,7 @@ private fun Finalizado(
     onCerrarActa: () -> Unit,
     onVerActa: () -> Unit,
     onReabrirActa: () -> Unit,
+    onResumenIa: () -> Unit,
 ) {
     val context = LocalContext.current
     Card(
@@ -675,6 +678,15 @@ private fun Finalizado(
                             modifier = Modifier.weight(1f),
                         ) { Text("Compartir") }
                     }
+                }
+                if (state.puedeResumir) {
+                    Button(
+                        onClick = onResumenIa,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                    ) { Text("Resumen con IA") }
                 }
                 if (state.puedeReabrirActa) {
                     TextButton(onClick = onReabrirActa) { Text("Reabrir acta (administrador)") }

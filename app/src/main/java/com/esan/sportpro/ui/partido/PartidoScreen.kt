@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.esan.sportpro.ui.ia.ResumenIaScreen
 
 
 // ============================================================
@@ -104,6 +105,10 @@ private const val RUTA_REGISTRO =
 private const val RUTA_SEGUIMIENTO_VIVO =
     "partidos/{partidoId}/en-vivo"
 
+/** US-023: resumen narrativo con IA de un partido con el acta cerrada. */
+private const val RUTA_RESUMEN_IA =
+    "partidos/{partidoId}/resumen-ia"
+
 
 // ============================================================
 // RUTAS DINÁMICAS
@@ -119,6 +124,12 @@ private fun rutaSeguimientoVivo(
     partidoId: String
 ): String =
     "partidos/$partidoId/en-vivo"
+
+
+private fun rutaResumenIa(
+    partidoId: String
+): String =
+    "partidos/$partidoId/resumen-ia"
 
 
 private fun rutaCatalogoEditar(
@@ -1139,12 +1150,24 @@ fun PartidoScreen(
                         NavType.StringType
                 }
             )
-        ) {
+        ) { entrada ->
 
             RegistroPartidoScreen(
 
                 onVolver = {
                     navController.popBackStack()
+                },
+
+                onResumenIa = {
+                    entrada.arguments?.getString("partidoId")?.let { partidoId ->
+                        navController.navigate(
+                            rutaResumenIa(
+                                partidoId
+                            )
+                        ) {
+                            launchSingleTop = true
+                        }
+                    }
                 },
             )
         }
@@ -1170,6 +1193,34 @@ fun PartidoScreen(
         ) {
 
             SeguimientoPartidoScreen(
+
+                onVolver = {
+                    navController.popBackStack()
+                },
+            )
+        }
+
+
+        // ====================================================
+        // US-023 · RESUMEN NARRATIVO CON IA
+        // ====================================================
+
+        composable(
+            route =
+                RUTA_RESUMEN_IA,
+
+            arguments = listOf(
+
+                navArgument(
+                    "partidoId"
+                ) {
+                    type =
+                        NavType.StringType
+                }
+            )
+        ) {
+
+            ResumenIaScreen(
 
                 onVolver = {
                     navController.popBackStack()

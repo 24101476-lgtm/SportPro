@@ -100,6 +100,10 @@ private const val RUTA_CATALOGO_EDITAR =
 private const val RUTA_REGISTRO =
     "partido/{partidoId}"
 
+/** US-021: seguimiento en tiempo real para jugador y padre (solo lectura). */
+private const val RUTA_SEGUIMIENTO_VIVO =
+    "partidos/{partidoId}/en-vivo"
+
 
 // ============================================================
 // RUTAS DINÁMICAS
@@ -109,6 +113,12 @@ private fun rutaRegistro(
     partidoId: String
 ): String =
     "partido/$partidoId"
+
+
+private fun rutaSeguimientoVivo(
+    partidoId: String
+): String =
+    "partidos/$partidoId/en-vivo"
 
 
 private fun rutaCatalogoEditar(
@@ -231,6 +241,17 @@ fun PartidoScreen(
 
                     navController.navigate(
                         RUTA_PARTIDO_NUEVO
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
+
+                onSeguirPartido = { partidoId ->
+
+                    navController.navigate(
+                        rutaSeguimientoVivo(
+                            partidoId
+                        )
                     ) {
                         launchSingleTop = true
                     }
@@ -1121,6 +1142,34 @@ fun PartidoScreen(
         ) {
 
             RegistroPartidoScreen(
+
+                onVolver = {
+                    navController.popBackStack()
+                },
+            )
+        }
+
+
+        // ====================================================
+        // US-021 · SEGUIMIENTO EN TIEMPO REAL (SOLO LECTURA)
+        // ====================================================
+
+        composable(
+            route =
+                RUTA_SEGUIMIENTO_VIVO,
+
+            arguments = listOf(
+
+                navArgument(
+                    "partidoId"
+                ) {
+                    type =
+                        NavType.StringType
+                }
+            )
+        ) {
+
+            SeguimientoPartidoScreen(
 
                 onVolver = {
                     navController.popBackStack()

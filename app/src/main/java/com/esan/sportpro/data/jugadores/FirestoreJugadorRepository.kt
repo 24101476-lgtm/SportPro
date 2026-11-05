@@ -42,6 +42,18 @@ class FirestoreJugadorRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
+    override fun observarFichaPropia(usuarioUid: String): Flow<Jugador?> = callbackFlow {
+        val registro = coleccion.whereEqualTo("usuarioUid", usuarioUid).limit(1)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.documents?.firstOrNull()?.toObject<Jugador>())
+            }
+        awaitClose { registro.remove() }
+    }
+
     override suspend fun guardar(jugador: Jugador, equipoEtiqueta: String, nuevo: Boolean): Boolean {
         // Se escribe un mapa explícito (y no el objeto) para no persistir propiedades calculadas.
         val datos = mapOf(

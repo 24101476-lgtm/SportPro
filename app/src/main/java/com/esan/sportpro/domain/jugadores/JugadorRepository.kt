@@ -9,6 +9,12 @@ interface JugadorRepository {
     fun observarJugadores(academiaId: String): Flow<List<Jugador>>
 
     /**
+     * Ficha enlazada a la cuenta del jugador (`usuarioUid`), o `null` si todavía no hay enlace.
+     * Las reglas de Firestore solo dejan leer la propia (US-021: el jugador sigue los partidos de su equipo).
+     */
+    fun observarFichaPropia(usuarioUid: String): Flow<Jugador?>
+
+    /**
      * Crea el jugador si [Jugador.id] está vacío; si no, actualiza su perfil. Además mantiene su
      * entrada en `directorio_jugadores` (nombre, equipo y código, sin datos sensibles) que usan
      * los apoderados para pedir la vinculación (US-007).

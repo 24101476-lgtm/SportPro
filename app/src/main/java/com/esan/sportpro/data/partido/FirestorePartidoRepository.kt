@@ -1750,6 +1750,38 @@ class FirestorePartidoRepository @Inject constructor(
             }
     }
 
+    override fun reabrirActa(
+        partidoId: String,
+        motivo: String,
+    ) {
+        val batch = firestore.batch()
+        val partidoRef = partidos.document(partidoId)
+
+        batch.update(
+            partidoRef,
+            mapOf(
+                "actaCerrada" to false,
+                "estado" to EstadoPartido.FINALIZADO.name,
+                "motivoReapertura" to motivo.trim(),
+                "reabiertoPor" to uidActual,
+                "reabiertoEn" to FieldValue.serverTimestamp(),
+                "vecesReabierto" to FieldValue.increment(1),
+            ),
+        )
+        batch.set(
+            partidoRef.collection("auditoria").document(),
+            mapOf(
+                "accion" to "REABRIR_ACTA",
+                "motivo" to motivo.trim(),
+                "uid" to uidActual,
+                "nombre" to nombreActual,
+                "fecha" to FieldValue.serverTimestamp(),
+            ),
+        )
+
+        batch.commitLogged("reabrirActa")
+    }
+
     // ---------------------------------------------------------------- Catálogo inicial
 
     private fun sembrarCatalogo() {
@@ -2054,6 +2086,16 @@ class FirestorePartidoRepository @Inject constructor(
 
             ultimoRecordatorioMs =
                 millis("ultimoRecordatorioConvocatoria"),
+
+            // US-022
+            actaCerradaEnMs =
+                millis("actaCerradaEn"),
+
+            vecesReabierto =
+                getLong("vecesReabierto")?.toInt() ?: 0,
+
+            motivoUltimaReapertura =
+                getString("motivoReapertura"),
         )
     }
 

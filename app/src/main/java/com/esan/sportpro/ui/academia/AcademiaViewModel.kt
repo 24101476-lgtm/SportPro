@@ -23,7 +23,13 @@ data class FormularioEquipo(
     val entrenador: String = "",
     val errores: Map<CampoEquipo, String> = emptyMap(),
     val guardando: Boolean = false,
-)
+    /** Escudo ya guardado (al editar). */
+    val escudoActual: String = "",
+    /** URI local de un escudo nuevo (galería), todavía sin subir. */
+    val escudoNuevo: String? = null,
+) {
+    val escudoVisible: String? get() = escudoNuevo ?: escudoActual.takeIf { it.isNotBlank() }
+}
 
 data class AcademiaUiState(
     val perfil: PerfilActual? = null,
@@ -81,10 +87,15 @@ class AcademiaViewModel @Inject constructor(
                     nombre = equipo.nombre,
                     categoria = equipo.categoria,
                     entrenador = equipo.entrenadorNombre,
+                    escudoActual = equipo.escudoUrl,
                 ),
             )
         }
     }
+
+    fun onEscudoElegido(uri: String) = editarFormulario { copy(escudoNuevo = uri) }
+
+    fun quitarEscudoNuevo() = editarFormulario { copy(escudoNuevo = null) }
 
     fun cerrarFormulario() = setState { copy(formulario = null) }
 
@@ -118,18 +129,30 @@ class AcademiaViewModel @Inject constructor(
         editarFormulario { copy(guardando = true) }
         viewModelScope.launch {
             try {
+                val esNuevo = formulario.id == null
+                // Para un equipo nuevo con escudo se reserva el id antes, así se sube justo después.
+                val id = formulario.id ?: if (formulario.escudoNuevo != null) equipoRepository.nuevoId() else ""
                 val confirmado = equipoRepository.guardar(
                     Equipo(
-                        id = formulario.id.orEmpty(),
+                        id = id,
                         academiaId = perfil.academiaId,
                         nombre = formulario.nombre,
                         categoria = formulario.categoria,
                         entrenadorNombre = formulario.entrenador,
                         creadoPor = perfil.uid,
                     ),
+                    esNuevo = esNuevo,
                 )
+                // El escudo se sube después de guardar el equipo. Si falla, el equipo queda sin escudo.
+                val escudoFallido = formulario.escudoNuevo?.let { uri ->
+                    id.isBlank() || equipoRepository.subirEscudo(id, uri) == null
+                } ?: false
                 setState { copy(formulario = null) }
-                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Equipo guardado")))
+                val texto = buildString {
+                    append(mensajeGuardado(confirmado, "Equipo guardado"))
+                    if (escudoFallido) append(". No se pudo subir el escudo; inténtalo de nuevo más tarde")
+                }
+                sendEvent(AcademiaEvent.Mensaje(texto))
             } catch (e: Exception) {
                 editarFormulario { copy(guardando = false) }
                 sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))

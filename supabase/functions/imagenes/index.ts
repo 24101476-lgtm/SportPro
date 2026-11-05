@@ -11,7 +11,7 @@ import { createRemoteJWKSet, jwtVerify } from "npm:jose@5";
 const FIREBASE_PROJECT_ID = "sportpro-198a4";
 const BUCKET = "imagenes";
 const TAMANO_MAXIMO = 5 * 1024 * 1024;
-const CARPETAS = ["jugadores", "ejercicios", "publicaciones"];
+const CARPETAS = ["jugadores", "ejercicios", "publicaciones", "escudos"];
 
 // Las rutas son {carpeta}/{uid de quien subió}/{uuid}.jpg; el uid permite comprobar el dueño.
 const RUTA_VALIDA = new RegExp(`^(${CARPETAS.join("|")})/([^/]+)/[0-9a-f-]{36}\\.jpg$`);

@@ -194,6 +194,7 @@ private fun ListaEntrenamientos(
     Column(modifier = modifier) {
         val programadas = state.entrenamientos.count { it.estadoSesion == EstadoSesion.PROGRAMADA }
         EncabezadoModulo(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.CONOS,
             titulo = "Entrenamientos",
             subtitulo = "$programadas ${if (programadas == 1) "sesión programada" else "sesiones programadas"}",
             icono = Icons.Default.FitnessCenter,

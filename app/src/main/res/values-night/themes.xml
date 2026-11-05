@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo del arranque igual al de la app (modo oscuro), sin destello. -->
+    <style name="Theme.SportPro" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF121310</item>
+    </style>
+</resources>

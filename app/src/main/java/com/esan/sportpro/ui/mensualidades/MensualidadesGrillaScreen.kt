@@ -85,6 +85,7 @@ fun MensualidadesGrillaScreen(
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
             EncabezadoModulo(
+                foto = com.esan.sportpro.ui.common.FotoSportPro.BOTINES,
                 titulo = "Mensualidades",
                 subtitulo = "Control de pagos del mes por jugador",
                 icono = Icons.Default.Payments,

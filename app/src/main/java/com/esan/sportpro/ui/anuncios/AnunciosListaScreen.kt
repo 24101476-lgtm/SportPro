@@ -68,6 +68,7 @@ fun AnunciosListaScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             EncabezadoModulo(
+                foto = com.esan.sportpro.ui.common.FotoSportPro.ESTADIO,
                 titulo = "Anuncios",
                 subtitulo = "Comunicados de tu academia",
                 icono = Icons.Default.Campaign,

@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.home
 
+import com.esan.sportpro.core.theme.SportProTema
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,7 @@ import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.IconoCircular
+import com.esan.sportpro.ui.common.SelectorApariencia
 import com.esan.sportpro.ui.common.TarjetaSportPro
 import com.esan.sportpro.ui.common.TituloSeccion
 import com.esan.sportpro.ui.comunidad.ComunidadScreen
@@ -97,7 +99,10 @@ fun HomeScreen(
             onLogout = onLogout,
         )
 
-        is HomeUiState.Listo -> HomeConPerfil(perfil = actual.perfil, onLogout = onLogout)
+        // Rediseño: los escudos subidos de la academia quedan disponibles para todas las pantallas.
+        is HomeUiState.Listo -> com.esan.sportpro.ui.common.ProveedorEscudos(academiaId = actual.perfil.academiaId) {
+            HomeConPerfil(perfil = actual.perfil, onLogout = onLogout)
+        }
     }
 }
 
@@ -130,7 +135,7 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 6.dp) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                 pestanas.forEach { item ->
                     NavigationBarItem(
                         selected = item.id == pestana.id,
@@ -143,9 +148,11 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
                         label = { Text(item.label, maxLines = 1) },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                            indicatorColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            selectedIconColor = SportProTema.colores.iconoNavActivo,
+                            indicatorColor = SportProTema.colores.indicadorNav,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
                     )
                 }
@@ -300,6 +307,8 @@ private fun MasScreen(
                 }
             }
         }
+        item { TituloSeccion("Apariencia") }
+        item { SelectorApariencia() }
         item { TituloSeccion("Cuenta") }
         item {
             OutlinedButton(onClick = onLogout, modifier = Modifier.padding(top = 4.dp)) {

@@ -27,6 +27,7 @@ enum class CarpetaImagen(val nombre: String) {
     JUGADORES("jugadores"),
     EJERCICIOS("ejercicios"),
     PUBLICACIONES("publicaciones"),
+    ESCUDOS("escudos"),
 }
 
 /** `true` si la URL apunta al bucket de Supabase; las URLs antiguas de Firebase se ignoran. */

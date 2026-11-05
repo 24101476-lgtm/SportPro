@@ -53,6 +53,7 @@ fun EstadisticasEquipoScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             EncabezadoModulo(
+                foto = com.esan.sportpro.ui.common.FotoSportPro.ESTADIO,
                 titulo = "Estadísticas",
                 subtitulo = "Resultados y goles de tu equipo",
                 icono = Icons.Default.Groups,

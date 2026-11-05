@@ -157,6 +157,10 @@ fun RegistroPartidoScreen(
                     item { AlertaDuplicados(state.duplicados.size, onRevisar = viewModel::verDuplicados) }
                 }
 
+                if (partido.estado == EstadoPartido.EN_CURSO && !state.puedeCorregir) {
+                    item { AvisoSoloLectura() }
+                }
+
                 val paleta = state.paleta
                 if (paleta.isNotEmpty()) {
                     val controles = paleta.filter { it.ambito == AmbitoEvento.PARTIDO }
@@ -212,6 +216,26 @@ fun RegistroPartidoScreen(
         EventoBottomSheet(hoja = hoja, state = state, viewModel = viewModel)
     }
     DialogosPartido(state = state, viewModel = viewModel)
+}
+
+/** Explica por qué no hay controles: solo los responsables del partido pueden registrar eventos. */
+@Composable
+private fun AvisoSoloLectura() {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Modo solo lectura", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "Este partido lo registra otra cuenta. Para continuarlo, entra con la cuenta que lo inició o con un administrador.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
 }
 
 @Composable

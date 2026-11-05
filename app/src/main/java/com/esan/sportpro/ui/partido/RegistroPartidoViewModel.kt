@@ -197,8 +197,8 @@ class RegistroPartidoViewModel @Inject constructor(
     private var finAutomaticoEnviado = false
 
     /**
-     * Respaldo: si nadie registra "Fin de partido" y el 2.º tiempo agota el tiempo añadido
-     * máximo, el partido se finaliza automáticamente. Solo lo hace el dispositivo del operador (o del creador si no hay
+     * Respaldo: si nadie registra "Fin de partido" y el 2.º tiempo agota el tiempo añadido máximo,
+     * o el partido quedó abandonado antes del 2.º tiempo, se finaliza automáticamente. Solo lo hace el dispositivo del operador (o del creador si no hay
      * operador asignado) para no generar eventos duplicados desde varios teléfonos.
      */
     private fun revisarFinReglamentario() {
@@ -208,9 +208,7 @@ class RegistroPartidoViewModel @Inject constructor(
         val responsable = p.operadorUid ?: p.creadoPor
         // Si el responsable no vuelve a abrir el partido (se quedaba "en vivo" por días), pasado un
         // margen cualquier usuario autorizado lo cierra.
-        val inicio2 = p.inicioSegundoTiempoMs
-        val abandonado = inicio2 != null &&
-            st.ahoraMs - inicio2 > (2L * p.duracionTiempoMin + ReglasPartido.ADICION_MAX + MARGEN_ABANDONO_MIN) * 60_000L
+        val abandonado = ReglasPartido.partidoAbandonado(p, st.ahoraMs)
         if (responsable != null && responsable != st.uid && !(abandonado && st.puedeCorregir)) return
         if (ReglasPartido.existeVigente(TiposEvento.FIN_PARTIDO, st.eventos)) return
         finAutomaticoEnviado = true
@@ -224,7 +222,11 @@ class RegistroPartidoViewModel @Inject constructor(
                 secundarioId = null,
                 secundarioNombre = null,
                 resultadoPenal = null,
-                observacion = "Cierre automático: no se registró el final tras ${ReglasPartido.ADICION_MAX} min de tiempo añadido",
+                observacion = if (p.inicioSegundoTiempoMs != null) {
+                    "Cierre automático: no se registró el final tras ${ReglasPartido.ADICION_MAX} min de tiempo añadido"
+                } else {
+                    "Cierre automático: el partido quedó abandonado sin iniciar el 2.º tiempo"
+                },
             ),
             excedeCambios = false,
         )
@@ -584,8 +586,6 @@ class RegistroPartidoViewModel @Inject constructor(
         currentState.catalogo.firstOrNull { it.id == id } ?: checkNotNull(CatalogoBase.porId(id))
 
     private companion object {
-        /** Minutos de espera tras agotarse el tiempo añadido antes de que otro usuario cierre el partido. */
-        const val MARGEN_ABANDONO_MIN = 30L
 
         val EVENTOS_CONTROL_TIEMPO = setOf(
             TiposEvento.INICIO_PARTIDO,

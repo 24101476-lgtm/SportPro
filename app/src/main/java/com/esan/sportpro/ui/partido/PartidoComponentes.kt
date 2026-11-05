@@ -682,7 +682,9 @@ fun textoReloj(
         "Final"
 
     partido.enDescanso ->
-        if (reloj.segundosDescanso > 0) {
+        if (reloj.descansoExcedido) {
+            "Descanso ${formatearCronometro(reloj.segundosDescanso)}+"
+        } else if (reloj.segundosDescanso > 0) {
             "Descanso ${formatearCronometro(reloj.segundosDescanso)}"
         } else {
             "Descanso"

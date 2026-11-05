@@ -174,6 +174,12 @@ object ReglasPartido {
     /** Minutos máximos de tiempo añadido que se cuentan al final de cada tiempo. */
     const val ADICION_MAX = 15
 
+    /** Duración máxima que muestra el reloj del descanso; pasado este tiempo se indica que se excedió. */
+    const val DESCANSO_MAX_MIN = 30
+
+    /** Margen tras el final previsible antes de considerar que un partido quedó abandonado. */
+    const val MARGEN_ABANDONO_MIN = 30
+
     /** Estado del reloj del partido calculado a partir de las marcas de tiempo del servidor. */
     data class Reloj(
         /** Segundos de juego acumulados (el 2.º tiempo empieza en duración × 60). */
@@ -182,12 +188,14 @@ object ReglasPartido {
         val minuto: Int,
         /** Minutos de tiempo añadido del tiempo en curso (0 si no aplica). */
         val adicion: Int,
-        /** true cuando el 2.º tiempo agotó el tiempo añadido máximo: se cierra automáticamente. */
+        /** true cuando el 2.º tiempo agotó el tiempo añadido máximo o el partido quedó abandonado: se cierra automáticamente. */
         val tiempoCumplido: Boolean,
         /** Avance del partido entre 0 y 1, para la barra de progreso. */
         val progreso: Float,
-        /** Segundos transcurridos en el descanso (0 si no hay descanso en curso). */
+        /** Segundos transcurridos en el descanso, hasta [DESCANSO_MAX_MIN] (0 si no hay descanso en curso). */
         val segundosDescanso: Long = 0,
+        /** true cuando el descanso superó [DESCANSO_MAX_MIN] y el operador aún no reanuda el partido. */
+        val descansoExcedido: Boolean = false,
     ) {
         /** true cuando ya pasó la duración reglamentaria del tiempo en curso. */
         val enTiempoAnadido: Boolean get() = adicion > 0
@@ -198,8 +206,9 @@ object ReglasPartido {
      * cronómetro sigue avanzando aunque la app esté en segundo plano o se haya cerrado.
      * - Cada tiempo corre hasta su duración (45' / 90') y luego cuenta tiempo añadido.
      *   Lo termina el operador con "Fin de primer tiempo" / "Fin de partido", como el árbitro.
-     * - Descanso: el reloj de juego se detiene y se muestra cuánto lleva el descanso.
+     * - Descanso: el reloj de juego se detiene y se muestra cuánto lleva, hasta [DESCANSO_MAX_MIN].
      * - Si nadie registra el final, el 2.º tiempo se cierra solo al agotar [ADICION_MAX].
+     * - Un partido que nunca pasó al 2.º tiempo se cierra solo según [partidoAbandonado].
      */
     fun reloj(partido: Partido, ahoraMs: Long): Reloj {
         val dur = partido.duracionTiempoMin.coerceAtLeast(1)
@@ -210,14 +219,19 @@ object ReglasPartido {
         return when {
             partido.estado == EstadoPartido.PROGRAMADO || inicio1 == null -> Reloj(0, 0, 0, false, 0f)
             partido.estado != EstadoPartido.EN_CURSO -> Reloj(total, 2 * dur, 0, true, 1f)
-            partido.enDescanso -> Reloj(
-                segundosJuego = durSeg,
-                minuto = dur,
-                adicion = 0,
-                tiempoCumplido = false,
-                progreso = 0.5f,
-                segundosDescanso = partido.finPrimerTiempoMs?.let { segundosEntre(it, ahoraMs) } ?: 0,
-            )
+            partido.enDescanso -> {
+                val descanso = partido.finPrimerTiempoMs?.let { segundosEntre(it, ahoraMs) } ?: 0
+                val maxDescanso = DESCANSO_MAX_MIN * 60L
+                Reloj(
+                    segundosJuego = durSeg,
+                    minuto = dur,
+                    adicion = 0,
+                    tiempoCumplido = partidoAbandonado(partido, ahoraMs),
+                    progreso = 0.5f,
+                    segundosDescanso = descanso.coerceAtMost(maxDescanso),
+                    descansoExcedido = descanso > maxDescanso,
+                )
+            }
             partido.inicioSegundoTiempoMs != null -> {
                 val seg = segundosEntre(partido.inicioSegundoTiempoMs, ahoraMs).coerceAtMost(durSeg + maxAdicion)
                 val juego = durSeg + seg
@@ -235,10 +249,28 @@ object ReglasPartido {
                     segundosJuego = seg,
                     minuto = (seg / 60).toInt(),
                     adicion = if (seg > durSeg) ((seg - durSeg) / 60).toInt() else 0,
-                    tiempoCumplido = false,
+                    tiempoCumplido = partidoAbandonado(partido, ahoraMs),
                     progreso = (seg.coerceAtMost(durSeg).toFloat() / total).coerceIn(0f, 0.5f),
                 )
             }
+        }
+    }
+
+    /**
+     * true si un partido en curso ya no puede seguir jugándose. Con 2.º tiempo iniciado se mide desde
+     * ese inicio; sin él, desde el inicio del partido, dejando tiempo para jugarlo completo con
+     * descanso y tiempo añadido. Así no se cierra un partido real en el que olvidaron marcar el descanso.
+     */
+    fun partidoAbandonado(partido: Partido, ahoraMs: Long): Boolean {
+        if (partido.estado != EstadoPartido.EN_CURSO) return false
+        val dur = partido.duracionTiempoMin.coerceAtLeast(1).toLong()
+        val inicio2 = partido.inicioSegundoTiempoMs
+        val inicio1 = partido.inicioPrimerTiempoMs
+        return when {
+            inicio2 != null -> ahoraMs - inicio2 > (2 * dur + ADICION_MAX + MARGEN_ABANDONO_MIN) * 60_000L
+            inicio1 != null ->
+                ahoraMs - inicio1 > (2 * dur + 2 * ADICION_MAX + DESCANSO_MAX_MIN + MARGEN_ABANDONO_MIN) * 60_000L
+            else -> false
         }
     }
 

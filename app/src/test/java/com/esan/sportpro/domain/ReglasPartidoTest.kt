@@ -124,6 +124,54 @@ class ReglasPartidoTest {
         assertFalse(reloj.tiempoCumplido)
     }
 
+    // ------------------------------------------------------------ Descanso y partidos abandonados
+
+    private fun enDescanso(finPrimerTiempoMs: Long = 45 * 60_000L) =
+        partido().copy(enDescanso = true, finPrimerTiempoMs = finPrimerTiempoMs)
+
+    @Test
+    fun descanso_normalMuestraLosSegundosTranscurridos() {
+        val reloj = ReglasPartido.reloj(enDescanso(), (45 + 10) * 60_000L)
+        assertEquals(10 * 60L, reloj.segundosDescanso)
+        assertFalse(reloj.descansoExcedido)
+        assertFalse(reloj.tiempoCumplido)
+    }
+
+    @Test
+    fun descanso_noMuestraMasQueElMaximoAunqueSigaAbierto() {
+        val reloj = ReglasPartido.reloj(enDescanso(), (45 + 90) * 60_000L)
+        assertEquals(ReglasPartido.DESCANSO_MAX_MIN * 60L, reloj.segundosDescanso)
+        assertTrue(reloj.descansoExcedido)
+        assertFalse(reloj.tiempoCumplido)
+    }
+
+    @Test
+    fun descanso_abandonadoHorasDespues_seCierraSolo() {
+        val reloj = ReglasPartido.reloj(enDescanso(), 18 * 60 * 60_000L)
+        assertTrue(ReglasPartido.partidoAbandonado(enDescanso(), 18 * 60 * 60_000L))
+        assertTrue(reloj.tiempoCumplido)
+    }
+
+    @Test
+    fun primerTiempo_sinMarcarDescanso_noSeCierraMientrasPuedaSeguirJugandose() {
+        assertFalse(ReglasPartido.partidoAbandonado(partido(), 150 * 60_000L))
+        assertTrue(ReglasPartido.partidoAbandonado(partido(), 181 * 60_000L))
+        assertTrue(ReglasPartido.reloj(partido(), 181 * 60_000L).tiempoCumplido)
+    }
+
+    @Test
+    fun segundoTiempo_abandonadoSeMideDesdeSuInicio() {
+        val inicio2 = 60 * 60_000L
+        assertFalse(ReglasPartido.partidoAbandonado(partido(inicio2), inicio2 + 135 * 60_000L))
+        assertTrue(ReglasPartido.partidoAbandonado(partido(inicio2), inicio2 + 136 * 60_000L))
+    }
+
+    @Test
+    fun partidoFinalizado_nuncaSeConsideraAbandonado() {
+        val finalizado = partido().copy(estado = EstadoPartido.FINALIZADO)
+        assertFalse(ReglasPartido.partidoAbandonado(finalizado, 18 * 60 * 60_000L))
+    }
+
     // ------------------------------------------------------------ Tiempo añadido del 1.er tiempo
 
     /** Caso real: el 1.er tiempo terminó en 45+15' (minuto 60) y el 2.º empezó en 45'. */

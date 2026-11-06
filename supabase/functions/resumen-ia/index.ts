@@ -17,15 +17,40 @@ import { createRemoteJWKSet, jwtVerify } from "npm:jose@5";
 
 const FIREBASE_PROJECT_ID = "sportpro-198a4";
 const VERSION_PROMPT = "v1";
-const MODELO = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
-const URL_GEMINI = `https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`;
+// Modelos por orden de preferencia. Los más nuevos suelen saturarse (503 "high demand"), así que
+// cada intento pasa al siguiente de la lista. gemini-2.5-flash ya no está disponible para cuentas
+// nuevas. Se pueden cambiar sin tocar el código: GEMINI_MODELOS="a,b,c" fija toda la lista y
+// GEMINI_MODEL fija solo el preferido (el resto queda como respaldo).
+const MODELOS_POR_DEFECTO = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+const NOMBRE_DE_MODELO = /^[A-Za-z0-9._-]+$/;
+
+// Acepta el nombre con o sin el prefijo "models/" que muestra la API de Google.
+const limpiarModelo = (m: string) => m.trim().replace(/^models\//, "");
+
+function listaDeModelos(): string[] {
+  const configurados = (Deno.env.get("GEMINI_MODELOS") ?? "")
+    .split(",")
+    .map(limpiarModelo)
+    .filter((m) => NOMBRE_DE_MODELO.test(m));
+  if (configurados.length > 0) return configurados;
+  const preferido = limpiarModelo(Deno.env.get("GEMINI_MODEL") ?? "");
+  return NOMBRE_DE_MODELO.test(preferido)
+    ? [preferido, ...MODELOS_POR_DEFECTO.filter((m) => m !== preferido)]
+    : MODELOS_POR_DEFECTO;
+}
+
+const urlGemini = (modelo: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
 
 const MIN_EVENTOS = 3;
 const MAX_EVENTOS = 400;
 const MAX_JUGADORES = 60;
 const MAX_OBSERVACION = 140;
 const MAX_PALABRAS = 400;
-const TIEMPO_INTENTO_MS = 12_000; // dos intentos caben en los 30 s que espera la app
+const MAX_INTENTOS = 3;
+const TIEMPO_INTENTO_MS = 10_000;
+const PRESUPUESTO_MS = 26_000; // la app espera 30 s en total; incluye las lecturas de Firestore
+const MARGEN_MINIMO_MS = 3_000; // con menos tiempo que esto no se lanza otro intento
 const INTERVALO_MINIMO_MS = 15_000;
 
 const ALIAS = /^(J\d{2}|JX\d+|RIVAL|NO_IDENTIFICADO)$/;
@@ -205,8 +230,8 @@ function validarResumen(crudo: any): Resumen | null {
   return { hechos, desarrollo, advertencias };
 }
 
-async function pedirAGemini(datos: string, clave: string): Promise<Resumen | null> {
-  const respuesta = await fetch(URL_GEMINI, {
+async function pedirAGemini(datos: string, clave: string, modelo: string, limiteMs: number): Promise<Resumen | null> {
+  const respuesta = await fetch(urlGemini(modelo), {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": clave },
     body: JSON.stringify({
@@ -219,7 +244,7 @@ async function pedirAGemini(datos: string, clave: string): Promise<Resumen | nul
         responseSchema: ESQUEMA,
       },
     }),
-    signal: AbortSignal.timeout(TIEMPO_INTENTO_MS),
+    signal: AbortSignal.timeout(limiteMs),
   });
   if (!respuesta.ok) throw new Error(`Gemini respondió ${respuesta.status}`);
   const cuerpo = await respuesta.json();
@@ -239,6 +264,7 @@ async function pedirAGemini(datos: string, clave: string): Promise<Resumen | nul
 const ultimaPorUsuario = new Map<string, number>();
 
 async function generar(req: Request, uid: string, token: string): Promise<Response> {
+  const inicio = Date.now();
   // deno-lint-ignore no-explicit-any
   let cuerpo: any;
   try {
@@ -284,22 +310,30 @@ async function generar(req: Request, uid: string, token: string): Promise<Respon
 
   // El insumo es JSON: se escapa "<" para que ninguna observación pueda cerrar la etiqueta de datos.
   const datos = JSON.stringify(insumo).replaceAll("<", "\\u003c");
-  for (let intento = 1; intento <= 2; intento++) {
+  // Cada intento usa el siguiente modelo de la lista; si la lista es más corta, repite el último.
+  const modelos = listaDeModelos();
+  let huboTiempoAgotado = false;
+  for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    const modelo = modelos[Math.min(intento - 1, modelos.length - 1)];
+    const restante = PRESUPUESTO_MS - (Date.now() - inicio);
+    if (restante < MARGEN_MINIMO_MS) break;
     try {
-      const resumen = await pedirAGemini(datos, clave);
+      const resumen = await pedirAGemini(datos, clave, modelo, Math.min(TIEMPO_INTENTO_MS, restante));
       if (resumen) {
-        console.log(`Resumen generado: partido=${partidoId} eventos=${insumo.eventos.length} intento=${intento}`);
-        return responder(200, { modelo: MODELO, versionPrompt: VERSION_PROMPT, ...resumen });
+        console.log(
+          `Resumen generado: partido=${partidoId} eventos=${insumo.eventos.length} intento=${intento} modelo=${modelo}`,
+        );
+        return responder(200, { modelo, versionPrompt: VERSION_PROMPT, ...resumen });
       }
-      console.warn(`Respuesta no válida del proveedor: partido=${partidoId} intento=${intento}`);
+      console.warn(`Respuesta no válida del proveedor: partido=${partidoId} intento=${intento} modelo=${modelo}`);
     } catch (error) {
-      console.error(`Error del proveedor: partido=${partidoId} intento=${intento}`, (error as Error).message);
-      if ((error as Error).name === "TimeoutError" && intento === 2) {
-        return responder(504, { error: "El proveedor tardó demasiado" });
-      }
+      if ((error as Error).name === "TimeoutError") huboTiempoAgotado = true;
+      console.error(`Error del proveedor: partido=${partidoId} intento=${intento} modelo=${modelo}`, (error as Error).message);
     }
   }
-  return responder(502, { error: "No se pudo generar el resumen" });
+  return huboTiempoAgotado
+    ? responder(504, { error: "El proveedor tardó demasiado" })
+    : responder(502, { error: "No se pudo generar el resumen" });
 }
 
 Deno.serve(async (req) => {

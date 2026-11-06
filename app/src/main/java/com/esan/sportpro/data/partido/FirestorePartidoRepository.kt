@@ -105,9 +105,35 @@ class FirestorePartidoRepository @Inject constructor(
     override val uidActual: String?
         get() = auth.currentUser?.uid
 
+    // La app no guarda displayName en Firebase Auth: el nombre real está en `usuarios/{uid}`. Se deja
+    // en memoria porque las escrituras de este repositorio no esperan a la red (ver cabecera).
+    @Volatile
+    private var nombrePerfil: Pair<String, String>? = null
+
+    init {
+        auth.addAuthStateListener { sesion ->
+            nombrePerfil = null
+            sesion.currentUser?.uid?.let(::cargarNombrePerfil)
+        }
+    }
+
+    private fun cargarNombrePerfil(uid: String) {
+        firestore.collection(COL_USUARIOS).document(uid).get()
+            .addOnSuccessListener { doc ->
+                val nombre = listOfNotNull(doc.getString("nombres"), doc.getString("apellidos"))
+                    .joinToString(" ")
+                    .trim()
+                if (nombre.isNotEmpty() && auth.currentUser?.uid == uid) nombrePerfil = uid to nombre
+            }
+    }
+
     private val nombreActual: String?
-        get() = auth.currentUser?.let {
-            it.displayName ?: it.email
+        get() {
+            val usuario = auth.currentUser ?: return null
+            nombrePerfil?.takeIf { it.first == usuario.uid }?.let { return it.second }
+            // Recién registrado el perfil aún podía no existir: se reintenta para la próxima escritura.
+            cargarNombrePerfil(usuario.uid)
+            return usuario.displayName?.takeIf { it.isNotBlank() } ?: usuario.email
         }
 
     // ---------------------------------------------------------------- Errores de escritura

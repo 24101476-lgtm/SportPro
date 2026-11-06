@@ -331,6 +331,8 @@ async function generar(req: Request, uid: string, token: string): Promise<Respon
       console.error(`Error del proveedor: partido=${partidoId} intento=${intento} modelo=${modelo}`, (error as Error).message);
     }
   }
+  // Si no se generó nada, "Reintentar" no debe chocar con el límite de 15 s entre generaciones.
+  ultimaPorUsuario.delete(uid);
   return huboTiempoAgotado
     ? responder(504, { error: "El proveedor tardó demasiado" })
     : responder(502, { error: "No se pudo generar el resumen" });

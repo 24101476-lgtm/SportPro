@@ -39,8 +39,11 @@ class SupabaseGeneradorResumen @Inject constructor(
     private val auth: FirebaseAuth,
 ) : GeneradorResumen {
 
+    // readTimeout también se fija: su valor por defecto (10 s) cortaba la llamada mucho antes de los
+    // 30 s, justo cuando la función estaba probando los modelos de respaldo.
     private val cliente = OkHttpClient.Builder()
         .callTimeout(TIEMPO_MAXIMO_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(TIEMPO_MAXIMO_MS, TimeUnit.MILLISECONDS)
         .build()
 
     override suspend fun generar(partidoId: String, insumo: InsumoResumen): SalidaIa = try {

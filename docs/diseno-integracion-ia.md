@@ -205,12 +205,13 @@ Flujo: `ResumenIaScreen` → `ResumenIaViewModel` → `ConstructorInsumo` → `S
 | 7. Dato no verificado | `ReglasResumen.verificar` compara alias, minutos, marcadores parciales, nombres propios y citas de eventos; `segmentar` resalta cada mención en pantalla |
 | 8. Menos de 3 eventos | `MOTIVO_POCOS_EVENTOS`; no se llama al proveedor (ni desde la app ni desde la función) |
 | 9. Sin clave en el cliente | El secreto `GEMINI_API_KEY` solo existe en Supabase |
-| 10. Fallo o más de 30 s | `OkHttp` con 30 s de tope; mensaje "No se pudo generar el resumen. Inténtalo nuevamente" con Reintentar; los eventos no se tocan |
+| 10. Fallo o más de 30 s | `OkHttp` con 30 s de tope. La función hace hasta 3 intentos, cada uno con el siguiente modelo de la lista, dentro de un presupuesto de 26 s. Si todos fallan, la app muestra "No se pudo generar el resumen. Inténtalo nuevamente" con Reintentar; los eventos no se tocan |
 | 11. Versión guardada | `partidos/{id}/resumenes`: modelo, versión del prompt, `solicitadoPor`, `creadoEn`, texto, menciones y eventos usados |
 
 **Verificación de la salida.** Alias fuera de la alineación, minutos sin evento (con `45+3'` se suma), marcadores que nunca ocurrieron (se aceptan los parciales por los que pasó el partido), nombres propios que no son equipo, categoría ni tipo de evento, y hechos sin cita de un evento real. Es una barrera automática, no una garantía: por eso US-024 exige corregir cada mención marcada antes de aprobar.
 
 **Límites conocidos.**
+- Los modelos de Gemini cambian y se saturan (los más nuevos devolvieron 503 "high demand" en las pruebas; `gemini-2.5-flash` ya no está disponible para cuentas nuevas). Por eso la función usa una lista con respaldo (`GEMINI_MODELOS`) y guarda el modelo que respondió. Un modelo nuevo puede comportarse distinto con la salida JSON con esquema: ante un 400, revisar los logs.
 - El tope de frecuencia es en memoria de la instancia (un intento cada 15 s por usuario); no hay tope diario por academia.
 - Un cliente modificado podría escribir un borrador falso directamente en Firestore; las reglas solo comprueban rol, acta cerrada y estado BORRADOR. El texto sigue sin ser visible para jugadores y padres hasta que US-024 lo apruebe.
 - Los nombres de pila se reponen en el teléfono del entrenador: el proveedor nunca los recibe.

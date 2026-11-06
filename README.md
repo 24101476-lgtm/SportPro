@@ -40,11 +40,17 @@ y nunca está en la app ni en Git. Para desplegarla (una vez, con la CLI de Supa
 
 ```bash
 supabase secrets set GEMINI_API_KEY=<clave de Google AI Studio> --project-ref ghowgsannwmpuwncwrcc
-supabase functions deploy resumen-ia --project-ref ghowgsannwmpuwncwrcc
+supabase functions deploy resumen-ia --project-ref ghowgsannwmpuwncwrcc --no-verify-jwt
 ```
 
-Opcional: `supabase secrets set GEMINI_MODEL=<modelo>` para cambiar de modelo sin tocar el código
-(por defecto `gemini-2.5-flash`). El modelo usado queda guardado en cada versión del resumen.
+Guardar el secreto exige ser Owner o Administrator del proyecto de Supabase (con el rol Developer falla).
+
+Modelos: la función prueba hasta tres, en orden, y cada intento pasa al siguiente si el anterior
+responde 503 o falla. Por defecto `gemini-3.5-flash`, `gemini-3.6-flash` y `gemini-3.5-flash-lite`
+(los modelos más nuevos suelen saturarse). Se pueden cambiar sin tocar el código con
+`supabase secrets set GEMINI_MODELOS=a,b,c` o fijar solo el preferido con `GEMINI_MODEL=<modelo>`.
+El modelo que realmente respondió queda guardado en cada versión del resumen.
+Pasos de validación para el equipo: [`docs/guia-validacion-us021-us022-us023.md`](docs/guia-validacion-us021-us022-us023.md).
 
 Si necesitas acceso de administrador a la consola de Firebase, pídele al dueño del proyecto
 que te agregue en **Configuración del proyecto → Usuarios y permisos**.

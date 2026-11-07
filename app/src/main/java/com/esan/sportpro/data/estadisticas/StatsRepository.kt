@@ -126,7 +126,7 @@ class StatsRepository @Inject constructor(
         if (partidos.isEmpty()) return emptyList()
         val partidoIds = partidos.map { it.id }
         val eventos = eventosVigentesDe(partidoIds)
-        val nombresPorJugador = nombresDeJugadores(equipoId)
+        val (nombresPorJugador, fotosPorJugador) = datosDePlantel(equipoId)
         val asistenciaPorJugador = asistenciaPorJugador(equipoId, filtro)
 
         val eventosPorJugador = eventos.groupBy { it.jugadorId }
@@ -141,7 +141,7 @@ class StatsRepository @Inject constructor(
                 eventos = eventosPorJugador[jugadorId].orEmpty(),
                 partidosDelJugador = eventosPorJugador[jugadorId].orEmpty().map { it.partidoId }.distinct().size,
                 porcentajeAsistencia = asistenciaPorJugador[jugadorId] ?: 0.0,
-            )
+            ).copy(fotoUrl = fotosPorJugador[jugadorId].orEmpty())
         }
 
         val sinAsignar = eventosPorJugador[null].orEmpty()
@@ -302,16 +302,21 @@ class StatsRepository @Inject constructor(
      * Nombres de los jugadores. `jugadores` solo lo puede leer el personal de la academia, así que
      * para jugadores y padres se usan los nombres copiados en los convocados de cada partido.
      */
-    private suspend fun nombresDeJugadores(equipoId: String): Map<String, String> {
-        val delPlantel = runCatching {
+    private suspend fun datosDePlantel(equipoId: String): Pair<Map<String, String>, Map<String, String>> {
+        val docs = runCatching {
             firestore.collection("jugadores")
                 .whereEqualTo("equipoId", equipoId)
                 .get()
                 .await()
                 .documents
-                .associate { it.id to (it.getString("nombre") ?: "Jugador sin nombre") }
-        }.getOrDefault(emptyMap())
-        return nombresConvocados + delPlantel
+        }.getOrDefault(emptyList())
+        val nombres = docs.associate { doc ->
+            val nombre = doc.getString("nombre")
+                ?: "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
+            doc.id to nombre.ifBlank { "Jugador sin nombre" }
+        }
+        val fotos = docs.mapNotNull { doc -> doc.getString("fotoUrl")?.takeIf { it.isNotBlank() }?.let { doc.id to it } }.toMap()
+        return (nombresConvocados + nombres) to fotos
     }
 
     /** Nombres leídos de `partidos/{id}/convocados` en la última consulta de eventos. */

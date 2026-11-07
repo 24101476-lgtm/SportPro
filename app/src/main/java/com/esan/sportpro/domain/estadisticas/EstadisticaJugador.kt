@@ -20,4 +20,6 @@ data class EstadisticaJugador(
     /** Porcentaje 0..100. */
     val porcentajeAsistenciaEntrenamientos: Double = 0.0,
     val sinAsignar: Boolean = false,
+    /** Foto del perfil (Supabase); vacía si no tiene o si el rol no puede leer la ficha. */
+    val fotoUrl: String = "",
 )

@@ -219,9 +219,14 @@ service cloud.firestore {
 
     // US-008 (simulado, sin cobros reales): todos leen su información; solo el administrador
     // registra o anula pagos.
+    // Al crear, el jugador debe existir y ser de la misma academia del administrador.
     match /mensualidades/{id} {
       allow read: if autenticado();
-      allow create, update: if esAdmin();
+      allow create: if esAdmin()
+        && request.resource.data.academiaId == academiaPropia()
+        && exists(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId))
+        && get(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId)).data.academiaId == academiaPropia();
+      allow update: if esAdmin();
       allow delete: if false;
     }
 

@@ -1,6 +1,7 @@
 package com.esan.sportpro.ui.mensualidades
 
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.ListItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -66,19 +72,11 @@ fun MensualidadRegistrarScreen(
         ) {
             RegistroSimuladoLegend()
 
-            OutlinedTextField(
-                value = state.jugadorNombre,
-                onValueChange = { viewModel.onJugadorSeleccionado(state.jugadorId, it, state.equipoId, state.equipoNombre) },
-                label = { Text("Jugador") },
-                supportingText = { Text("TODO: selector real una vez integrado con el módulo Jugadores") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedTextField(
-                value = state.equipoNombre,
-                onValueChange = { viewModel.onJugadorSeleccionado(state.jugadorId, state.jugadorNombre, state.equipoId, it) },
-                label = { Text("Equipo") },
-                modifier = Modifier.fillMaxWidth(),
+            SelectorJugador(
+                state = state,
+                onBusqueda = viewModel::onBusquedaJugadorChanged,
+                onElegir = viewModel::onJugadorElegido,
+                onQuitar = viewModel::onJugadorQuitado,
             )
 
             OutlinedTextField(
@@ -149,5 +147,64 @@ fun MensualidadRegistrarScreen(
                 }
             }
         }
+    }
+}
+
+/** Busca entre los jugadores activos de la academia; no admite nombres que no estén inscritos. */
+@Composable
+private fun SelectorJugador(
+    state: MensualidadRegistrarUiState,
+    onBusqueda: (String) -> Unit,
+    onElegir: (com.esan.sportpro.domain.jugadores.Jugador) -> Unit,
+    onQuitar: () -> Unit,
+) {
+    if (state.jugadorId.isNotBlank()) {
+        Text("Jugador", style = MaterialTheme.typography.labelLarge)
+        InputChip(
+            selected = true,
+            onClick = onQuitar,
+            label = {
+                Text(
+                    if (state.equipoNombre.isBlank()) state.jugadorNombre
+                    else "${state.jugadorNombre} · ${state.equipoNombre}",
+                )
+            },
+            trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Quitar jugador") },
+        )
+        return
+    }
+
+    OutlinedTextField(
+        value = state.busquedaJugador,
+        onValueChange = onBusqueda,
+        label = { Text("Buscar jugador inscrito") },
+        supportingText = {
+            Text(
+                when {
+                    state.cargandoJugadores -> "Cargando jugadores…"
+                    state.jugadoresDisponibles.isEmpty() -> "No hay jugadores activos registrados en la academia"
+                    else -> "Elige un jugador de la lista"
+                },
+            )
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    val consulta = state.busquedaJugador.trim()
+    val coincidencias = state.jugadoresDisponibles
+        .filter { consulta.isBlank() || it.nombreCompleto.contains(consulta, ignoreCase = true) }
+        .take(6)
+    if (!state.cargandoJugadores && coincidencias.isEmpty() && consulta.isNotBlank()) {
+        Text(
+            "No hay ningún jugador inscrito con ese nombre",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    coincidencias.forEach { jugador ->
+        ListItem(
+            headlineContent = { Text(jugador.nombreCompleto) },
+            supportingContent = { if (jugador.equipoNombre.isNotBlank()) Text(jugador.equipoNombre) },
+            modifier = Modifier.clickable { onElegir(jugador) },
+        )
     }
 }

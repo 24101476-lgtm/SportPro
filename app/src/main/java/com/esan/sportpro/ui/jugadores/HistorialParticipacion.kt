@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -62,8 +63,9 @@ import kotlin.math.roundToInt
  * 56_Historial_Filtros y 57_Historial_Vacio). La usan el detalle del jugador (entrenador y
  * administrador) y "Mis hijos" (padre). Quién puede abrirla lo decide [ReglasHistorial.puedeVer].
  *
- * Los filtros viven en la pantalla (sobreviven a la rotación) y todo se calcula sobre las sesiones
- * que el módulo ya observa, así que también funciona sin conexión con la caché de Firestore.
+ * Los filtros viven en la pantalla (sobreviven a la rotación). Los entrenamientos se calculan sobre
+ * las sesiones que el módulo ya observa; los partidos terminados llegan en [partidos]
+ * (`ParticipacionPartidosRepository`).
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +73,8 @@ fun HistorialParticipacion(
     jugador: Jugador,
     entrenamientos: List<Entrenamiento>,
     modifier: Modifier = Modifier,
+    partidos: List<RegistroParticipacion> = emptyList(),
+    cargandoPartidos: Boolean = false,
     hoy: LocalDate = FechasSportPro.hoy(),
 ) {
     var desdeIso by rememberSaveable(jugador.id) { mutableStateOf("") }
@@ -85,8 +89,8 @@ fun HistorialParticipacion(
     )
     val errorFiltro = ReglasHistorial.validarFiltro(filtro)
 
-    val todos = remember(jugador.id, entrenamientos) {
-        ReglasHistorial.ordenar(ReglasHistorial.desdeEntrenamientos(jugador.id, entrenamientos))
+    val todos = remember(jugador.id, entrenamientos, partidos) {
+        ReglasHistorial.ordenar(ReglasHistorial.desdeEntrenamientos(jugador.id, entrenamientos) + partidos)
     }
     val filtrados = if (errorFiltro != null) emptyList() else ReglasHistorial.filtrar(todos, filtro)
     val resumen = ReglasHistorial.resumen(filtrados)
@@ -162,13 +166,16 @@ fun HistorialParticipacion(
 
         item { TituloSeccion("Sesiones (${filtrados.size})") }
 
-        if (tipo == TipoActividad.PARTIDO) {
+        if (cargandoPartidos && tipo != TipoActividad.ENTRENAMIENTO) {
             item {
-                Text(
-                    "La participación en partidos se mostrará cuando las convocatorias registren qué jugadores jugaron.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        "Cargando partidos…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -291,11 +298,18 @@ private fun FilaRegistro(registro: RegistroParticipacion) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (registro.descripcion.isNotBlank()) {
-                    Text(registro.descripcion, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    Text(registro.descripcion, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
                 ChipEstado(registro.estado.etiqueta, registro.estado.tono())
+                registro.minutosJugados?.takeIf { it > 0 }?.let {
+                    Text(
+                        "$it min jugados",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 registro.minutosRetraso?.let {
                     Text(
                         "$it min de retraso",

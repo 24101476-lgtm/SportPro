@@ -144,7 +144,13 @@ fun MisHijosScreen(
                     if (jugador == null || !state.puedeVerHistorial(jugador)) {
                         EmptyStateMessage("No tienes acceso al historial de este jugador.", contenido)
                     } else {
-                        HistorialParticipacion(jugador = jugador, entrenamientos = state.entrenamientos, modifier = contenido)
+                        HistorialParticipacion(
+                            jugador = jugador,
+                            entrenamientos = state.entrenamientos,
+                            partidos = state.historialPartidos,
+                            cargandoPartidos = state.cargandoPartidos,
+                            modifier = contenido,
+                        )
                     }
                 }
             }

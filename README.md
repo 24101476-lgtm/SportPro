@@ -101,7 +101,7 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Entrenamientos: biblioteca de ejercicios | US-009 | Implementado (ficha completa, buscador con filtros, permisos por autor, desactivación) |
 | Entrenamientos: registro de asistencia (sin conexión, historial de cambios, cierre con % del equipo) | US-011 | Implementado |
 | Entrenamientos: planificación de sesiones (duración, solapamiento, reordenar, duplicar, cancelar) | US-010 | Implementado (notificación push pendiente de US-027) |
-| Entrenamientos: historial de participación del jugador (resumen, filtros, gráfico de 6 meses) | US-012 | Implementado para entrenador, administrador y padre (vista del jugador y filtro de partidos pendientes del enlace cuenta↔ficha y de las convocatorias) |
+| Entrenamientos: historial de participación del jugador (resumen, filtros, gráfico de 6 meses, entrenamientos y partidos) | US-012 | Implementado para entrenador, administrador y padre; los partidos salen de la alineación final, las respuestas a la convocatoria y los minutos del acta (vista del propio jugador pendiente del enlace cuenta↔ficha) |
 | Partido en vivo, eventos y correcciones | — | Implementado (ver `docs/diseno-tecnico-partido-en-vivo.md`) |
 | Partido: cierre y acta final (resumen con minutos jugados, reapertura del administrador en 48 h con auditoría, compartir como texto) | US-022 | Implementado; hay que republicar `firestore.rules` |
 | Partido: seguimiento en tiempo real para jugador y padre (cronología, alineación, estadísticas, animaciones, aviso sin conexión) | US-021 | Implementado; republicar `firestore.rules`. El jugador necesita el enlace cuenta↔ficha (`usuarioUid`), todavía pendiente |

@@ -35,9 +35,14 @@ data class MensualidadesGrillaUiState(
      */
     val rolActual: UserRole = UserRole.ADMINISTRADOR,
     val mensualidades: List<MensualidadConEstadoEfectivo> = emptyList(),
+    /** Equipos con jugadores activos, para el filtro por equipo de la grilla. */
+    val equiposDisponibles: List<EquipoOpcion> = emptyList(),
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
 )
+
+/** Opción del filtro por equipo. */
+data class EquipoOpcion(val id: String, val nombre: String)
 
 /** Mensualidad + su estado efectivo ya resuelto (Vencido calculado, nunca persistido). */
 data class MensualidadConEstadoEfectivo(
@@ -95,6 +100,17 @@ class MensualidadesGrillaViewModel @Inject constructor(
                 ),
             ) { jugadores, pagos ->
                 val pagoPorJugador = pagos.associateBy { it.jugadorId }
+                val equipos = jugadores.filter { it.activo && it.equipoId.isNotBlank() }
+                    .map { EquipoOpcion(it.equipoId, it.equipoNombre.ifBlank { "Equipo" }) }
+                    .distinctBy { it.id }
+                    .sortedBy { it.nombre.lowercase() }
+                setState {
+                    // Si el equipo filtrado ya no existe, se vuelve a "Todos".
+                    copy(
+                        equiposDisponibles = equipos,
+                        equipoFiltro = equipoFiltro?.takeIf { f -> equipos.any { it.id == f } },
+                    )
+                }
                 val deJugadoresActivos = jugadores.filter { it.activo }.map { jugador ->
                     val pago = pagoPorJugador[jugador.id]
                     if (pago != null) {

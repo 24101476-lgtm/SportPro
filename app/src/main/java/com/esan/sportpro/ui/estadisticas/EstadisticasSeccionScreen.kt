@@ -34,6 +34,7 @@ fun EstadisticasSeccionScreen(modifier: Modifier = Modifier) {
         is EstadisticasDestino.Equipo -> EstadisticasEquipoScreen(
             onVerJugadores = { destino = EstadisticasDestino.Jugadores },
             onAbrirFiltros = { destino = EstadisticasDestino.Filtros },
+            onSeleccionarJugador = { jugador -> destino = EstadisticasDestino.JugadorDetalle(jugador.jugadorId) },
             modifier = modifier,
             viewModel = viewModel,
         )
@@ -55,6 +56,8 @@ fun EstadisticasSeccionScreen(modifier: Modifier = Modifier) {
             if (jugador != null) {
                 EstadisticasJugadorDetalleScreen(
                     jugador = jugador,
+                    esDestacado = com.esan.sportpro.domain.estadisticas.RankingsJugadores
+                        .destacado(state.jugadores)?.jugadorId == jugador.jugadorId,
                     onVolver = { destino = EstadisticasDestino.Jugadores },
                     modifier = modifier,
                 )

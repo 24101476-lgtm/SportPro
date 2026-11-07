@@ -39,6 +39,7 @@ import com.esan.sportpro.ui.common.TarjetaSportPro
 fun EstadisticasEquipoScreen(
     onVerJugadores: () -> Unit,
     onAbrirFiltros: () -> Unit,
+    onSeleccionarJugador: (com.esan.sportpro.domain.estadisticas.EstadisticaJugador) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: EstadisticasViewModel = hiltViewModel(),
 ) {
@@ -126,6 +127,7 @@ fun EstadisticasEquipoScreen(
                             }
                         }
                     }
+                    item { SeccionRankingsEquipo(state.jugadores, onSeleccionarJugador) }
                     item {
                         TarjetaSportPro(onClick = onVerJugadores) {
                             Row(

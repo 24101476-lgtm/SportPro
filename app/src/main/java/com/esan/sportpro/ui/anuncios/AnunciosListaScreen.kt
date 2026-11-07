@@ -1,5 +1,22 @@
 package com.esan.sportpro.ui.anuncios
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.esan.sportpro.core.fecha.FechasSportPro
+import com.esan.sportpro.domain.anuncios.PrioridadAnuncio
+import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.TonoEstado
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -118,44 +135,60 @@ fun AnunciosListaScreen(
 
 @Composable
 private fun AnuncioListaItem(anuncio: Anuncio, onClick: () -> Unit) {
+    val acento = anuncio.prioridad.colorAcento()
+    val urgente = anuncio.prioridad == PrioridadAnuncio.URGENTE
     TarjetaSportPro(onClick = onClick) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // Franja de color a la izquierda: de un vistazo se distingue urgente de informativo.
+            Box(modifier = Modifier.width(6.dp).fillMaxHeight().background(acento))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(if (urgente) acento.copy(alpha = 0.06f) else Color.Transparent)
+                    .padding(16.dp),
             ) {
-                Text(text = anuncio.titulo, style = MaterialTheme.typography.titleMedium)
-                PrioridadAnuncioChip(prioridad = anuncio.prioridad)
-            }
-            Text(
-                text = anuncio.mensaje,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Row(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = anuncio.destinatarios.etiqueta,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (anuncio.editado) {
-                    Text(
-                        text = "· Editado",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape, color = acento.copy(alpha = 0.14f), modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (urgente) Icons.Default.Campaign else Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = acento,
+                            modifier = Modifier.padding(9.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(
+                            text = anuncio.titulo,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        anuncio.fechaPublicacion?.let {
+                            Text(
+                                text = FechasSportPro.formatoDiaMesHora().format(it),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    PrioridadAnuncioChip(prioridad = anuncio.prioridad)
                 }
-                if (anuncio.archivado) {
-                    Text(
-                        text = "· Archivado",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Text(
+                    text = anuncio.mensaje,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                Row(
+                    modifier = Modifier.padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChipEstado(texto = anuncio.destinatarios.etiqueta, tono = TonoEstado.NEUTRO)
+                    if (anuncio.editado) ChipEstado(texto = "Editado", tono = TonoEstado.ADVERTENCIA)
+                    if (anuncio.archivado) ChipEstado(texto = "Archivado", tono = TonoEstado.NEUTRO)
                 }
             }
         }

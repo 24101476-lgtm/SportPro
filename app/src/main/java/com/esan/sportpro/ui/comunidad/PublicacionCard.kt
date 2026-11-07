@@ -1,6 +1,7 @@
 package com.esan.sportpro.ui.comunidad
 
 import com.esan.sportpro.core.fecha.FechasSportPro
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,7 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Brush
 import coil.compose.AsyncImage
+import com.esan.sportpro.core.theme.PaletaSportPro
+import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.TonoEstado
 import com.esan.sportpro.ui.common.TarjetaSportPro
 import com.esan.sportpro.ui.partido.ColoresPartido
 import com.esan.sportpro.domain.comunidad.EstadoPublicacion
@@ -62,19 +67,19 @@ fun PublicacionCard(
     TarjetaSportPro(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = ColoresPartido.Verde.copy(alpha = 0.15f),
-                    modifier = Modifier.size(40.dp),
+                androidx.compose.foundation.layout.Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Brush.linearGradient(listOf(PaletaSportPro.MusgoMedio, PaletaSportPro.Verde))),
                 ) {
-                    androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            publicacion.autorNombre.trim().take(1).uppercase(),
-                            color = ColoresPartido.Verde,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
+                    Text(
+                        publicacion.autorNombre.trim().take(1).uppercase(),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
                 Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(publicacion.autorNombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -117,24 +122,44 @@ fun PublicacionCard(
                 }
             }
 
-            Text(publicacion.texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(publicacion.texto, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))
 
-            if (publicacion.imagenesUrls.isNotEmpty()) {
+            if (publicacion.imagenesUrls.size == 1) {
+                AsyncImage(
+                    model = publicacion.imagenesUrls.first(),
+                    contentDescription = "Foto de la publicación",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            } else if (publicacion.imagenesUrls.size > 1) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 12.dp),
                 ) {
                     items(publicacion.imagenesUrls) { url ->
                         AsyncImage(
                             model = url,
-                            contentDescription = null,
+                            contentDescription = "Foto de la publicación",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .size(120.dp)
-                                .clip(RoundedCornerShape(8.dp)),
+                                .size(width = 200.dp, height = 180.dp)
+                                .clip(RoundedCornerShape(16.dp)),
                         )
                     }
                 }
+            }
+
+            val totalReacciones = publicacion.reaccionesPorUsuario.size
+            if (totalReacciones >= 3) {
+                ChipEstado(
+                    texto = "🔥 Popular · $totalReacciones reacciones",
+                    tono = TonoEstado.ADVERTENCIA,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
 
             Row(
@@ -150,14 +175,15 @@ fun PublicacionCard(
                     Surface(
                         onClick = { onReaccionar(if (activa) null else tipo) },
                         shape = RoundedCornerShape(16.dp),
-                        color = if (activa) ColoresPartido.Verde.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        color = if (activa) ColoresPartido.Verde.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
+                        border = if (activa) androidx.compose.foundation.BorderStroke(1.5.dp, ColoresPartido.Verde) else null,
                         modifier = Modifier.padding(end = 4.dp),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(tipo.emoji)
+                            Text(tipo.emoji, style = MaterialTheme.typography.titleMedium)
                             if (cantidad > 0) {
                                 Text(" $cantidad", style = MaterialTheme.typography.labelMedium)
                             }

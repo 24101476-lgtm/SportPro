@@ -17,6 +17,8 @@ import com.esan.sportpro.domain.partido.JugadorEnAlineacion
 import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.PartidoRepository
 import com.esan.sportpro.domain.partido.ReglasPartido
+import com.esan.sportpro.domain.ia.ResumenPartido
+import com.esan.sportpro.domain.ia.RevisionResumenRepository
 import com.esan.sportpro.domain.partido.ReglasSeguimiento
 import com.esan.sportpro.domain.partido.TipoEvento
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +44,8 @@ data class SeguimientoUiState(
     /** true cuando ya llegó la primera lista de eventos: antes no se animan entradas ni goles. */
     val eventosCargados: Boolean = false,
     val conectado: Boolean = true,
+    /** US-024: resumen aprobado del partido, o null si todavía no hay uno publicado. */
+    val resumenPublicado: ResumenPartido? = null,
     /** Última vez que llegó información con conexión (criterio 5); null si aún no llegó ninguna. */
     val ultimaActualizacionMs: Long? = null,
     val ahoraMs: Long = System.currentTimeMillis(),
@@ -81,6 +85,7 @@ class SeguimientoPartidoViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
     private val accesoEspectador: AccesoEspectador,
     private val conectividad: ConectividadObserver,
+    private val revisionRepository: RevisionResumenRepository,
 ) : BaseViewModel<SeguimientoUiState, Unit>(SeguimientoUiState()) {
 
     val partidoId: String = checkNotNull(savedStateHandle["partidoId"])
@@ -122,6 +127,11 @@ class SeguimientoPartidoViewModel @Inject constructor(
             repo.observarCatalogo()
                 .catch { /* se mantiene el catálogo base */ }
                 .collect { setState { copy(catalogo = it) } }
+        }
+        viewModelScope.launch {
+            revisionRepository.observarPublicado(partidoId)
+                .catch { /* sin resumen publicado la pestaña lo indica */ }
+                .collect { setState { copy(resumenPublicado = it) } }
         }
         viewModelScope.launch {
             conectividad.conectado.collect { setState { copy(conectado = it) } }

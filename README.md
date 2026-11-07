@@ -107,6 +107,8 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Partido: seguimiento en tiempo real para jugador y padre (cronología, alineación, estadísticas, animaciones, aviso sin conexión) | US-021 | Implementado; republicar `firestore.rules`. El jugador necesita el enlace cuenta↔ficha (`usuarioUid`), todavía pendiente |
 | Mensualidades, Estadísticas, Anuncios, Comunidad | US-008, US-026 a US-030 | Implementado |
 | Resumen narrativo con IA: generación del borrador con verificación de datos (Edge Function de Supabase + Gemini) | US-023 | Implementado (ver `docs/diseno-integracion-ia.md`, sección 13). Falta desplegar la función con su clave y republicar `firestore.rules`. Revisión, aprobación y evaluación (US-024, US-025) pendientes |
+| Resumen con IA: revisión, corrección y aprobación del entrenador, con publicación en el partido y, si se elige, en la comunidad | US-024 | Implementado (ver `docs/diseno-integracion-ia.md`, sección 14); hay que republicar `firestore.rules` |
+| Resumen con IA: evaluación documentada, consolidado y exportación como texto | US-025 | Implementado (ver sección 14); hay que republicar `firestore.rules` |
 
 ## Documentación técnica
 

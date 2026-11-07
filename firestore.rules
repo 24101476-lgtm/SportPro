@@ -339,6 +339,38 @@ service cloud.firestore {
       allow write: if esAdmin();
     }
 
+    // US-025: evaluación documentada de un resumen aprobado, con id {partidoId}_{resumenId}. La crea el
+    // entrenador que aprobó el resumen o el administrador, una sola vez (no se edita ni se borra). La
+    // leen el administrador de la academia y el entrenador que aprobó el resumen. Se comprueba contra
+    // el propio resumen quién lo aprobó, para que nadie evalúe resúmenes ajenos.
+    match /evaluacionesResumen/{evaluacionId} {
+      allow read: if esStaff()
+        && (resource == null
+          || (esAdmin() && resource.data.academiaId == academiaPropia())
+          || resource.data.aprobadoPor == request.auth.uid);
+      allow create: if esStaff()
+        && evaluacionId == request.resource.data.partidoId + '_' + request.resource.data.resumenId
+        && request.resource.data.evaluadorUid == request.auth.uid
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoEn == request.time
+        && get(/databases/$(database)/documents/partidos/$(request.resource.data.partidoId)/resumenes/$(request.resource.data.resumenId))
+             .data.get('aprobadoPor', '') == request.resource.data.aprobadoPor
+        && (esAdmin() || request.resource.data.aprobadoPor == request.auth.uid)
+        && request.resource.data.utilidad is int
+        && request.resource.data.utilidad >= 1 && request.resource.data.utilidad <= 5
+        && request.resource.data.omisiones is int
+        && request.resource.data.omisiones >= 0 && request.resource.data.omisiones <= 99
+        && request.resource.data.errores is int
+        && request.resource.data.errores >= 0 && request.resource.data.errores <= 99
+        && request.resource.data.inventados is int
+        && request.resource.data.inventados >= 0 && request.resource.data.inventados <= 99
+        && request.resource.data.comentario is string
+        && request.resource.data.comentario.size() >= 20 && request.resource.data.comentario.size() <= 500
+        && request.resource.data.correcciones is string
+        && request.resource.data.correcciones.size() <= 1500;
+      allow update, delete: if false;
+    }
+
     match /partidos/{partidoId} {
       // getAfter: permite validar escrituras hechas en el mismo lote que crea o actualiza el partido.
       function partido() {
@@ -393,8 +425,37 @@ service cloud.firestore {
       // US-023: versiones del resumen narrativo con IA. Las crea desde la app el responsable del
       // partido, solo con el acta cerrada y siempre como BORRADOR (la función intermedia en
       // Supabase no tiene acceso de administración a Firestore). Los borradores solo los ven quienes
-      // operan el partido; US-024 abrirá la edición y la aprobación.
+      // operan el partido.
+      //
+      // US-024: el responsable (personal) corrige el texto y lo aprueba. El texto original de la IA
+      // (hechos, desarrollo, interpretacion) nunca cambia: el texto del entrenador va en los campos
+      // *Final. Aprobar exige la confirmación, su uid y la hora del servidor; editar una versión
+      // aprobada la devuelve a BORRADOR (deja de ser visible). Se puede enlazar o retirar la
+      // publicación en la comunidad sin tocar el texto.
       match /resumenes/{resumenId} {
+        function textoFinalValido(d) {
+          return d.hechosFinal is string && d.hechosFinal.size() > 0 && d.hechosFinal.size() <= 4000
+            && d.desarrolloFinal is string && d.desarrolloFinal.size() > 0 && d.desarrolloFinal.size() <= 4000
+            && d.interpretacionFinal is string && d.interpretacionFinal.size() <= 1000;
+        }
+
+        function revisionValida(antes, despues) {
+          return despues.diff(antes).affectedKeys().hasOnly([
+              'hechosFinal', 'desarrolloFinal', 'interpretacionFinal', 'editadoPor', 'editadoEn',
+              'estado', 'aprobadoPor', 'aprobadoEn', 'confirmacionAprobacion', 'visibleEnComunidad'
+            ])
+            && textoFinalValido(despues)
+            && despues.editadoPor == request.auth.uid
+            && despues.editadoEn == request.time
+            && (
+              (antes.estado in ['BORRADOR', 'APROBADO'] && despues.estado == 'BORRADOR')
+              || (antes.estado == 'BORRADOR' && despues.estado == 'APROBADO'
+                && despues.aprobadoPor == request.auth.uid
+                && despues.aprobadoEn == request.time
+                && despues.confirmacionAprobacion == true)
+            );
+        }
+
         allow read: if puedeOperarCon(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
           || (autenticado() && resource.data.estado == 'APROBADO');
         allow create: if puedeOperarCon(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
@@ -402,7 +463,14 @@ service cloud.firestore {
           && request.resource.data.estado == 'BORRADOR'
           && request.resource.data.solicitadoPor == request.auth.uid
           && request.resource.data.creadoEn == request.time;
-        allow update, delete: if false;
+        allow update: if esStaff()
+          && puedeOperarCon(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
+          && actaCerrada(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
+          && (
+            revisionValida(resource.data, request.resource.data)
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['publicacionComunidadId'])
+          );
+        allow delete: if false;
       }
 
       // US-022: auditoría del partido (reaperturas del acta). Solo se agregan entradas.

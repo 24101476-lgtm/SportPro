@@ -688,6 +688,19 @@ private fun Finalizado(
                             .heightIn(min = 52.dp),
                     ) { Text("Resumen con IA") }
                 }
+                if (state.evaluacionPendiente) {
+                    Text(
+                        "Evaluación del resumen pendiente",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        "Ya aprobaste el resumen. Registra su evaluación: utilidad, omisiones, errores y datos inventados.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = onResumenIa, modifier = Modifier.fillMaxWidth()) { Text("Evaluar el resumen") }
+                }
                 if (state.puedeReabrirActa) {
                     TextButton(onClick = onReabrirActa) { Text("Reabrir acta (administrador)") }
                     ReglasActa.limiteReaperturaMs(partido)?.let { limite ->

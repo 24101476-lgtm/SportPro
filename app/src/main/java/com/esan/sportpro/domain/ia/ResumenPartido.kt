@@ -36,7 +36,12 @@ data class BloquesResumen(
     val interpretacion: String = "",
 )
 
-/** Una generación guardada en `partidos/{partidoId}/resumenes` (cada intento es una versión). */
+/**
+ * Una generación guardada en `partidos/{partidoId}/resumenes` (cada intento es una versión).
+ *
+ * [bloques] es siempre el texto original de la IA y nunca cambia (US-024, criterio 6: se conserva
+ * para compararlo). Lo que corrige y aprueba el entrenador va en [bloquesFinal].
+ */
 data class ResumenPartido(
     val id: String,
     val partidoId: String,
@@ -51,4 +56,18 @@ data class ResumenPartido(
     val advertencias: List<String>,
     val eventosUsados: List<String>,
     val marcador: String,
-)
+    /** Texto editado por el entrenador; null mientras nadie lo haya tocado. */
+    val bloquesFinal: BloquesResumen? = null,
+    val editadoPor: String? = null,
+    val aprobadoPor: String? = null,
+    val aprobadoEnMs: Long? = null,
+    /** US-024, criterio 7: el entrenador decide si el resumen aprobado también se publica en la comunidad. */
+    val visibleEnComunidad: Boolean = false,
+    /** Publicación del muro creada al aprobar con [visibleEnComunidad]; se retira si el resumen vuelve a Borrador. */
+    val publicacionComunidadId: String? = null,
+) {
+    /** El texto con el que se trabaja: el del entrenador si ya lo editó, y si no el de la IA. */
+    val bloquesVigentes: BloquesResumen get() = bloquesFinal ?: bloques
+
+    val publicado: Boolean get() = estado == EstadoResumen.APROBADO
+}

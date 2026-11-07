@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,31 +26,26 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.esan.sportpro.domain.ia.MencionNoVerificada
-import com.esan.sportpro.domain.ia.ReglasResumen
 import com.esan.sportpro.domain.ia.ResumenPartido
 import com.esan.sportpro.ui.partido.ColoresPartido
 import com.esan.sportpro.ui.partido.Etiqueta
-import com.esan.sportpro.ui.partido.cantidad
-import com.esan.sportpro.ui.partido.formatearFechaHora
 
-/** US-023: generación del resumen narrativo de un partido con el acta cerrada. */
+/** US-023: generación del resumen. US-024: revisión y aprobación. US-025: evaluación del resumen aprobado. */
 @Composable
 fun ResumenIaScreen(
     onVolver: () -> Unit,
@@ -57,51 +53,77 @@ fun ResumenIaScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val partido = state.partido
+    val snackbar = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-            IconButton(onClick = onVolver) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
-            Column {
-                Text("Resumen con IA", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (partido != null) {
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbar.showSnackbar(it)
+            viewModel.limpiarMensaje()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                IconButton(
+                    onClick = { if (state.formularioEvaluacion != null) viewModel.posponerEvaluacion() else onVolver() },
+                ) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
+                Column {
                     Text(
-                        "${partido.nombreEquipo} vs ${partido.nombreRival}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (state.formularioEvaluacion != null) "Evaluación del resumen" else "Resumen con IA",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                     )
+                    if (partido != null) {
+                        Text(
+                            "${partido.nombreEquipo} vs ${partido.nombreRival}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        }
 
-        LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item {
-                PanelGenerar(
-                    generando = state.generando,
-                    hayResumenes = state.resumenes.isNotEmpty(),
-                    motivoNoGenerar = state.motivoNoGenerar,
-                    error = state.error,
-                    onGenerar = viewModel::generar,
-                )
-            }
-            if (state.resumenes.size > 1) {
-                item {
-                    SelectorVersiones(
-                        resumenes = state.resumenes,
-                        elegido = state.resumenMostrado?.id,
-                        onElegir = viewModel::elegirVersion,
-                    )
+            if (state.formularioEvaluacion != null) {
+                FormularioEvaluacionResumen(state, viewModel)
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    item {
+                        PanelGenerar(
+                            generando = state.generando,
+                            hayResumenes = state.resumenes.isNotEmpty(),
+                            motivoNoGenerar = state.motivoNoGenerar,
+                            error = state.error,
+                            onGenerar = viewModel::generar,
+                        )
+                    }
+                    if (state.resumenes.size > 1) {
+                        item {
+                            SelectorVersiones(
+                                resumenes = state.resumenes,
+                                elegido = state.resumenMostrado?.id,
+                                onElegir = viewModel::elegirVersion,
+                            )
+                        }
+                    }
+                    state.resumenMostrado?.let { resumen ->
+                        item(key = resumen.id) {
+                            if (state.enRevision) {
+                                RevisionBorrador(state, resumen, viewModel)
+                            } else {
+                                TarjetaResumenGuardado(state, resumen, viewModel)
+                            }
+                        }
+                    }
                 }
             }
-            state.resumenMostrado?.let { resumen -> item { TarjetaResumen(resumen) } }
         }
+        SnackbarHost(hostState = snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
+        DialogosResumen(state, viewModel)
     }
 }
 
@@ -180,115 +202,12 @@ private fun SelectorVersiones(resumenes: List<ResumenPartido>, elegido: String?,
                 modifier = Modifier.clickable { onElegir(resumen.id) },
             ) {
                 Text(
-                    "v${resumen.version}",
+                    "v${resumen.version}" + if (resumen.publicado) " ✓" else "",
                     color = if (activa) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun TarjetaResumen(resumen: ResumenPartido) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Versión ${resumen.version}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Etiqueta("Borrador", ColoresPartido.Naranja)
-            }
-            Text(
-                "Modelo ${resumen.modelo} · " + (resumen.creadoEnMs?.let { formatearFechaHora(it) } ?: "guardando…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Borrador: no es visible para jugadores, padres ni la comunidad hasta que sea aprobado.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (resumen.mencionesNoVerificadas.isNotEmpty()) {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "${cantidad(resumen.mencionesNoVerificadas.size, "dato no verificado", "datos no verificados")}. " +
-                                "Corrígelos o elimínalos antes de aprobar.",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        resumen.mencionesNoVerificadas.forEach { mencion ->
-                            Text(
-                                "• «${mencion.texto}»: ${mencion.motivo}",
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-            }
-
-            Bloque("Hechos registrados", resumen.bloques.hechos, resumen.mencionesNoVerificadas)
-            Bloque("Desarrollo del partido", resumen.bloques.desarrollo, resumen.mencionesNoVerificadas)
-            Bloque(
-                titulo = "Interpretación del entrenador",
-                texto = resumen.bloques.interpretacion,
-                menciones = emptyList(),
-                vacio = "Pendiente: la completas tú al revisar el resumen.",
-            )
-
-            if (resumen.advertencias.isNotEmpty()) {
-                Text(
-                    "Avisos de la IA: " + resumen.advertencias.joinToString(" "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun Bloque(titulo: String, texto: String, menciones: List<MencionNoVerificada>, vacio: String? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(titulo, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        if (texto.isBlank()) {
-            Text(
-                vacio ?: "Sin contenido.",
-                style = MaterialTheme.typography.bodyMedium,
-                fontStyle = FontStyle.Italic,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(resaltar(texto, menciones), style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-/** Cada mención no verificada va resaltada y seguida de la etiqueta "Dato no verificado" (criterio 7). */
-private fun resaltar(texto: String, menciones: List<MencionNoVerificada>): AnnotatedString = buildAnnotatedString {
-    ReglasResumen.segmentar(texto, menciones).forEach { segmento ->
-        if (segmento.noVerificado) {
-            pushStyle(SpanStyle(background = Color(0x55FF6D00), fontWeight = FontWeight.Bold))
-            append(segmento.texto)
-            pop()
-            pushStyle(SpanStyle(color = Color(0xFFB71C1C), fontSize = 11.sp, fontWeight = FontWeight.Bold))
-            append(" [Dato no verificado]")
-            pop()
-        } else {
-            append(segmento.texto)
         }
     }
 }

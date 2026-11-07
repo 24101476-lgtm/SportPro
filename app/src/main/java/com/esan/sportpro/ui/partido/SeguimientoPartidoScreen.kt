@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.partido.EstadoPartido
+import com.esan.sportpro.ui.ia.ResumenPublicado
 import com.esan.sportpro.domain.partido.EventoPartido
 import com.esan.sportpro.domain.partido.JugadorEnAlineacion
 import com.esan.sportpro.domain.partido.Partido
@@ -71,7 +74,7 @@ import com.esan.sportpro.domain.partido.SituacionJugador
 import com.esan.sportpro.navigation.UserRole
 import kotlinx.coroutines.delay
 
-private val TITULOS_PESTANAS = listOf("Cronología", "Alineación", "Estadísticas")
+private val TITULOS_PESTANAS = listOf("Cronología", "Alineación", "Estadísticas", "Resumen")
 
 /**
  * US-021: seguimiento del partido en tiempo real para jugador y padre de familia. Es de solo
@@ -148,7 +151,8 @@ private fun Contenido(state: SeguimientoUiState, partido: Partido, onVolver: () 
         when (pestana) {
             0 -> PestanaCronologia(state, partido, modifier)
             1 -> PestanaAlineacion(state, partido, modifier)
-            else -> PestanaEstadisticas(state, partido, modifier)
+            2 -> PestanaEstadisticas(state, partido, modifier)
+            else -> PestanaResumen(state, partido, modifier)
         }
     }
 }
@@ -397,6 +401,32 @@ private fun FilaEvento(evento: EventoPartido, todos: List<EventoPartido>, partid
                     )
                 }
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Resumen (US-024)
+
+/** Resumen narrativo aprobado por el entrenador; mientras no exista uno, la pestaña lo indica. */
+@Composable
+private fun PestanaResumen(state: SeguimientoUiState, partido: Partido, modifier: Modifier) {
+    val resumen = state.resumenPublicado
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 32.dp),
+    ) {
+        if (resumen == null) {
+            TextoSecundario(
+                if (partido.estado == EstadoPartido.ACTA_CERRADA) {
+                    "El entrenador todavía no publicó el resumen de este partido."
+                } else {
+                    "El resumen aparecerá aquí cuando el partido termine y el entrenador lo publique."
+                },
+            )
+        } else {
+            ResumenPublicado(resumen, partido)
         }
     }
 }

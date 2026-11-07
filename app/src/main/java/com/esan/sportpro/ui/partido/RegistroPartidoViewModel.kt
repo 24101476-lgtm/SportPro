@@ -6,6 +6,10 @@ import com.esan.sportpro.core.red.ConectividadObserver
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.partido.PartidoEnCursoStore
 import com.esan.sportpro.data.partido.describirErrorFirestore
+import com.esan.sportpro.domain.ia.EvaluacionRepository
+import com.esan.sportpro.domain.ia.EvaluacionResumen
+import com.esan.sportpro.domain.ia.ResumenPartido
+import com.esan.sportpro.domain.ia.RevisionResumenRepository
 import com.esan.sportpro.domain.partido.ActaPartido
 import com.esan.sportpro.domain.partido.BorradorEvento
 import com.esan.sportpro.domain.partido.CatalogoBase
@@ -25,6 +29,7 @@ import com.esan.sportpro.domain.partido.TiposEvento
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -67,6 +72,10 @@ data class RegistroUiState(
     val ahoraMs: Long = System.currentTimeMillis(),
     val rol: String? = null,
     val uid: String? = null,
+    /** US-024: resumen aprobado del partido (el más reciente), o null. */
+    val resumenPublicado: ResumenPartido? = null,
+    /** US-025: evaluación registrada de ese resumen, o null si sigue pendiente. */
+    val evaluacion: EvaluacionResumen? = null,
     val hoja: HojaEvento? = null,
     val dialogo: DialogoPartido? = null,
     /** Error de lectura de Firestore (permisos, base inexistente, etc.). */
@@ -106,6 +115,16 @@ data class RegistroUiState(
             return rol == ROL_ADMIN || (uid != null && uid in listOfNotNull(p.operadorUid, p.entrenadorUid, p.creadoPor))
         }
 
+    /**
+     * US-025, criterio 1: el resumen ya se aprobó y todavía no se evaluó. La evaluación pendiente se
+     * muestra en la pantalla del partido a quien aprobó el resumen y al administrador.
+     */
+    val evaluacionPendiente: Boolean
+        get() {
+            val resumen = resumenPublicado ?: return false
+            return evaluacion == null && (rol == ROL_ADMIN || (uid != null && resumen.aprobadoPor == uid))
+        }
+
     /** Tipos que se muestran en la paleta: el inicio se lanza con su propio botón. */
     val paleta: List<TipoEvento>
         get() {
@@ -142,6 +161,8 @@ class RegistroPartidoViewModel @Inject constructor(
     private val repo: PartidoRepository,
     private val conectividad: ConectividadObserver,
     private val partidoEnCurso: PartidoEnCursoStore,
+    private val revisionResumen: RevisionResumenRepository,
+    private val evaluaciones: EvaluacionRepository,
 ) : BaseViewModel<RegistroUiState, RegistroEvento>(RegistroUiState(uid = repo.uidActual)) {
 
     val partidoId: String = checkNotNull(savedStateHandle["partidoId"])
@@ -179,6 +200,21 @@ class RegistroPartidoViewModel @Inject constructor(
         }
         viewModelScope.launch {
             repo.observarCatalogo().collect { setState { copy(catalogo = it) } }
+        }
+        viewModelScope.launch {
+            // Resumen aprobado y su evaluación: sin permisos o sin red simplemente no se muestra el aviso.
+            revisionResumen.observarPublicado(partidoId)
+                .catch { }
+                .collectLatest { resumen ->
+                    setState { copy(resumenPublicado = resumen) }
+                    if (resumen == null) {
+                        setState { copy(evaluacion = null) }
+                    } else {
+                        evaluaciones.observarEvaluacion(partidoId, resumen.id)
+                            .catch { }
+                            .collect { setState { copy(evaluacion = it) } }
+                    }
+                }
         }
         viewModelScope.launch {
             repo.observarRolActual()

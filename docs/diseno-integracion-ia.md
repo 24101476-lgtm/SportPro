@@ -216,3 +216,62 @@ Flujo: `ResumenIaScreen` → `ResumenIaViewModel` → `ConstructorInsumo` → `S
 - Un cliente modificado podría escribir un borrador falso directamente en Firestore; las reglas solo comprueban rol, acta cerrada y estado BORRADOR. El texto sigue sin ser visible para jugadores y padres hasta que US-024 lo apruebe.
 - Los nombres de pila se reponen en el teléfono del entrenador: el proveedor nunca los recibe.
 - Con el plan gratuito de Gemini, Google puede usar los datos enviados para mejorar sus productos. Por eso solo salen alias, dorsales y eventos.
+
+## 14. Implementación de US-024 y US-025 (revisión, aprobación y evaluación)
+
+Flujo: `ResumenIaScreen` → `ResumenIaViewModel` → `ReglasRevision` / `ReglasResumen.verificarEdicion` → `FirestoreResumenRepository` (`RevisionResumenRepository`) y `FirestoreEvaluacionRepository`.
+
+### Modelo en Firestore
+
+`partidos/{id}/resumenes/{resumenId}` guarda ahora dos textos:
+
+| Campos | Qué son |
+|---|---|
+| `hechos`, `desarrollo`, `interpretacion` | El texto **original de la IA**. Nunca cambia (las reglas no permiten tocarlo) y sirve para compararlo con lo aprobado |
+| `hechosFinal`, `desarrolloFinal`, `interpretacionFinal` | El texto del entrenador, con el que se trabaja y que se publica |
+| `estado` | `BORRADOR` o `APROBADO`. Los demás estados del ciclo (`EN_REVISION`, `DESCARTADO`, `DESACTUALIZADO`) siguen sin usarse |
+| `editadoPor`, `editadoEn` | Quién guardó el último cambio y cuándo (hora del servidor) |
+| `aprobadoPor`, `aprobadoEn`, `confirmacionAprobacion` | Quién aprobó, cuándo y que aceptó la confirmación |
+| `visibleEnComunidad`, `publicacionComunidadId` | Si el entrenador pidió publicarlo también en la comunidad, y el id de esa publicación |
+
+`evaluacionesResumen/{partidoId}_{resumenId}` (colección nueva): `partidoId`, `resumenId`, `version`, `partidoNombre`, `fechaPartidoMs`, `academiaId`, `aprobadoPor`, `evaluadorUid`, `utilidad`, `omisiones`, `errores`, `inventados`, `comentario`, `correcciones` y `creadoEn`. Se crea una sola vez por versión.
+
+### Criterios de US-024
+
+| Criterio | Dónde se cumple |
+|---|---|
+| 1. Borrador no visible | Las reglas solo dejan leer los borradores a quien opera el partido; jugadores y padres consultan con `estado == APROBADO` |
+| 2. Editor con los tres bloques | `EditorBloques`: hechos, desarrollo e interpretación. `ReglasRevision.validar` pide hechos y desarrollo, tope de 400 palabras entre ambos y 1000 caracteres de interpretación |
+| 3. Texto y cronología lado a lado | `RevisionBorrador`: dos columnas desde 600 dp de ancho; en pantallas angostas la cronología queda debajo del editor |
+| 4. Menciones no verificadas | `ReglasRevision.mencionesVigentes`: las que marcó la generación y siguen en el texto, más las que detecta `ReglasResumen.verificarEdicion` sobre el texto nuevo. Si queda alguna, **Aprobar y publicar** muestra «Corrige las menciones no verificadas antes de aprobar» |
+| 5. Confirmación explícita | `DialogosResumen`: casilla con el texto «Confirmo que revisé el resumen y sus datos corresponden a lo ocurrido en el partido»; el botón se habilita al marcarla |
+| 6. Versión final y original | `aprobar` escribe el texto final, `aprobadoPor` y `aprobadoEn` (servidor); el original queda intacto |
+| 7. Publicación | Pestaña **Resumen** del seguimiento del partido (`SeguimientoPartidoScreen`). Con el interruptor de comunidad se crea además una publicación abierta en el muro (marcador, hechos que quepan en 1000 caracteres y la leyenda) |
+| 8. Leyenda permanente | `LeyendaResumenIa` en el resumen publicado y en la tarjeta del entrenador |
+| 9. Editar un aprobado | «Editar de nuevo» vuelve la versión a `BORRADOR`, deja de verse y retira la publicación de la comunidad (`eliminada = true`) |
+
+**Verificación del texto editado.** No hay citas de eventos, así que se comprueban minutos, marcadores parciales, alias sueltos y nombres propios. Los nombres de los convocados se aceptan porque el texto ya trae «Nombre (dorsal)». La interpretación es opinión del entrenador y no se contrasta.
+
+### Criterios de US-025
+
+| Criterio | Dónde se cumple |
+|---|---|
+| 1. Pedir la evaluación y dejarla pendiente | Al aprobar aparece «¿Evaluar ahora?»; si se pospone, `RegistroPartidoScreen` muestra «Evaluación del resumen pendiente» a quien aprobó y al administrador |
+| 2. Formulario | `FormularioEvaluacionResumen`: utilidad de 1 a 5, omisiones, errores factuales y datos inventados (0 a 99) y comentario de 20 a 500 caracteres. Validación en `ReglasEvaluacion.validar` |
+| 3. Correcciones precargadas | `DiferenciasResumen.correcciones` compara frase por frase el texto de la IA con el aprobado («se corrigió», «se eliminó», «se agregó»); el entrenador puede editarlo |
+| 4. Vinculada a versión, partido y uid | El id del documento es `{partidoId}_{resumenId}` y trae `evaluadorUid` y `aprobadoPor` |
+| 5. Pantalla Evaluaciones | Pestaña del módulo IA (`EvaluacionesScreen`): promedio de utilidad y total de omisiones, errores e invenciones |
+| 6. Exportar | Botón «Exportar como texto»: selector nativo de Android con `ReglasEvaluacion.textoExportable` |
+| 7. Solo quien aprobó y el administrador | `ReglasEvaluacion.puedeEvaluar` en la app y reglas de Firestore en el servidor (el administrador lee las de su academia; el entrenador, las de los resúmenes que aprobó) |
+
+### Reglas de Firestore (hay que republicar `firestore.rules`)
+
+- `resumenes`: `update` solo para personal que opera el partido, con el acta cerrada. Se permite (a) cambiar el texto final y las marcas de edición, pasando a `BORRADOR` o de `BORRADOR` a `APROBADO` con la confirmación, o (b) enlazar o retirar `publicacionComunidadId`. El texto original no se puede modificar.
+- `evaluacionesResumen`: `create` por el entrenador que aprobó o el administrador, comprobando contra el propio resumen quién lo aprobó; sin `update` ni `delete`.
+
+### Límites conocidos
+
+- Jugadores y padres ven solo los partidos de su equipo por la lógica de la app (igual que US-021); las reglas dejan leer cualquier resumen aprobado a un usuario autenticado.
+- Si después de aprobar el administrador reabre el acta y se corrigen eventos, el resumen aprobado no pasa a `DESACTUALIZADO` (ese estado sigue sin usarse). Hay que editarlo a mano.
+- Aprobar una versión no retira otra versión aprobada anterior: se muestra la aprobada más reciente.
+- Sin conexión, la publicación en la comunidad queda pendiente en la caché de Firestore y se envía sola al volver la red.

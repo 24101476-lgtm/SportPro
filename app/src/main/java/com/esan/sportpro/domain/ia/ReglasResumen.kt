@@ -112,6 +112,29 @@ object ReglasResumen {
         return resultado.values.toList()
     }
 
+    /**
+     * US-024, criterio 4: vuelve a verificar el texto que escribe el entrenador. Se revisan los hechos
+     * y el desarrollo (la interpretación es opinión suya y no se contrasta). Sin citas de eventos, el
+     * texto ya viene con nombres de pila y dorsal, por eso los nombres de los convocados forman parte
+     * del vocabulario permitido. Cada mención corregida o eliminada deja de aparecer en el resultado.
+     */
+    fun verificarEdicion(hechos: String, desarrollo: String, insumo: InsumoResumen): List<MencionNoVerificada> {
+        val resultado = linkedMapOf<String, MencionNoVerificada>()
+        fun marcar(texto: String, motivo: String) {
+            if (texto.isNotBlank()) resultado.putIfAbsent(texto, MencionNoVerificada(texto, motivo))
+        }
+        val minutos = insumo.eventos.map { it.minuto }.toSet()
+        val marcadores = marcadoresPosibles(insumo)
+        val nombres = insumo.aliases.values.flatMap { jugador ->
+            NOMBRE_PROPIO.findAll(jugador.nombre).map { it.value.lowercase() }.toList()
+        }
+        val vocabulario = vocabularioPermitido(insumo) + nombres
+        listOf(hechos, desarrollo).forEach { bloque ->
+            verificarTexto(bloque, insumo, minutos, marcadores, vocabulario, ::marcar)
+        }
+        return resultado.values.toList()
+    }
+
     private fun verificarTexto(
         texto: String,
         insumo: InsumoResumen,

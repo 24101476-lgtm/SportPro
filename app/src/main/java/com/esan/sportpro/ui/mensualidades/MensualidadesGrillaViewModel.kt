@@ -7,6 +7,7 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.mensualidades.MensualidadRepository
+import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
 import com.esan.sportpro.domain.mensualidades.Mensualidad
 import com.esan.sportpro.navigation.UserRole
@@ -14,6 +15,7 @@ import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -41,6 +43,8 @@ data class MensualidadesGrillaUiState(
 data class MensualidadConEstadoEfectivo(
     val mensualidad: Mensualidad,
     val estadoEfectivo: EstadoMensualidad,
+    /** true si el jugador activo aún no tiene ningún pago registrado en el mes (se muestra como Pendiente/Vencido). */
+    val sinRegistro: Boolean = false,
 )
 
 sealed interface MensualidadesGrillaEvent {
@@ -54,6 +58,7 @@ class MensualidadesGrillaViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val firebaseAuth: FirebaseAuth,
     private val sesionRepository: SesionRepository,
+    private val jugadorRepository: JugadorRepository,
 ) : BaseViewModel<MensualidadesGrillaUiState, MensualidadesGrillaEvent>(MensualidadesGrillaUiState()) {
 
     private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
@@ -78,21 +83,62 @@ class MensualidadesGrillaViewModel @Inject constructor(
                 .withDayOfMonth(
                     minOf(estado.diaCorteMes, YearMonth.of(estado.anio, estado.mes).lengthOfMonth()),
                 )
-            repository.observarGrilla(
-                academiaId = academiaIdActual,
-                mes = estado.mes,
-                anio = estado.anio,
-                equipoId = estado.equipoFiltro,
-                estado = estado.estadoFiltro,
-            ).catch { e ->
-                setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) }
-            }.collectLatest { lista ->
-                val resueltas = lista.map { m ->
-                    MensualidadConEstadoEfectivo(
-                        mensualidad = m,
-                        estadoEfectivo = EstadoMensualidad.calcular(m.estadoRegistrado, corte),
-                    )
+            // Se combinan los jugadores activos con los pagos vigentes del mes: así aparecen todos los
+            // jugadores inscritos (con su equipo) y los que no tienen registro salen como Pendiente,
+            // pasando a Vencido automáticamente al cumplirse el día de corte.
+            combine(
+                jugadorRepository.observarJugadores(academiaIdActual),
+                repository.observarGrilla(
+                    academiaId = academiaIdActual,
+                    mes = estado.mes,
+                    anio = estado.anio,
+                ),
+            ) { jugadores, pagos ->
+                val pagoPorJugador = pagos.associateBy { it.jugadorId }
+                val deJugadoresActivos = jugadores.filter { it.activo }.map { jugador ->
+                    val pago = pagoPorJugador[jugador.id]
+                    if (pago != null) {
+                        // Se refrescan nombre y equipo con la ficha actual del jugador.
+                        val m = pago.copy(
+                            jugadorNombre = jugador.nombreCompleto.ifBlank { pago.jugadorNombre },
+                            equipoId = jugador.equipoId.ifBlank { pago.equipoId },
+                            equipoNombre = jugador.equipoNombre.ifBlank { pago.equipoNombre },
+                        )
+                        MensualidadConEstadoEfectivo(m, EstadoMensualidad.calcular(m.estadoRegistrado, corte))
+                    } else {
+                        val vacio = Mensualidad(
+                            id = "sin-registro-${jugador.id}",
+                            academiaId = academiaIdActual,
+                            equipoId = jugador.equipoId,
+                            equipoNombre = jugador.equipoNombre,
+                            jugadorId = jugador.id,
+                            jugadorNombre = jugador.nombreCompleto,
+                            mes = estado.mes,
+                            anio = estado.anio,
+                            estadoRegistrado = EstadoMensualidad.PENDIENTE,
+                        )
+                        MensualidadConEstadoEfectivo(
+                            mensualidad = vacio,
+                            estadoEfectivo = EstadoMensualidad.calcular(EstadoMensualidad.PENDIENTE, corte),
+                            sinRegistro = true,
+                        )
+                    }
                 }
+                // Pagos de jugadores que ya no están activos se conservan (el historial no se pierde).
+                val idsActivos = jugadores.filter { it.activo }.map { it.id }.toSet()
+                val deInactivos = pagos.filter { it.jugadorId !in idsActivos }.map { m ->
+                    MensualidadConEstadoEfectivo(m, EstadoMensualidad.calcular(m.estadoRegistrado, corte))
+                }
+                (deJugadoresActivos + deInactivos)
+                    .filter { estado.equipoFiltro == null || it.mensualidad.equipoId == estado.equipoFiltro }
+                    .filter { estado.estadoFiltro == null || it.estadoEfectivo == estado.estadoFiltro }
+                    .sortedWith(
+                        compareBy<MensualidadConEstadoEfectivo> { it.mensualidad.equipoNombre.lowercase() }
+                            .thenBy { it.mensualidad.jugadorNombre.lowercase() },
+                    )
+            }.catch { e ->
+                setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) }
+            }.collectLatest { resueltas ->
                 setState { copy(mensualidades = resueltas, isLoading = false, errorMessage = null) }
             }
         }

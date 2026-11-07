@@ -137,7 +137,7 @@ fun MensualidadesGrillaScreen(
                 }
                 state.mensualidades.isEmpty() -> EstadoVacioModulo(
                     titulo = "Aún no hay mensualidades",
-                    mensaje = "No hay pagos registrados en este periodo",
+                    mensaje = "No hay jugadores que coincidan con este periodo o filtro",
                     icono = Icons.Default.Payments,
                 )
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -153,7 +153,12 @@ fun MensualidadesGrillaScreen(
                                 Column {
                                     Text(item.mensualidad.jugadorNombre, style = MaterialTheme.typography.titleSmall)
                                     Text(item.mensualidad.equipoNombre, style = MaterialTheme.typography.bodySmall)
-                                    if (state.rolActual == UserRole.ADMINISTRADOR) {
+                                    if (item.sinRegistro) {
+                                        Text(
+                                            text = "Sin pago registrado",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    } else if (state.rolActual == UserRole.ADMINISTRADOR) {
                                         Text(
                                             text = "S/ %.2f".format(item.mensualidad.montoReferencial),
                                             style = MaterialTheme.typography.bodyMedium,

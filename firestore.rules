@@ -133,8 +133,11 @@ service cloud.firestore {
     // de edad, por eso solo lo leen el administrador y el entrenador de su academia, y el
     // apoderado con vínculo aprobado (solo el de su hijo). Solo el personal lo edita.
     match /jugadores/{jugadorId} {
+      // US-021: el jugador lee solo su propia ficha (la que tiene su cuenta en `usuarioUid`) para
+      // saber de qué equipo puede seguir los partidos.
       allow read: if (esStaff() && resource.data.academiaId == academiaPropia())
-        || vinculoAprobado(jugadorId);
+        || vinculoAprobado(jugadorId)
+        || (autenticado() && resource.data.usuarioUid == request.auth.uid);
       allow create: if esStaff()
         && request.resource.data.academiaId == academiaPropia()
         && request.resource.data.creadoPor == request.auth.uid;

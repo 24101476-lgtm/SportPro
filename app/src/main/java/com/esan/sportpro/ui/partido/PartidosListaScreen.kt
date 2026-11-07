@@ -84,6 +84,8 @@ fun PartidosListaScreen(
     onAbrirPartido: (String) -> Unit,
     onAbrirCatalogo: () -> Unit,
     onNuevoPartido: () -> Unit,
+    /** US-021: jugador y padre abren el seguimiento en vivo en lugar del registro. */
+    onSeguirPartido: ((String) -> Unit)? = null,
     viewModel: PartidosViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -204,7 +206,13 @@ fun PartidosListaScreen(
                     grupos.forEach { (grupo, titulo, lista) ->
                         item(key = "titulo-$titulo") { TituloGrupo(titulo, lista.size) }
                         items(lista, key = { it.id }) { partido ->
-                            val abrir = { onAbrirPartido(partido.id) }
+                            val abrir = {
+                                if (state.esEspectador && onSeguirPartido != null) {
+                                    onSeguirPartido(partido.id)
+                                } else {
+                                    onAbrirPartido(partido.id)
+                                }
+                            }
                             when (grupo) {
                                 FiltroPartidos.EN_VIVO -> TarjetaEnVivo(partido, abrir)
                                 FiltroPartidos.PROGRAMADOS -> TarjetaProgramado(partido, abrir)

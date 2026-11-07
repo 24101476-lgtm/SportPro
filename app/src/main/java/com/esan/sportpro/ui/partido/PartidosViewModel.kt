@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.partido
 
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
+import com.esan.sportpro.data.partido.AccesoEspectador
 import com.esan.sportpro.data.partido.PartidoEnCursoStore
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
@@ -14,6 +15,7 @@ import com.esan.sportpro.domain.partido.JugadorConvocado
 import com.esan.sportpro.domain.partido.NuevoPartido
 import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.PartidoRepository
+import com.esan.sportpro.domain.partido.ReglasSeguimiento
 import com.esan.sportpro.domain.partido.TiposPartido
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -58,6 +60,9 @@ data class PartidosUiState(
     /** Solo administrador y entrenador programan partidos; jugador y padre los siguen. */
     val puedeCrear: Boolean get() = perfil?.esStaff == true
 
+    /** US-021: jugador y padre abren la vista de seguimiento, sin acciones de registro. */
+    val esEspectador: Boolean get() = perfil != null && !perfil.esStaff
+
     val equiposActivos: List<Equipo> get() = equipos.filter { it.activo }
 
     /** Jugadores activos del equipo elegido en el formulario, ordenados por dorsal. */
@@ -78,17 +83,32 @@ class PartidosViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
     private val equipoRepository: EquipoRepository,
     private val jugadorRepository: JugadorRepository,
+    private val accesoEspectador: AccesoEspectador,
 ) : BaseViewModel<PartidosUiState, Unit>(PartidosUiState()) {
 
     private var restauracionRevisada = false
     private var escucha: Job? = null
     private var todos: List<Partido> = emptyList()
 
+    /** Equipos que puede seguir un jugador o un padre (US-021); `null` = sin restricción (personal). */
+    private var equiposPermitidos: Set<String>? = null
+
     init {
         viewModelScope.launch {
             val perfil = runCatching { sesionRepository.perfilActual() }.getOrNull()
+            equiposPermitidos = if (perfil != null && !perfil.esStaff) emptySet() else null
             setState { copy(perfil = perfil) }
             filtrarPorAcademia()
+            if (perfil != null && !perfil.esStaff) {
+                launch {
+                    accesoEspectador.equiposPermitidos(perfil)
+                        .catch { /* sin permisos o sin red: no se muestran partidos hasta resolver los equipos */ }
+                        .collect { equipos ->
+                            equiposPermitidos = equipos
+                            filtrarPorAcademia()
+                        }
+                }
+            }
             if (perfil != null && perfil.esStaff) {
                 launch {
                     equipoRepository.observarEquipos(perfil.academiaId)
@@ -148,10 +168,19 @@ class PartidosViewModel @Inject constructor(
         }
     }
 
-    /** Muestra solo los partidos de la academia del usuario. */
+    /**
+     * Muestra solo los partidos de la academia del usuario. Jugador y padre, además, solo los de
+     * sus equipos (US-021, criterio 7).
+     */
     private fun filtrarPorAcademia() {
-        val academia = currentState.perfil?.academiaId
-        val visibles = todos.filter { academia == null || it.academiaId == academia }
+        val perfil = currentState.perfil
+        val academia = perfil?.academiaId
+        val deLaAcademia = todos.filter { academia == null || it.academiaId == academia }
+        val visibles = if (perfil == null) {
+            deLaAcademia
+        } else {
+            ReglasSeguimiento.partidosVisibles(deLaAcademia, perfil.rol, equiposPermitidos)
+        }
         setState { copy(partidos = visibles) }
     }
 

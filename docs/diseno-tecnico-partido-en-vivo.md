@@ -206,3 +206,18 @@ Cada escenario debe documentarse con captura o video como evidencia. Los escenar
   - `StatsRepository` lee los partidos con `estado == FINALIZADO`, `golesEquipo` y `golesRival`.
   - Los goles, asistencias, tarjetas, faltas y minutos jugados se calculan a partir de `partidos/{id}/eventos` (solo eventos vigentes del equipo propio) y de `convocados`.
   - Los eventos con "Jugador no identificado" aparecen en la fila "Sin asignar".
+
+## 12. Seguimiento del espectador en tiempo real (US-021)
+
+Pantalla de solo lectura (`SeguimientoPartidoScreen`, ruta `partidos/{partidoId}/en-vivo`) para jugador y padre de familia. Ninguna de sus pantallas ofrece registrar, editar ni anular eventos.
+
+- **Tiempo real:** `SeguimientoPartidoViewModel` escucha con los mismos listeners de Firestore que el registro (`observarPartido`, `observarEventos`, `observarConvocados`, `observarCatalogo`). Cuando el operador registra un evento, el espectador lo ve sin hacer nada.
+- **Cronología:** solo eventos `VIGENTE`, de más antiguo a más reciente (`ReglasSeguimiento.cronologiaEspectador`). Un evento anulado o corregido desaparece y el marcador se recalcula, porque sale de los mismos eventos (`ReglasPartido.marcador`).
+- **Animaciones:** cada evento que llega después de abrir la pantalla entra con un fundido y un desplazamiento; los que ya estaban no se animan. Si sube la suma de goles, el marcador se agranda y se pinta de lima durante 3 s con la etiqueta "¡GOL!". La carga inicial y la anulación de un gol no lo disparan.
+- **Conexión:** sin red aparece "Mostrando la última información recibida" con la hora de la última actualización. Solo cuenta como actualización la información que llega con conexión.
+- **Pestañas:** Cronología, Alineación (titulares y suplentes con su situación: en cancha, sustituido, expulsado, ingresó, en banca) y Estadísticas por equipo (posesión de eventos, tiros, faltas, amarillas y rojas).
+  - *Posesión de eventos:* reparte porcentualmente los eventos de juego de cada equipo, sin contar controles de tiempo ni cambios.
+  - *Tiros:* goles más penales. El catálogo base no tiene un evento "Tiro"; un gol nacido de un penal convertido no se cuenta dos veces.
+- **Quién ve qué (criterio 7):** `AccesoEspectador` resuelve los equipos permitidos. El padre ve los de sus jugadores con vínculo aprobado (`vinculaciones.equipoId`); el jugador, el de su ficha enlazada por `usuarioUid`. Administrador y entrenador no tienen restricción. La lista de partidos (`PartidosViewModel`) y la propia pantalla aplican la misma regla (`ReglasSeguimiento.puedeSeguir`).
+- **Reglas de Firestore:** el jugador puede leer solo la ficha cuyo `usuarioUid` es su uid; es lo único que cambia en `jugadores`.
+- **Pendiente conocido:** nada escribe todavía `usuarioUid` en las fichas (enlace cuenta↔ficha de US-006). Mientras no exista el enlace, un jugador no verá partidos. Para probar con el rol Jugador, escribe el uid de su usuario en el campo `usuarioUid` de su ficha en Firestore.

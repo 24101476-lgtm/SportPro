@@ -385,6 +385,21 @@ service cloud.firestore {
       allow update: if (puedeOperarCon(resource.data) && !actaCerrada(resource.data)) || reaperturaPermitida();
       allow delete: if esAdmin();
 
+      // US-023: versiones del resumen narrativo con IA. Las crea desde la app el responsable del
+      // partido, solo con el acta cerrada y siempre como BORRADOR (la función intermedia en
+      // Supabase no tiene acceso de administración a Firestore). Los borradores solo los ven quienes
+      // operan el partido; US-024 abrirá la edición y la aprobación.
+      match /resumenes/{resumenId} {
+        allow read: if puedeOperarCon(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
+          || (autenticado() && resource.data.estado == 'APROBADO');
+        allow create: if puedeOperarCon(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
+          && actaCerrada(get(/databases/$(database)/documents/partidos/$(partidoId)).data)
+          && request.resource.data.estado == 'BORRADOR'
+          && request.resource.data.solicitadoPor == request.auth.uid
+          && request.resource.data.creadoEn == request.time;
+        allow update, delete: if false;
+      }
+
       // US-022: auditoría del partido (reaperturas del acta). Solo se agregan entradas.
       match /auditoria/{registroId} {
         allow read: if esStaff();

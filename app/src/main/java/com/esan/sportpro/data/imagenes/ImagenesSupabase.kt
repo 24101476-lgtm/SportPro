@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val URL_SUPABASE = "https://ghowgsannwmpuwncwrcc.supabase.co"
+internal const val URL_SUPABASE = "https://ghowgsannwmpuwncwrcc.supabase.co"
 private const val URL_FUNCION = "$URL_SUPABASE/functions/v1/imagenes"
 private const val PREFIJO_IMAGENES = "$URL_SUPABASE/storage/v1/object/public/imagenes/"
 private const val TIEMPO_MAXIMO_MS = 20_000L

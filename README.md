@@ -33,6 +33,25 @@ Las imágenes se guardan en el bucket `imagenes` del proyecto Supabase `sportpro
 sube directo: llama a la Edge Function `imagenes`, que valida el token de Firebase Auth y es la
 única con la clave secreta. El código está en `supabase/` (función, migración y configuración).
 
+### Resumen con IA (US-023)
+
+La Edge Function `resumen-ia` llama a la API de Gemini; la clave vive solo como secreto de Supabase
+y nunca está en la app ni en Git. Para desplegarla (una vez, con la CLI de Supabase y sesión iniciada):
+
+```bash
+supabase secrets set GEMINI_API_KEY=<clave de Google AI Studio> --project-ref ghowgsannwmpuwncwrcc
+supabase functions deploy resumen-ia --project-ref ghowgsannwmpuwncwrcc --no-verify-jwt
+```
+
+Guardar el secreto exige ser Owner o Administrator del proyecto de Supabase (con el rol Developer falla).
+
+Modelos: la función prueba hasta tres, en orden, y cada intento pasa al siguiente si el anterior
+responde 503 o falla. Por defecto `gemini-3.5-flash`, `gemini-3.6-flash` y `gemini-3.5-flash-lite`
+(los modelos más nuevos suelen saturarse). Se pueden cambiar sin tocar el código con
+`supabase secrets set GEMINI_MODELOS=a,b,c` o fijar solo el preferido con `GEMINI_MODEL=<modelo>`.
+El modelo que realmente respondió queda guardado en cada versión del resumen.
+Pasos de validación para el equipo: [`docs/guia-validacion-us021-us022-us023.md`](docs/guia-validacion-us021-us022-us023.md).
+
 Si necesitas acceso de administrador a la consola de Firebase, pídele al dueño del proyecto
 que te agregue en **Configuración del proyecto → Usuarios y permisos**.
 
@@ -87,7 +106,7 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 | Partido: cierre y acta final (resumen con minutos jugados, reapertura del administrador en 48 h con auditoría, compartir como texto) | US-022 | Implementado; hay que republicar `firestore.rules` |
 | Partido: seguimiento en tiempo real para jugador y padre (cronología, alineación, estadísticas, animaciones, aviso sin conexión) | US-021 | Implementado; republicar `firestore.rules`. El jugador necesita el enlace cuenta↔ficha (`usuarioUid`), todavía pendiente |
 | Mensualidades, Estadísticas, Anuncios, Comunidad | US-008, US-026 a US-030 | Implementado |
-| Resumen narrativo con IA | — | Diseño listo (`docs/diseno-integracion-ia.md`); implementación en semana 12 |
+| Resumen narrativo con IA: generación del borrador con verificación de datos (Edge Function de Supabase + Gemini) | US-023 | Implementado (ver `docs/diseno-integracion-ia.md`, sección 13). Falta desplegar la función con su clave y republicar `firestore.rules`. Revisión, aprobación y evaluación (US-024, US-025) pendientes |
 
 ## Documentación técnica
 

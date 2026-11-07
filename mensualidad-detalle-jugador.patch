@@ -1,0 +1,335 @@
+From 6e01a09174ba99ab188efaf829911afeca17ee8d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 16:11:52 -0500
+Subject: [PATCH] =?UTF-8?q?fix(mensualidades):=20el=20historial=20del=20ju?=
+ =?UTF-8?q?gador=20ya=20no=20cierra=20la=20app=20y=20muestra=20m=C3=A1s=20?=
+ =?UTF-8?q?detalle?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Al tocar un jugador la consulta del historial (jugadorId + orderBy fechaRegistro) exigía un índice compuesto de Firestore; al fallar el flujo, el error no se capturaba y la app se cerraba. Ahora se ordena en memoria y los errores se muestran en pantalla. Además: botón y gesto Atrás vuelven a la grilla, cabecera con jugador, equipo y resumen por estado, mes en texto, y montos solo para el administrador.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../mensualidades/MensualidadRepository.kt    |  4 +-
+ .../MensualidadHistorialScreen.kt             | 88 +++++++++++++++----
+ .../MensualidadHistorialViewModel.kt          | 66 +++++++++++++-
+ .../mensualidades/MensualidadesEntryScreen.kt |  9 +-
+ 4 files changed, 146 insertions(+), 21 deletions(-)
+
+diff --git a/app/src/main/java/com/esan/sportpro/data/mensualidades/MensualidadRepository.kt b/app/src/main/java/com/esan/sportpro/data/mensualidades/MensualidadRepository.kt
+index 946fa01..4709839 100644
+--- a/app/src/main/java/com/esan/sportpro/data/mensualidades/MensualidadRepository.kt
++++ b/app/src/main/java/com/esan/sportpro/data/mensualidades/MensualidadRepository.kt
+@@ -83,13 +83,15 @@ class MensualidadRepository @Inject constructor(
+     fun observarHistorialDeJugador(jugadorId: String): Flow<List<Mensualidad>> = callbackFlow {
+         val registro = coleccion
+             .whereEqualTo("jugadorId", jugadorId)
+-            .orderBy("fechaRegistro", Query.Direction.DESCENDING)
+             .addSnapshotListener { snapshot, error ->
+                 if (error != null) {
+                     close(error)
+                     return@addSnapshotListener
+                 }
++                // Se ordena en memoria: un orderBy junto al filtro por jugador exige un índice
++                // compuesto en Firestore y, sin él, la consulta falla y cerraba la pantalla.
+                 val lista = snapshot?.documents?.mapNotNull { it.toObject<Mensualidad>() }.orEmpty()
++                    .sortedByDescending { it.fechaRegistro }
+                 trySend(lista)
+             }
+         awaitClose { registro.remove() }
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialScreen.kt
+index 1a63dca..a6f15a6 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialScreen.kt
+@@ -1,7 +1,6 @@
+ package com.esan.sportpro.ui.mensualidades
+ 
+-import com.esan.sportpro.core.fecha.FechasSportPro
+-import com.esan.sportpro.ui.common.BarraSuperiorSportPro
++import androidx.activity.compose.BackHandler
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+@@ -11,9 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.automirrored.filled.ArrowBack
+ import androidx.compose.material3.Card
+ import androidx.compose.material3.CircularProgressIndicator
+ import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.Text
+@@ -27,19 +30,24 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.unit.dp
+ import androidx.hilt.navigation.compose.hiltViewModel
++import com.esan.sportpro.core.fecha.FechasSportPro
++import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+ import com.esan.sportpro.ui.common.RegistroSimuladoLegend
+-import java.text.SimpleDateFormat
++import java.time.Month
++import java.time.format.TextStyle
+ import java.util.Locale
+ 
+ /**
+  * US-008 — Frame 39_Mensualidad_Historial. Lista todos los registros de un jugador (vigentes
+- * y anulados) para dejar trazable cualquier corrección (criterio de aceptación 6).
++ * y anulados) para dejar trazable cualquier corrección (criterio de aceptación 6). Muestra además
++ * el jugador, su equipo y un resumen por estado; los montos solo los ve el administrador.
+  */
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun MensualidadHistorialScreen(
+     jugadorId: String,
+     jugadorNombre: String,
++    onVolver: () -> Unit,
+     modifier: Modifier = Modifier,
+     viewModel: MensualidadHistorialViewModel = hiltViewModel(),
+ ) {
+@@ -47,37 +55,82 @@ fun MensualidadHistorialScreen(
+     val formato = remember { FechasSportPro.formatoFecha() }
+ 
+     LaunchedEffect(jugadorId) { viewModel.cargar(jugadorId, jugadorNombre) }
++    // El botón "atrás" del sistema vuelve a la grilla en vez de cerrar la app.
++    BackHandler(onBack = onVolver)
+ 
+     Scaffold(
+         modifier = modifier,
+-        topBar = { BarraSuperiorSportPro(title = { Text("Historial · ${state.jugadorNombre}") }) },
++        topBar = {
++            BarraSuperiorSportPro(
++                title = { Text("Historial de mensualidades") },
++                navigationIcon = {
++                    IconButton(onClick = onVolver) {
++                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
++                    }
++                },
++            )
++        },
+     ) { padding ->
+         when {
+             state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                 CircularProgressIndicator()
+             }
+-            state.registros.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+-                Text("Sin historial de mensualidades", style = MaterialTheme.typography.bodyMedium)
++            state.errorMessage != null -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
++                Text(state.errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)
+             }
+             else -> LazyColumn(
+-                modifier = Modifier.padding(padding).padding(16.dp),
++                modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
+                 verticalArrangement = Arrangement.spacedBy(8.dp),
+             ) {
+-                item { RegistroSimuladoLegend(modifier = Modifier.padding(bottom = 8.dp)) }
++                item { RegistroSimuladoLegend(modifier = Modifier.padding(bottom = 4.dp)) }
++                item {
++                    Card(modifier = Modifier.fillMaxWidth()) {
++                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
++                            Text(state.jugadorNombre.ifBlank { "Jugador" }, style = MaterialTheme.typography.titleMedium)
++                            Text(
++                                state.equipoNombre.ifBlank { "Sin equipo asignado" },
++                                style = MaterialTheme.typography.bodyMedium,
++                            )
++                            val r = state.resumen
++                            Text(
++                                "Pagadas ${r.pagadas} · Pendientes ${r.pendientes} · Vencidas ${r.vencidas} · Exoneradas ${r.exoneradas}",
++                                style = MaterialTheme.typography.bodySmall,
++                            )
++                            if (state.puedeVerMontos) {
++                                Text(
++                                    "Total pagado (referencial): S/ %.2f".format(r.totalPagado),
++                                    style = MaterialTheme.typography.bodySmall,
++                                )
++                            }
++                        }
++                    }
++                }
++                if (state.registros.isEmpty()) {
++                    item {
++                        Text(
++                            "Este jugador aún no tiene pagos registrados.",
++                            style = MaterialTheme.typography.bodyMedium,
++                            modifier = Modifier.padding(vertical = 16.dp),
++                        )
++                    }
++                }
+                 items(state.registros, key = { it.id }) { registro ->
+                     Card(modifier = Modifier.fillMaxWidth()) {
+-                        Column(Modifier.padding(12.dp)) {
++                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                             Row(
+                                 modifier = Modifier.fillMaxWidth(),
+                                 horizontalArrangement = Arrangement.SpaceBetween,
++                                verticalAlignment = Alignment.CenterVertically,
+                             ) {
+-                                Text(
+-                                    text = "${registro.mes.toString().padStart(2, '0')}/${registro.anio}",
+-                                    style = MaterialTheme.typography.titleSmall,
+-                                )
++                                val mes = Month.of(registro.mes.coerceIn(1, 12))
++                                    .getDisplayName(TextStyle.FULL, Locale("es"))
++                                    .replaceFirstChar { it.uppercase() }
++                                Text("$mes ${registro.anio}", style = MaterialTheme.typography.titleSmall)
+                                 EstadoMensualidadChip(estado = registro.estadoRegistrado)
+                             }
+-                            Text("S/ %.2f · %s".format(registro.montoReferencial, registro.medioDeclarado.etiqueta))
++                            if (state.puedeVerMontos) {
++                                Text("S/ %.2f · %s".format(registro.montoReferencial, registro.medioDeclarado.etiqueta))
++                            }
+                             Text(
+                                 text = "Registrado: ${formato.format(registro.fechaRegistro)}",
+                                 style = MaterialTheme.typography.bodySmall,
+@@ -94,6 +147,11 @@ fun MensualidadHistorialScreen(
+                                     style = MaterialTheme.typography.labelSmall,
+                                     color = Color(0xFFD62828),
+                                 )
++                            } else if (registro.anulaRegistroId != null) {
++                                Text(
++                                    text = "Corrige un registro anterior",
++                                    style = MaterialTheme.typography.labelSmall,
++                                )
+                             }
+                         }
+                     }
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialViewModel.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialViewModel.kt
+index af926f1..c7e21b9 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialViewModel.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadHistorialViewModel.kt
+@@ -3,17 +3,39 @@ package com.esan.sportpro.ui.mensualidades
+ import androidx.lifecycle.viewModelScope
+ import com.esan.sportpro.core.viewmodel.BaseViewModel
+ import com.esan.sportpro.data.mensualidades.MensualidadRepository
++import com.esan.sportpro.data.partido.describirErrorFirestore
++import com.esan.sportpro.domain.cuentas.SesionRepository
++import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+ import com.esan.sportpro.domain.mensualidades.Mensualidad
++import com.esan.sportpro.navigation.UserRole
+ import dagger.hilt.android.lifecycle.HiltViewModel
+ import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.catch
+ import kotlinx.coroutines.launch
++import java.time.LocalDate
++import java.time.YearMonth
+ import javax.inject.Inject
+ 
++/** Conteo de los registros vigentes de un jugador por estado efectivo (Vencido calculado). */
++data class ResumenHistorial(
++    val pagadas: Int = 0,
++    val pendientes: Int = 0,
++    val vencidas: Int = 0,
++    val exoneradas: Int = 0,
++    /** Suma de los pagos vigentes en estado Pagado (referencial, simulado). */
++    val totalPagado: Double = 0.0,
++)
++
+ data class MensualidadHistorialUiState(
+     val jugadorId: String = "",
+     val jugadorNombre: String = "",
++    val equipoNombre: String = "",
+     val registros: List<Mensualidad> = emptyList(),
++    val resumen: ResumenHistorial = ResumenHistorial(),
++    /** Solo el administrador ve montos (criterio de aceptación 7). */
++    val puedeVerMontos: Boolean = false,
+     val isLoading: Boolean = true,
++    val errorMessage: String? = null,
+ )
+ 
+ /**
+@@ -27,18 +49,56 @@ data class MensualidadHistorialUiState(
+ @HiltViewModel
+ class MensualidadHistorialViewModel @Inject constructor(
+     private val repository: MensualidadRepository,
++    private val sesionRepository: SesionRepository,
+ ) : BaseViewModel<MensualidadHistorialUiState, Unit>(MensualidadHistorialUiState()) {
+ 
+     private var observacionJob: Job? = null
+ 
+     fun cargar(jugadorId: String, jugadorNombre: String) {
+         if (currentState.jugadorId == jugadorId && !currentState.isLoading) return
+-        setState { copy(jugadorId = jugadorId, jugadorNombre = jugadorNombre, isLoading = true) }
++        setState { copy(jugadorId = jugadorId, jugadorNombre = jugadorNombre, isLoading = true, errorMessage = null) }
+         observacionJob?.cancel()
+         observacionJob = viewModelScope.launch {
+-            repository.observarHistorialDeJugador(jugadorId).collect { registros ->
+-                setState { copy(registros = registros, isLoading = false) }
++            val rol = sesionRepository.perfilActual()?.rol
++            setState { copy(puedeVerMontos = rol == UserRole.ADMINISTRADOR) }
++            repository.observarHistorialDeJugador(jugadorId)
++                .catch { e -> setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) } }
++                .collect { registros ->
++                    val vigentes = registros.filter { it.vigente }
++                    setState {
++                        copy(
++                            registros = registros,
++                            resumen = resumir(vigentes),
++                            equipoNombre = registros.firstOrNull { it.equipoNombre.isNotBlank() }?.equipoNombre.orEmpty(),
++                            isLoading = false,
++                            errorMessage = null,
++                        )
++                    }
++                }
++        }
++    }
++
++    private fun resumir(vigentes: List<Mensualidad>): ResumenHistorial {
++        var pagadas = 0
++        var pendientes = 0
++        var vencidas = 0
++        var exoneradas = 0
++        var total = 0.0
++        vigentes.forEach { m ->
++            val corte = LocalDate.of(m.anio, m.mes, 1)
++                .withDayOfMonth(minOf(DIA_CORTE, YearMonth.of(m.anio, m.mes).lengthOfMonth()))
++            when (EstadoMensualidad.calcular(m.estadoRegistrado, corte)) {
++                EstadoMensualidad.PAGADO -> { pagadas++; total += m.montoReferencial }
++                EstadoMensualidad.PENDIENTE -> pendientes++
++                EstadoMensualidad.VENCIDO -> vencidas++
++                EstadoMensualidad.EXONERADO -> exoneradas++
+             }
+         }
++        return ResumenHistorial(pagadas, pendientes, vencidas, exoneradas, total)
++    }
++
++    private companion object {
++        /** Mismo día de corte que la grilla (TODO: leerlo de la academia). */
++        const val DIA_CORTE = 10
+     }
+ }
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesEntryScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesEntryScreen.kt
+index 1118420..b0e6f9a 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesEntryScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesEntryScreen.kt
+@@ -55,14 +55,19 @@ fun MensualidadesEntryScreen(
+             },
+             modifier = modifier,
+         )
+-        is MensualidadesDestino.Registrar -> MensualidadRegistrarScreen(
++        is MensualidadesDestino.Registrar -> {
++            // "Atrás" del sistema vuelve a la grilla en vez de cerrar la app.
++            androidx.activity.compose.BackHandler { destino = MensualidadesDestino.Grilla }
++            MensualidadRegistrarScreen(
+             onGuardado = { destino = MensualidadesDestino.Grilla },
+             onCancelar = { destino = MensualidadesDestino.Grilla },
+             modifier = modifier,
+-        )
++            )
++        }
+         is MensualidadesDestino.Historial -> MensualidadHistorialScreen(
+             jugadorId = actual.jugadorId,
+             jugadorNombre = actual.jugadorNombre,
++            onVolver = { destino = MensualidadesDestino.Grilla },
+             modifier = modifier,
+         )
+     }
+-- 
+2.43.0
+

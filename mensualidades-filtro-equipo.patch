@@ -1,0 +1,106 @@
+From 9e43cd672f28e6589a82cc3d929550235e284d11 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 16:15:39 -0500
+Subject: [PATCH] feat(mensualidades): filtro por equipo en la grilla
+
+Chips desplazables con 'Todos los equipos' y cada equipo que tiene jugadores activos; se combinan con el filtro por estado.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../MensualidadesGrillaScreen.kt              | 27 +++++++++++++++++++
+ .../MensualidadesGrillaViewModel.kt           | 16 +++++++++++
+ 2 files changed, 43 insertions(+)
+
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
+index 26cbfb6..33cae8d 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
+@@ -1,5 +1,6 @@
+ package com.esan.sportpro.ui.mensualidades
+ 
++import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Add
+ import androidx.compose.material.icons.filled.ChevronLeft
+@@ -116,6 +118,31 @@ fun MensualidadesGrillaScreen(
+                 }) { Icon(Icons.Default.ChevronRight, contentDescription = "Mes siguiente") }
+             }
+ 
++            if (state.equiposDisponibles.isNotEmpty()) {
++                Row(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .horizontalScroll(rememberScrollState())
++                        .padding(top = 8.dp),
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                ) {
++                    FilterChip(
++                        selected = state.equipoFiltro == null,
++                        onClick = { viewModel.onFiltroEquipoChanged(null) },
++                        label = { Text("Todos los equipos") },
++                    )
++                    state.equiposDisponibles.forEach { equipo ->
++                        FilterChip(
++                            selected = state.equipoFiltro == equipo.id,
++                            onClick = {
++                                viewModel.onFiltroEquipoChanged(if (state.equipoFiltro == equipo.id) null else equipo.id)
++                            },
++                            label = { Text(equipo.nombre) },
++                        )
++                    }
++                }
++            }
++
+             Row(
+                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
+index 2f64a29..323a6a9 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
+@@ -35,10 +35,15 @@ data class MensualidadesGrillaUiState(
+      */
+     val rolActual: UserRole = UserRole.ADMINISTRADOR,
+     val mensualidades: List<MensualidadConEstadoEfectivo> = emptyList(),
++    /** Equipos con jugadores activos, para el filtro por equipo de la grilla. */
++    val equiposDisponibles: List<EquipoOpcion> = emptyList(),
+     val isLoading: Boolean = true,
+     val errorMessage: String? = null,
+ )
+ 
++/** Opción del filtro por equipo. */
++data class EquipoOpcion(val id: String, val nombre: String)
++
+ /** Mensualidad + su estado efectivo ya resuelto (Vencido calculado, nunca persistido). */
+ data class MensualidadConEstadoEfectivo(
+     val mensualidad: Mensualidad,
+@@ -95,6 +100,17 @@ class MensualidadesGrillaViewModel @Inject constructor(
+                 ),
+             ) { jugadores, pagos ->
+                 val pagoPorJugador = pagos.associateBy { it.jugadorId }
++                val equipos = jugadores.filter { it.activo && it.equipoId.isNotBlank() }
++                    .map { EquipoOpcion(it.equipoId, it.equipoNombre.ifBlank { "Equipo" }) }
++                    .distinctBy { it.id }
++                    .sortedBy { it.nombre.lowercase() }
++                setState {
++                    // Si el equipo filtrado ya no existe, se vuelve a "Todos".
++                    copy(
++                        equiposDisponibles = equipos,
++                        equipoFiltro = equipoFiltro?.takeIf { f -> equipos.any { it.id == f } },
++                    )
++                }
+                 val deJugadoresActivos = jugadores.filter { it.activo }.map { jugador ->
+                     val pago = pagoPorJugador[jugador.id]
+                     if (pago != null) {
+-- 
+2.43.0
+

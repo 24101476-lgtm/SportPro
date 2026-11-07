@@ -1,0 +1,270 @@
+From 0537b5369bbdb115601c10c687d3ee61105a9ba4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 15:31:08 -0500
+Subject: [PATCH] feat(mensualidades): selector de jugadores inscritos en
+ Registrar pago (US-008)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El campo Jugador era texto libre y jugadorId quedaba vacío, por lo que no se podía registrar ningún pago. Ahora se elige entre los jugadores activos de la academia (equipo tomado de la ficha), el ViewModel valida que el id esté en la lista y las reglas de Firestore exigen que el jugador exista y sea de la misma academia.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../MensualidadRegistrarScreen.kt             | 83 ++++++++++++++++---
+ .../MensualidadRegistrarViewModel.kt          | 56 +++++++++++--
+ firestore.rules                               |  7 +-
+ 3 files changed, 123 insertions(+), 23 deletions(-)
+
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
+index 3afb0c2..810b150 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
+@@ -1,6 +1,7 @@
+ package com.esan.sportpro.ui.mensualidades
+ 
+ import com.esan.sportpro.ui.common.BarraSuperiorSportPro
++import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+@@ -15,6 +16,11 @@ import androidx.compose.material3.Button
+ import androidx.compose.material3.CircularProgressIndicator
+ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.FilterChip
++import androidx.compose.material3.Icon
++import androidx.compose.material3.InputChip
++import androidx.compose.material3.ListItem
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Close
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.OutlinedTextField
+ import androidx.compose.material3.Scaffold
+@@ -66,19 +72,11 @@ fun MensualidadRegistrarScreen(
+         ) {
+             RegistroSimuladoLegend()
+ 
+-            OutlinedTextField(
+-                value = state.jugadorNombre,
+-                onValueChange = { viewModel.onJugadorSeleccionado(state.jugadorId, it, state.equipoId, state.equipoNombre) },
+-                label = { Text("Jugador") },
+-                supportingText = { Text("TODO: selector real una vez integrado con el módulo Jugadores") },
+-                modifier = Modifier.fillMaxWidth(),
+-            )
+-
+-            OutlinedTextField(
+-                value = state.equipoNombre,
+-                onValueChange = { viewModel.onJugadorSeleccionado(state.jugadorId, state.jugadorNombre, state.equipoId, it) },
+-                label = { Text("Equipo") },
+-                modifier = Modifier.fillMaxWidth(),
++            SelectorJugador(
++                state = state,
++                onBusqueda = viewModel::onBusquedaJugadorChanged,
++                onElegir = viewModel::onJugadorElegido,
++                onQuitar = viewModel::onJugadorQuitado,
+             )
+ 
+             OutlinedTextField(
+@@ -151,3 +149,62 @@ fun MensualidadRegistrarScreen(
+         }
+     }
+ }
++
++/** Busca entre los jugadores activos de la academia; no admite nombres que no estén inscritos. */
++@Composable
++private fun SelectorJugador(
++    state: MensualidadRegistrarUiState,
++    onBusqueda: (String) -> Unit,
++    onElegir: (com.esan.sportpro.domain.jugadores.Jugador) -> Unit,
++    onQuitar: () -> Unit,
++) {
++    if (state.jugadorId.isNotBlank()) {
++        Text("Jugador", style = MaterialTheme.typography.labelLarge)
++        InputChip(
++            selected = true,
++            onClick = onQuitar,
++            label = {
++                Text(
++                    if (state.equipoNombre.isBlank()) state.jugadorNombre
++                    else "${state.jugadorNombre} · ${state.equipoNombre}",
++                )
++            },
++            trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Quitar jugador") },
++        )
++        return
++    }
++
++    OutlinedTextField(
++        value = state.busquedaJugador,
++        onValueChange = onBusqueda,
++        label = { Text("Buscar jugador inscrito") },
++        supportingText = {
++            Text(
++                when {
++                    state.cargandoJugadores -> "Cargando jugadores…"
++                    state.jugadoresDisponibles.isEmpty() -> "No hay jugadores activos registrados en la academia"
++                    else -> "Elige un jugador de la lista"
++                },
++            )
++        },
++        modifier = Modifier.fillMaxWidth(),
++    )
++    val consulta = state.busquedaJugador.trim()
++    val coincidencias = state.jugadoresDisponibles
++        .filter { consulta.isBlank() || it.nombreCompleto.contains(consulta, ignoreCase = true) }
++        .take(6)
++    if (!state.cargandoJugadores && coincidencias.isEmpty() && consulta.isNotBlank()) {
++        Text(
++            "No hay ningún jugador inscrito con ese nombre",
++            color = MaterialTheme.colorScheme.error,
++            style = MaterialTheme.typography.bodySmall,
++        )
++    }
++    coincidencias.forEach { jugador ->
++        ListItem(
++            headlineContent = { Text(jugador.nombreCompleto) },
++            supportingContent = { if (jugador.equipoNombre.isNotBlank()) Text(jugador.equipoNombre) },
++            modifier = Modifier.clickable { onElegir(jugador) },
++        )
++    }
++}
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
+index 571263b..44d729e 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
+@@ -5,11 +5,14 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
+ import androidx.lifecycle.viewModelScope
+ import com.esan.sportpro.core.viewmodel.BaseViewModel
+ import com.esan.sportpro.data.mensualidades.MensualidadRepository
++import com.esan.sportpro.domain.jugadores.Jugador
++import com.esan.sportpro.domain.jugadores.JugadorRepository
+ import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+ import com.esan.sportpro.domain.mensualidades.MedioPago
+ import com.esan.sportpro.domain.mensualidades.Mensualidad
+ import com.google.firebase.auth.FirebaseAuth
+ import dagger.hilt.android.lifecycle.HiltViewModel
++import kotlinx.coroutines.flow.catch
+ import kotlinx.coroutines.launch
+ import java.time.LocalDate
+ import java.util.Date
+@@ -20,6 +23,10 @@ data class MensualidadRegistrarUiState(
+     val jugadorNombre: String = "",
+     val equipoId: String = "",
+     val equipoNombre: String = "",
++    /** Jugadores activos de la academia: único origen válido para [jugadorId]. */
++    val jugadoresDisponibles: List<Jugador> = emptyList(),
++    val busquedaJugador: String = "",
++    val cargandoJugadores: Boolean = true,
+     val mes: Int = LocalDate.now().monthValue,
+     val anio: Int = LocalDate.now().year,
+     val montoTexto: String = "",
+@@ -46,6 +53,7 @@ class MensualidadRegistrarViewModel @Inject constructor(
+     private val repository: MensualidadRepository,
+     private val firebaseAuth: FirebaseAuth,
+     private val sesionRepository: SesionRepository,
++    private val jugadorRepository: JugadorRepository,
+ ) : BaseViewModel<MensualidadRegistrarUiState, MensualidadRegistrarEvent>(MensualidadRegistrarUiState()) {
+ 
+     /** Academia del perfil autenticado (antes era un valor fijo). */
+@@ -54,20 +62,44 @@ class MensualidadRegistrarViewModel @Inject constructor(
+     init {
+         viewModelScope.launch {
+             sesionRepository.perfilActual()?.let { academiaIdActual = it.academiaId }
++            jugadorRepository.observarJugadores(academiaIdActual)
++                .catch { setState { copy(cargandoJugadores = false, errorMessage = "No se pudo cargar la lista de jugadores") } }
++                .collect { lista ->
++                    val activos = lista.filter { it.activo }
++                    setState {
++                        // Si el jugador elegido ya no existe o se desactivó, se limpia la selección.
++                        val sigueValido = activos.any { it.id == jugadorId }
++                        copy(
++                            jugadoresDisponibles = activos,
++                            cargandoJugadores = false,
++                            jugadorId = if (sigueValido) jugadorId else "",
++                            jugadorNombre = if (sigueValido) jugadorNombre else "",
++                            equipoId = if (sigueValido) equipoId else "",
++                            equipoNombre = if (sigueValido) equipoNombre else "",
++                        )
++                    }
++                }
+         }
+     }
+ 
+-    fun onJugadorSeleccionado(jugadorId: String, jugadorNombre: String, equipoId: String, equipoNombre: String) {
++    fun onBusquedaJugadorChanged(texto: String) = setState { copy(busquedaJugador = texto) }
++
++    /** Elige un jugador inscrito; el equipo se toma de su ficha, no se escribe a mano. */
++    fun onJugadorElegido(jugador: Jugador) {
+         setState {
+             copy(
+-                jugadorId = jugadorId,
+-                jugadorNombre = jugadorNombre,
+-                equipoId = equipoId,
+-                equipoNombre = equipoNombre,
++                jugadorId = jugador.id,
++                jugadorNombre = jugador.nombreCompleto,
++                equipoId = jugador.equipoId,
++                equipoNombre = jugador.equipoNombre,
++                busquedaJugador = "",
++                errorMessage = null,
+             )
+         }
+     }
+ 
++    fun onJugadorQuitado() = setState { copy(jugadorId = "", jugadorNombre = "", equipoId = "", equipoNombre = "") }
++
+     fun onMesAnioChanged(mes: Int, anio: Int) = setState { copy(mes = mes, anio = anio) }
+ 
+     fun onMontoChanged(texto: String) = setState { copy(montoTexto = texto, montoError = null) }
+@@ -100,6 +132,12 @@ class MensualidadRegistrarViewModel @Inject constructor(
+             setState { copy(errorMessage = "Selecciona un jugador") }
+             return
+         }
++        // El jugador debe existir entre los inscritos y activos de la academia.
++        val jugador = estado.jugadoresDisponibles.firstOrNull { it.id == estado.jugadorId }
++        if (jugador == null) {
++            setState { copy(errorMessage = "Selecciona un jugador de la lista") }
++            return
++        }
+         val (monto, montoError) = validarMonto(estado.montoTexto)
+         val observacionError = if (estado.observacion.length > 200) "Máximo 200 caracteres" else null
+         if (monto == null || observacionError != null) {
+@@ -114,10 +152,10 @@ class MensualidadRegistrarViewModel @Inject constructor(
+                 repository.registrarPago(
+                     nuevo = Mensualidad(
+                         academiaId = academiaIdActual,
+-                        equipoId = estado.equipoId,
+-                        equipoNombre = estado.equipoNombre,
+-                        jugadorId = estado.jugadorId,
+-                        jugadorNombre = estado.jugadorNombre,
++                        equipoId = jugador.equipoId,
++                        equipoNombre = jugador.equipoNombre,
++                        jugadorId = jugador.id,
++                        jugadorNombre = jugador.nombreCompleto,
+                         mes = estado.mes,
+                         anio = estado.anio,
+                         montoReferencial = monto,
+diff --git a/firestore.rules b/firestore.rules
+index 4140fda..2b0fae8 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -216,9 +216,14 @@ service cloud.firestore {
+ 
+     // US-008 (simulado, sin cobros reales): todos leen su información; solo el administrador
+     // registra o anula pagos.
++    // Al crear, el jugador debe existir y ser de la misma academia del administrador.
+     match /mensualidades/{id} {
+       allow read: if autenticado();
+-      allow create, update: if esAdmin();
++      allow create: if esAdmin()
++        && request.resource.data.academiaId == academiaPropia()
++        && exists(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId))
++        && get(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId)).data.academiaId == academiaPropia();
++      allow update: if esAdmin();
+       allow delete: if false;
+     }
+ 
+-- 
+2.43.0
+

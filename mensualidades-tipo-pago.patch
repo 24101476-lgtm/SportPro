@@ -1,0 +1,157 @@
+From 0c0410e55ae5b4f6836dc145f577c45529d30c01 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 16:33:53 -0500
+Subject: [PATCH] feat(mensualidades): tipo de pago seleccionable (normal,
+ promo, beca, otro monto)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El monto ya no se escribe a mano por defecto: se elige el tipo de pago y el monto se fija (la beca exonera). 'Otro monto' conserva el campo libre con la validación 0..5000.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../sportpro/domain/mensualidades/TipoPago.kt | 19 +++++++++
+ .../MensualidadRegistrarScreen.kt             | 42 +++++++++++++++----
+ .../MensualidadRegistrarViewModel.kt          | 17 +++++++-
+ 3 files changed, 68 insertions(+), 10 deletions(-)
+ create mode 100644 app/src/main/java/com/esan/sportpro/domain/mensualidades/TipoPago.kt
+
+diff --git a/app/src/main/java/com/esan/sportpro/domain/mensualidades/TipoPago.kt b/app/src/main/java/com/esan/sportpro/domain/mensualidades/TipoPago.kt
+new file mode 100644
+index 0000000..47c6625
+--- /dev/null
++++ b/app/src/main/java/com/esan/sportpro/domain/mensualidades/TipoPago.kt
+@@ -0,0 +1,19 @@
++package com.esan.sportpro.domain.mensualidades
++
++/**
++ * Tipo de mensualidad que el administrador elige al registrar un pago (US-008), en vez de
++ * escribir el monto a mano. Los montos son referenciales y simulados: se cambian aquí, en un
++ * solo lugar. [OTRO] deja escribir un monto distinto (rango 0.00..5000.00).
++ */
++enum class TipoPago(
++    val etiqueta: String,
++    /** Monto fijo del tipo; `null` si el administrador lo escribe ([OTRO]). */
++    val monto: Double?,
++    /** Estado que corresponde por defecto a este tipo (la beca exonera el pago). */
++    val estado: EstadoMensualidad?,
++) {
++    NORMAL("Pago normal", 100.0, null),
++    PROMO("Pago promo", 80.0, null),
++    BECA("Beca", 0.0, EstadoMensualidad.EXONERADO),
++    OTRO("Otro monto", null, null),
++}
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
+index 810b150..1bea3b1 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarScreen.kt
+@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.mensualidades
+ 
+ import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
+ import androidx.hilt.navigation.compose.hiltViewModel
+ import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+ import com.esan.sportpro.domain.mensualidades.MedioPago
++import com.esan.sportpro.domain.mensualidades.TipoPago
+ import com.esan.sportpro.ui.common.RegistroSimuladoLegend
+ 
+ /**
+@@ -79,15 +81,37 @@ fun MensualidadRegistrarScreen(
+                 onQuitar = viewModel::onJugadorQuitado,
+             )
+ 
+-            OutlinedTextField(
+-                value = state.montoTexto,
+-                onValueChange = viewModel::onMontoChanged,
+-                label = { Text("Monto referencial (S/)") },
+-                isError = state.montoError != null,
+-                supportingText = { state.montoError?.let { Text(it) } },
+-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+-                modifier = Modifier.fillMaxWidth(),
+-            )
++            Text("Tipo de pago", style = MaterialTheme.typography.labelLarge)
++            Row(
++                modifier = Modifier.horizontalScroll(rememberScrollState()),
++                horizontalArrangement = Arrangement.spacedBy(8.dp),
++            ) {
++                TipoPago.entries.forEach { tipo ->
++                    FilterChip(
++                        selected = state.tipoPago == tipo,
++                        onClick = { viewModel.onTipoPagoChanged(tipo) },
++                        label = {
++                            Text(tipo.monto?.let { "${tipo.etiqueta} · S/ %.2f".format(it) } ?: tipo.etiqueta)
++                        },
++                    )
++                }
++            }
++            if (state.tipoPago == TipoPago.OTRO) {
++                OutlinedTextField(
++                    value = state.montoTexto,
++                    onValueChange = viewModel::onMontoChanged,
++                    label = { Text("Monto referencial (S/)") },
++                    isError = state.montoError != null,
++                    supportingText = { state.montoError?.let { Text(it) } },
++                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                    modifier = Modifier.fillMaxWidth(),
++                )
++            } else {
++                Text(
++                    "Monto: S/ ${state.montoTexto}",
++                    style = MaterialTheme.typography.bodyMedium,
++                )
++            }
+ 
+             Text("Medio declarado", style = MaterialTheme.typography.labelLarge)
+             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
+index 44d729e..ed4e892 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadRegistrarViewModel.kt
+@@ -10,6 +10,7 @@ import com.esan.sportpro.domain.jugadores.JugadorRepository
+ import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+ import com.esan.sportpro.domain.mensualidades.MedioPago
+ import com.esan.sportpro.domain.mensualidades.Mensualidad
++import com.esan.sportpro.domain.mensualidades.TipoPago
+ import com.google.firebase.auth.FirebaseAuth
+ import dagger.hilt.android.lifecycle.HiltViewModel
+ import kotlinx.coroutines.flow.catch
+@@ -29,7 +30,8 @@ data class MensualidadRegistrarUiState(
+     val cargandoJugadores: Boolean = true,
+     val mes: Int = LocalDate.now().monthValue,
+     val anio: Int = LocalDate.now().year,
+-    val montoTexto: String = "",
++    val tipoPago: TipoPago = TipoPago.NORMAL,
++    val montoTexto: String = "%.2f".format(TipoPago.NORMAL.monto),
+     val fechaRegistro: Date = Date(),
+     val medioDeclarado: MedioPago = MedioPago.EFECTIVO,
+     val observacion: String = "",
+@@ -102,6 +104,19 @@ class MensualidadRegistrarViewModel @Inject constructor(
+ 
+     fun onMesAnioChanged(mes: Int, anio: Int) = setState { copy(mes = mes, anio = anio) }
+ 
++    /** Elige el tipo de pago: fija el monto (o lo deja libre en "Otro") y el estado si corresponde. */
++    fun onTipoPagoChanged(tipo: TipoPago) {
++        setState {
++            copy(
++                tipoPago = tipo,
++                montoTexto = tipo.monto?.let { "%.2f".format(it) } ?: "",
++                montoError = null,
++                estadoSeleccionado = tipo.estado
++                    ?: if (estadoSeleccionado == EstadoMensualidad.EXONERADO) EstadoMensualidad.PAGADO else estadoSeleccionado,
++            )
++        }
++    }
++
+     fun onMontoChanged(texto: String) = setState { copy(montoTexto = texto, montoError = null) }
+ 
+     fun onFechaRegistroChanged(fecha: Date) = setState { copy(fechaRegistro = fecha) }
+-- 
+2.43.0
+

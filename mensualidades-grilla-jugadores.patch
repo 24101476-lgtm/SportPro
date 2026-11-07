@@ -1,0 +1,162 @@
+From e3799862f39508ad27c2267cc8d50df366c17c3c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 16:04:34 -0500
+Subject: [PATCH] feat(mensualidades): la grilla lista a todos los jugadores
+ activos con su equipo y estado
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La grilla solo mostraba pagos ya registrados. Ahora combina los jugadores activos de la academia con los pagos vigentes del mes: cada jugador aparece con su equipo y estado (Pagado, Pendiente, Vencido o Exonerado); sin pago registrado sale como Pendiente y pasa a Vencido tras el día de corte. Filtros por estado y equipo en memoria.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../MensualidadesGrillaScreen.kt              |  9 ++-
+ .../MensualidadesGrillaViewModel.kt           | 74 +++++++++++++++----
+ 2 files changed, 67 insertions(+), 16 deletions(-)
+
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
+index a415aac..26cbfb6 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaScreen.kt
+@@ -137,7 +137,7 @@ fun MensualidadesGrillaScreen(
+                 }
+                 state.mensualidades.isEmpty() -> EstadoVacioModulo(
+                     titulo = "Aún no hay mensualidades",
+-                    mensaje = "No hay pagos registrados en este periodo",
++                    mensaje = "No hay jugadores que coincidan con este periodo o filtro",
+                     icono = Icons.Default.Payments,
+                 )
+                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@@ -153,7 +153,12 @@ fun MensualidadesGrillaScreen(
+                                 Column {
+                                     Text(item.mensualidad.jugadorNombre, style = MaterialTheme.typography.titleSmall)
+                                     Text(item.mensualidad.equipoNombre, style = MaterialTheme.typography.bodySmall)
+-                                    if (state.rolActual == UserRole.ADMINISTRADOR) {
++                                    if (item.sinRegistro) {
++                                        Text(
++                                            text = "Sin pago registrado",
++                                            style = MaterialTheme.typography.bodyMedium,
++                                        )
++                                    } else if (state.rolActual == UserRole.ADMINISTRADOR) {
+                                         Text(
+                                             text = "S/ %.2f".format(item.mensualidad.montoReferencial),
+                                             style = MaterialTheme.typography.bodyMedium,
+diff --git a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
+index e253e2a..2f64a29 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/mensualidades/MensualidadesGrillaViewModel.kt
+@@ -7,6 +7,7 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
+ import androidx.lifecycle.viewModelScope
+ import com.esan.sportpro.core.viewmodel.BaseViewModel
+ import com.esan.sportpro.data.mensualidades.MensualidadRepository
++import com.esan.sportpro.domain.jugadores.JugadorRepository
+ import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+ import com.esan.sportpro.domain.mensualidades.Mensualidad
+ import com.esan.sportpro.navigation.UserRole
+@@ -14,6 +15,7 @@ import com.google.firebase.auth.FirebaseAuth
+ import dagger.hilt.android.lifecycle.HiltViewModel
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.combine
+ import kotlinx.coroutines.launch
+ import java.time.LocalDate
+ import java.time.YearMonth
+@@ -41,6 +43,8 @@ data class MensualidadesGrillaUiState(
+ data class MensualidadConEstadoEfectivo(
+     val mensualidad: Mensualidad,
+     val estadoEfectivo: EstadoMensualidad,
++    /** true si el jugador activo aún no tiene ningún pago registrado en el mes (se muestra como Pendiente/Vencido). */
++    val sinRegistro: Boolean = false,
+ )
+ 
+ sealed interface MensualidadesGrillaEvent {
+@@ -54,6 +58,7 @@ class MensualidadesGrillaViewModel @Inject constructor(
+     private val repository: MensualidadRepository,
+     private val firebaseAuth: FirebaseAuth,
+     private val sesionRepository: SesionRepository,
++    private val jugadorRepository: JugadorRepository,
+ ) : BaseViewModel<MensualidadesGrillaUiState, MensualidadesGrillaEvent>(MensualidadesGrillaUiState()) {
+ 
+     private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
+@@ -78,21 +83,62 @@ class MensualidadesGrillaViewModel @Inject constructor(
+                 .withDayOfMonth(
+                     minOf(estado.diaCorteMes, YearMonth.of(estado.anio, estado.mes).lengthOfMonth()),
+                 )
+-            repository.observarGrilla(
+-                academiaId = academiaIdActual,
+-                mes = estado.mes,
+-                anio = estado.anio,
+-                equipoId = estado.equipoFiltro,
+-                estado = estado.estadoFiltro,
+-            ).catch { e ->
+-                setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) }
+-            }.collectLatest { lista ->
+-                val resueltas = lista.map { m ->
+-                    MensualidadConEstadoEfectivo(
+-                        mensualidad = m,
+-                        estadoEfectivo = EstadoMensualidad.calcular(m.estadoRegistrado, corte),
+-                    )
++            // Se combinan los jugadores activos con los pagos vigentes del mes: así aparecen todos los
++            // jugadores inscritos (con su equipo) y los que no tienen registro salen como Pendiente,
++            // pasando a Vencido automáticamente al cumplirse el día de corte.
++            combine(
++                jugadorRepository.observarJugadores(academiaIdActual),
++                repository.observarGrilla(
++                    academiaId = academiaIdActual,
++                    mes = estado.mes,
++                    anio = estado.anio,
++                ),
++            ) { jugadores, pagos ->
++                val pagoPorJugador = pagos.associateBy { it.jugadorId }
++                val deJugadoresActivos = jugadores.filter { it.activo }.map { jugador ->
++                    val pago = pagoPorJugador[jugador.id]
++                    if (pago != null) {
++                        // Se refrescan nombre y equipo con la ficha actual del jugador.
++                        val m = pago.copy(
++                            jugadorNombre = jugador.nombreCompleto.ifBlank { pago.jugadorNombre },
++                            equipoId = jugador.equipoId.ifBlank { pago.equipoId },
++                            equipoNombre = jugador.equipoNombre.ifBlank { pago.equipoNombre },
++                        )
++                        MensualidadConEstadoEfectivo(m, EstadoMensualidad.calcular(m.estadoRegistrado, corte))
++                    } else {
++                        val vacio = Mensualidad(
++                            id = "sin-registro-${jugador.id}",
++                            academiaId = academiaIdActual,
++                            equipoId = jugador.equipoId,
++                            equipoNombre = jugador.equipoNombre,
++                            jugadorId = jugador.id,
++                            jugadorNombre = jugador.nombreCompleto,
++                            mes = estado.mes,
++                            anio = estado.anio,
++                            estadoRegistrado = EstadoMensualidad.PENDIENTE,
++                        )
++                        MensualidadConEstadoEfectivo(
++                            mensualidad = vacio,
++                            estadoEfectivo = EstadoMensualidad.calcular(EstadoMensualidad.PENDIENTE, corte),
++                            sinRegistro = true,
++                        )
++                    }
++                }
++                // Pagos de jugadores que ya no están activos se conservan (el historial no se pierde).
++                val idsActivos = jugadores.filter { it.activo }.map { it.id }.toSet()
++                val deInactivos = pagos.filter { it.jugadorId !in idsActivos }.map { m ->
++                    MensualidadConEstadoEfectivo(m, EstadoMensualidad.calcular(m.estadoRegistrado, corte))
+                 }
++                (deJugadoresActivos + deInactivos)
++                    .filter { estado.equipoFiltro == null || it.mensualidad.equipoId == estado.equipoFiltro }
++                    .filter { estado.estadoFiltro == null || it.estadoEfectivo == estado.estadoFiltro }
++                    .sortedWith(
++                        compareBy<MensualidadConEstadoEfectivo> { it.mensualidad.equipoNombre.lowercase() }
++                            .thenBy { it.mensualidad.jugadorNombre.lowercase() },
++                    )
++            }.catch { e ->
++                setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) }
++            }.collectLatest { resueltas ->
+                 setState { copy(mensualidades = resueltas, isLoading = false, errorMessage = null) }
+             }
+         }
+-- 
+2.43.0
+

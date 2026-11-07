@@ -1,0 +1,749 @@
+From ad958017948959fcb54102b68981a58c5015787d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 16:43:13 -0500
+Subject: [PATCH] =?UTF-8?q?feat(estadisticas):=20jugador=20destacado,=20ra?=
+ =?UTF-8?q?nkings,=20tarjetas=20con=20foto=20y=20detalle=20redise=C3=B1ado?=
+ =?UTF-8?q?=20(US-026)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Jugador destacado del periodo (gol 3, asistencia 2, amarilla -1, roja -3) y rankings de goleadores, asistencias, minutos y asistencia a entrenamientos, con pruebas unitarias.
+- La tabla de jugadores pasa a tarjetas con foto, cifras clave y orden por chips.
+- El detalle del jugador muestra su foto de perfil (Coil) y las cifras en recuadros.
+- La foto y el nombre se leen de la ficha del jugador; si el rol no puede leerla, se usan las iniciales.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018bWHSXom9a94eZujjfof45
+---
+ .../data/estadisticas/StatsRepository.kt      |  19 ++-
+ .../domain/estadisticas/EstadisticaJugador.kt |   2 +
+ .../domain/estadisticas/RankingsJugadores.kt  |  33 ++++
+ .../ui/estadisticas/AvatarEstadistica.kt      |  48 ++++++
+ .../estadisticas/EstadisticasEquipoScreen.kt  |   2 +
+ .../EstadisticasJugadorDetalleScreen.kt       |  67 +++++---
+ .../EstadisticasJugadoresTablaScreen.kt       | 147 ++++++++----------
+ .../estadisticas/EstadisticasSeccionScreen.kt |   3 +
+ .../estadisticas/RankingsEquipoSecciones.kt   | 125 +++++++++++++++
+ .../sportpro/domain/RankingsJugadoresTest.kt  |  39 +++++
+ 10 files changed, 379 insertions(+), 106 deletions(-)
+ create mode 100644 app/src/main/java/com/esan/sportpro/domain/estadisticas/RankingsJugadores.kt
+ create mode 100644 app/src/main/java/com/esan/sportpro/ui/estadisticas/AvatarEstadistica.kt
+ create mode 100644 app/src/main/java/com/esan/sportpro/ui/estadisticas/RankingsEquipoSecciones.kt
+ create mode 100644 app/src/test/java/com/esan/sportpro/domain/RankingsJugadoresTest.kt
+
+diff --git a/app/src/main/java/com/esan/sportpro/data/estadisticas/StatsRepository.kt b/app/src/main/java/com/esan/sportpro/data/estadisticas/StatsRepository.kt
+index 45844d7..80dabca 100644
+--- a/app/src/main/java/com/esan/sportpro/data/estadisticas/StatsRepository.kt
++++ b/app/src/main/java/com/esan/sportpro/data/estadisticas/StatsRepository.kt
+@@ -126,7 +126,7 @@ class StatsRepository @Inject constructor(
+         if (partidos.isEmpty()) return emptyList()
+         val partidoIds = partidos.map { it.id }
+         val eventos = eventosVigentesDe(partidoIds)
+-        val nombresPorJugador = nombresDeJugadores(equipoId)
++        val (nombresPorJugador, fotosPorJugador) = datosDePlantel(equipoId)
+         val asistenciaPorJugador = asistenciaPorJugador(equipoId, filtro)
+ 
+         val eventosPorJugador = eventos.groupBy { it.jugadorId }
+@@ -141,7 +141,7 @@ class StatsRepository @Inject constructor(
+                 eventos = eventosPorJugador[jugadorId].orEmpty(),
+                 partidosDelJugador = eventosPorJugador[jugadorId].orEmpty().map { it.partidoId }.distinct().size,
+                 porcentajeAsistencia = asistenciaPorJugador[jugadorId] ?: 0.0,
+-            )
++            ).copy(fotoUrl = fotosPorJugador[jugadorId].orEmpty())
+         }
+ 
+         val sinAsignar = eventosPorJugador[null].orEmpty()
+@@ -302,16 +302,21 @@ class StatsRepository @Inject constructor(
+      * Nombres de los jugadores. `jugadores` solo lo puede leer el personal de la academia, así que
+      * para jugadores y padres se usan los nombres copiados en los convocados de cada partido.
+      */
+-    private suspend fun nombresDeJugadores(equipoId: String): Map<String, String> {
+-        val delPlantel = runCatching {
++    private suspend fun datosDePlantel(equipoId: String): Pair<Map<String, String>, Map<String, String>> {
++        val docs = runCatching {
+             firestore.collection("jugadores")
+                 .whereEqualTo("equipoId", equipoId)
+                 .get()
+                 .await()
+                 .documents
+-                .associate { it.id to (it.getString("nombre") ?: "Jugador sin nombre") }
+-        }.getOrDefault(emptyMap())
+-        return nombresConvocados + delPlantel
++        }.getOrDefault(emptyList())
++        val nombres = docs.associate { doc ->
++            val nombre = doc.getString("nombre")
++                ?: "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
++            doc.id to nombre.ifBlank { "Jugador sin nombre" }
++        }
++        val fotos = docs.mapNotNull { doc -> doc.getString("fotoUrl")?.takeIf { it.isNotBlank() }?.let { doc.id to it } }.toMap()
++        return (nombresConvocados + nombres) to fotos
+     }
+ 
+     /** Nombres leídos de `partidos/{id}/convocados` en la última consulta de eventos. */
+diff --git a/app/src/main/java/com/esan/sportpro/domain/estadisticas/EstadisticaJugador.kt b/app/src/main/java/com/esan/sportpro/domain/estadisticas/EstadisticaJugador.kt
+index 05259a0..00939c7 100644
+--- a/app/src/main/java/com/esan/sportpro/domain/estadisticas/EstadisticaJugador.kt
++++ b/app/src/main/java/com/esan/sportpro/domain/estadisticas/EstadisticaJugador.kt
+@@ -20,4 +20,6 @@ data class EstadisticaJugador(
+     /** Porcentaje 0..100. */
+     val porcentajeAsistenciaEntrenamientos: Double = 0.0,
+     val sinAsignar: Boolean = false,
++    /** Foto del perfil (Supabase); vacía si no tiene o si el rol no puede leer la ficha. */
++    val fotoUrl: String = "",
+ )
+diff --git a/app/src/main/java/com/esan/sportpro/domain/estadisticas/RankingsJugadores.kt b/app/src/main/java/com/esan/sportpro/domain/estadisticas/RankingsJugadores.kt
+new file mode 100644
+index 0000000..76c9eec
+--- /dev/null
++++ b/app/src/main/java/com/esan/sportpro/domain/estadisticas/RankingsJugadores.kt
+@@ -0,0 +1,33 @@
++package com.esan.sportpro.domain.estadisticas
++
++/**
++ * US-026 — Rankings y "jugador destacado" calculados sobre la tabla de estadísticas del periodo.
++ * Son funciones puras (sin Android ni Firebase) para poder probarlas con pruebas unitarias.
++ * La fila "Sin asignar" nunca entra en un ranking: no es un jugador real.
++ */
++object RankingsJugadores {
++
++    /**
++     * Puntaje del jugador destacado: gol = 3, asistencia = 2, tarjeta amarilla = -1 y roja = -3.
++     * Es una regla simple y explicable, no un dato guardado.
++     */
++    fun puntaje(jugador: EstadisticaJugador): Int =
++        jugador.goles * 3 + jugador.asistencias * 2 - jugador.tarjetasAmarillas - jugador.tarjetasRojas * 3
++
++    /** Jugador con mayor [puntaje] (desempate: más minutos). `null` si nadie suma puntos. */
++    fun destacado(jugadores: List<EstadisticaJugador>): EstadisticaJugador? =
++        jugadores
++            .filter { !it.sinAsignar && puntaje(it) > 0 }
++            .maxWithOrNull(compareBy<EstadisticaJugador> { puntaje(it) }.thenBy { it.minutosJugados })
++
++    /** Los [n] primeros por [valor] descendente, sin contar a quien tiene 0 ni a "Sin asignar". */
++    fun top(
++        jugadores: List<EstadisticaJugador>,
++        n: Int = 3,
++        valor: (EstadisticaJugador) -> Double,
++    ): List<EstadisticaJugador> =
++        jugadores
++            .filter { !it.sinAsignar && valor(it) > 0.0 }
++            .sortedWith(compareByDescending<EstadisticaJugador> { valor(it) }.thenBy { it.jugadorNombre.lowercase() })
++            .take(n)
++}
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/AvatarEstadistica.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/AvatarEstadistica.kt
+new file mode 100644
+index 0000000..b46506e
+--- /dev/null
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/AvatarEstadistica.kt
+@@ -0,0 +1,48 @@
++package com.esan.sportpro.ui.estadisticas
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.layout.ContentScale
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import coil.compose.AsyncImage
++import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
++
++/** Foto de perfil redonda; si no hay foto, las iniciales del nombre. Coil carga y cachea la imagen. */
++@Composable
++fun AvatarEstadistica(jugador: EstadisticaJugador, tamano: Dp = 44.dp, modifier: Modifier = Modifier) {
++    Box(
++        modifier = modifier
++            .size(tamano)
++            .clip(CircleShape)
++            .background(MaterialTheme.colorScheme.secondaryContainer),
++        contentAlignment = Alignment.Center,
++    ) {
++        if (jugador.fotoUrl.isNotBlank()) {
++            AsyncImage(
++                model = jugador.fotoUrl,
++                contentDescription = "Foto de ${jugador.jugadorNombre}",
++                contentScale = ContentScale.Crop,
++                modifier = Modifier.fillMaxSize(),
++            )
++        } else {
++            val iniciales = jugador.jugadorNombre.split(" ")
++                .mapNotNull { it.firstOrNull()?.uppercaseChar() }
++                .take(2)
++                .joinToString("")
++            Text(
++                text = iniciales.ifBlank { "?" },
++                style = if (tamano >= 72.dp) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleSmall,
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasEquipoScreen.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasEquipoScreen.kt
+index 81b0a93..acda9b4 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasEquipoScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasEquipoScreen.kt
+@@ -39,6 +39,7 @@ import com.esan.sportpro.ui.common.TarjetaSportPro
+ fun EstadisticasEquipoScreen(
+     onVerJugadores: () -> Unit,
+     onAbrirFiltros: () -> Unit,
++    onSeleccionarJugador: (com.esan.sportpro.domain.estadisticas.EstadisticaJugador) -> Unit = {},
+     modifier: Modifier = Modifier,
+     viewModel: EstadisticasViewModel = hiltViewModel(),
+ ) {
+@@ -126,6 +127,7 @@ fun EstadisticasEquipoScreen(
+                             }
+                         }
+                     }
++                    item { SeccionRankingsEquipo(state.jugadores, onSeleccionarJugador) }
+                     item {
+                         TarjetaSportPro(onClick = onVerJugadores) {
+                             Row(
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadorDetalleScreen.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadorDetalleScreen.kt
+index e3e043e..537bbe7 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadorDetalleScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadorDetalleScreen.kt
+@@ -1,17 +1,16 @@
+ package com.esan.sportpro.ui.estadisticas
+ 
+-import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.lazy.LazyColumn
+-import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.ArrowBack
+-import androidx.compose.material3.Card
++import androidx.compose.material.icons.filled.EmojiEvents
+ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+@@ -19,19 +18,24 @@ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
++import com.esan.sportpro.ui.common.BarraSuperiorSportPro
++import com.esan.sportpro.ui.common.TarjetaSportPro
+ 
+-/** US-026 — Frame 123_Estadisticas_Jugador_Detalle. */
++/** US-026 — Frame 123_Estadisticas_Jugador_Detalle: foto, nombre y cifras en recuadros. */
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun EstadisticasJugadorDetalleScreen(
+     jugador: EstadisticaJugador,
+     onVolver: () -> Unit,
+     modifier: Modifier = Modifier,
++    esDestacado: Boolean = false,
+ ) {
+-    val filas = listOf(
++    val cifras = listOf(
+         "Partidos jugados" to jugador.partidosJugados.toString(),
+         "Minutos jugados" to jugador.minutosJugados.toString(),
+         "Goles" to jugador.goles.toString(),
+@@ -39,14 +43,14 @@ fun EstadisticasJugadorDetalleScreen(
+         "Tarjetas amarillas" to jugador.tarjetasAmarillas.toString(),
+         "Tarjetas rojas" to jugador.tarjetasRojas.toString(),
+         "Faltas cometidas" to jugador.faltas.toString(),
+-        "% asistencia a entrenamientos" to "%.0f%%".format(jugador.porcentajeAsistenciaEntrenamientos),
++        "Asistencia a entrenamientos" to "%.0f%%".format(jugador.porcentajeAsistenciaEntrenamientos),
+     )
+ 
+     Scaffold(
+         modifier = modifier,
+         topBar = {
+             BarraSuperiorSportPro(
+-                title = { Text(jugador.jugadorNombre) },
++                title = { Text("Detalle del jugador") },
+                 navigationIcon = {
+                     IconButton(onClick = onVolver) {
+                         Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+@@ -55,23 +59,44 @@ fun EstadisticasJugadorDetalleScreen(
+             )
+         },
+     ) { padding ->
+-        LazyColumn(
++        Column(
+             modifier = Modifier
+                 .fillMaxSize()
+                 .padding(padding)
+-                .padding(16.dp),
+-            verticalArrangement = Arrangement.spacedBy(8.dp),
++                .padding(16.dp)
++                .verticalScroll(rememberScrollState()),
++            verticalArrangement = Arrangement.spacedBy(16.dp),
++            horizontalAlignment = Alignment.CenterHorizontally,
+         ) {
+-            items(filas) { (etiqueta, valor) ->
+-                Card(modifier = Modifier.fillMaxWidth()) {
+-                    Row(
+-                        modifier = Modifier
+-                            .fillMaxWidth()
+-                            .padding(16.dp),
+-                        horizontalArrangement = Arrangement.SpaceBetween,
+-                    ) {
+-                        Text(text = etiqueta, style = MaterialTheme.typography.bodyLarge)
+-                        Text(text = valor, style = MaterialTheme.typography.titleMedium)
++            AvatarEstadistica(jugador, tamano = 120.dp)
++            Text(jugador.jugadorNombre, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
++            if (esDestacado) {
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
++                    Text(
++                        "Jugador destacado del periodo",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.primary,
++                        modifier = Modifier.padding(start = 6.dp),
++                    )
++                }
++            }
++            cifras.chunked(2).forEach { par ->
++                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++                    par.forEach { (etiqueta, valor) ->
++                        TarjetaSportPro(modifier = Modifier.weight(1f)) {
++                            Column(
++                                modifier = Modifier.fillMaxWidth().padding(16.dp),
++                                horizontalAlignment = Alignment.CenterHorizontally,
++                            ) {
++                                Text(valor, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
++                                Text(
++                                    etiqueta,
++                                    style = MaterialTheme.typography.bodySmall,
++                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                                )
++                            }
++                        }
+                     }
+                 }
+             }
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadoresTablaScreen.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadoresTablaScreen.kt
+index 6355b74..e4ba4f4 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadoresTablaScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasJugadoresTablaScreen.kt
+@@ -1,44 +1,44 @@
+ package com.esan.sportpro.ui.estadisticas
+ 
+-import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+ import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.lazy.LazyColumn
+-import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.lazy.itemsIndexed
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.ArrowBack
+ import androidx.compose.material.icons.filled.ArrowDownward
+ import androidx.compose.material.icons.filled.ArrowUpward
+ import androidx.compose.material3.ExperimentalMaterial3Api
+-import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.FilterChip
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Scaffold
+-import androidx.compose.material3.Surface
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
++import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.hilt.navigation.compose.hiltViewModel
+ import com.esan.sportpro.domain.estadisticas.ColumnaEstadisticaJugador
+ import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
++import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+ import com.esan.sportpro.ui.common.EmptyStateMessage
++import com.esan.sportpro.ui.common.TarjetaSportPro
+ 
+-private val columnas = ColumnaEstadisticaJugador.entries
+-private val anchoColumna = 84.dp
+-private val anchoColumnaJugador = 140.dp
+-
+-/** US-026, criterio 5 — Frame 122_Estadisticas_Jugadores_Tabla, ordenable por encabezado. */
++/**
++ * US-026, criterio 5 — Frame 122_Estadisticas_Jugadores_Tabla. Cada jugador es una tarjeta con
++ * foto y sus cifras clave; el orden se cambia con los chips (volver a tocar invierte el sentido).
++ */
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun EstadisticasJugadoresTablaScreen(
+@@ -48,7 +48,6 @@ fun EstadisticasJugadoresTablaScreen(
+     viewModel: EstadisticasViewModel = hiltViewModel(),
+ ) {
+     val state by viewModel.uiState.collectAsState()
+-    val scrollHorizontal = rememberScrollState()
+ 
+     Scaffold(
+         modifier = modifier,
+@@ -71,17 +70,34 @@ fun EstadisticasJugadoresTablaScreen(
+             return@Scaffold
+         }
+ 
+-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+-            Row(modifier = Modifier.horizontalScroll(scrollHorizontal)) {
+-                Column {
+-                    EncabezadoFila(columnaOrden = state.columnaOrden, ordenAscendente = state.ordenAscendente, onOrdenar = viewModel::cambiarOrden)
+-                    HorizontalDivider()
+-                    LazyColumn {
+-                        items(state.jugadores, key = { it.jugadorId }) { jugador ->
+-                            FilaJugador(jugador = jugador, onClick = { onSeleccionarJugador(jugador) })
+-                            HorizontalDivider()
+-                        }
+-                    }
++        Column(
++            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
++            verticalArrangement = Arrangement.spacedBy(12.dp),
++        ) {
++            Row(
++                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
++                horizontalArrangement = Arrangement.spacedBy(8.dp),
++            ) {
++                ColumnaEstadisticaJugador.entries.forEach { columna ->
++                    val activa = state.columnaOrden == columna
++                    FilterChip(
++                        selected = activa,
++                        onClick = { viewModel.cambiarOrden(columna) },
++                        label = { Text(columna.etiqueta) },
++                        trailingIcon = if (activa) {
++                            {
++                                Icon(
++                                    imageVector = if (state.ordenAscendente) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
++                                    contentDescription = null,
++                                )
++                            }
++                        } else null,
++                    )
++                }
++            }
++            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
++                itemsIndexed(state.jugadores, key = { _, j -> j.jugadorId }) { _, jugador ->
++                    TarjetaJugadorLista(jugador = jugador, onClick = { onSeleccionarJugador(jugador) })
+                 }
+             }
+         }
+@@ -89,70 +105,45 @@ fun EstadisticasJugadoresTablaScreen(
+ }
+ 
+ @Composable
+-private fun EncabezadoFila(
+-    columnaOrden: ColumnaEstadisticaJugador,
+-    ordenAscendente: Boolean,
+-    onOrdenar: (ColumnaEstadisticaJugador) -> Unit,
+-) {
+-    Row {
+-        columnas.forEach { columna ->
+-            val ancho = if (columna == ColumnaEstadisticaJugador.JUGADOR) anchoColumnaJugador else anchoColumna
+-            Surface(
+-                modifier = Modifier
+-                    .width(ancho)
+-                    .padding(4.dp),
+-                onClick = { onOrdenar(columna) },
+-            ) {
+-                Row(modifier = Modifier.padding(8.dp)) {
++private fun TarjetaJugadorLista(jugador: EstadisticaJugador, onClick: () -> Unit) {
++    TarjetaSportPro(onClick = onClick) {
++        Row(
++            modifier = Modifier.fillMaxWidth().padding(14.dp),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(12.dp),
++        ) {
++            AvatarEstadistica(jugador, tamano = 48.dp)
++            Column(modifier = Modifier.weight(1f)) {
++                Text(
++                    jugador.jugadorNombre,
++                    style = MaterialTheme.typography.titleSmall,
++                    fontWeight = FontWeight.Bold,
++                    color = if (jugador.sinAsignar) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
++                )
++                Text(
++                    "${jugador.partidosJugados} PJ · ${jugador.minutosJugados} min · " +
++                        "TA ${jugador.tarjetasAmarillas} · TR ${jugador.tarjetasRojas}",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++                if (!jugador.sinAsignar) {
+                     Text(
+-                        text = columna.etiqueta,
+-                        style = MaterialTheme.typography.labelMedium,
+-                        fontWeight = FontWeight.Bold,
++                        "Entrenamientos ${"%.0f".format(jugador.porcentajeAsistenciaEntrenamientos)}%",
++                        style = MaterialTheme.typography.bodySmall,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     )
+-                    if (columnaOrden == columna) {
+-                        Icon(
+-                            imageVector = if (ordenAscendente) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+-                            contentDescription = null,
+-                            modifier = Modifier.padding(start = 2.dp),
+-                        )
+-                    }
+                 }
+             }
++            CifraDestacada(valor = jugador.goles, etiqueta = "Goles")
++            CifraDestacada(valor = jugador.asistencias, etiqueta = "Asist.")
+         }
+     }
+ }
+ 
+ @Composable
+-private fun FilaJugador(jugador: EstadisticaJugador, onClick: () -> Unit) {
+-    val colorTexto = if (jugador.sinAsignar) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+-    Row {
+-        Surface(modifier = Modifier.width(anchoColumnaJugador), onClick = onClick) {
+-            Text(
+-                text = jugador.jugadorNombre,
+-                modifier = Modifier.padding(8.dp),
+-                color = colorTexto,
+-                style = MaterialTheme.typography.bodyMedium,
+-            )
+-        }
+-        CeldaValor(jugador.partidosJugados.toString(), colorTexto)
+-        CeldaValor(jugador.minutosJugados.toString(), colorTexto)
+-        CeldaValor(jugador.goles.toString(), colorTexto)
+-        CeldaValor(jugador.asistencias.toString(), colorTexto)
+-        CeldaValor(jugador.tarjetasAmarillas.toString(), colorTexto)
+-        CeldaValor(jugador.tarjetasRojas.toString(), colorTexto)
+-        CeldaValor(jugador.faltas.toString(), colorTexto)
+-        CeldaValor("%.0f%%".format(jugador.porcentajeAsistenciaEntrenamientos), colorTexto)
++private fun CifraDestacada(valor: Int, etiqueta: String) {
++    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++        Text(valor.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
++        Text(etiqueta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+     }
+ }
+-
+-@Composable
+-private fun CeldaValor(valor: String, color: androidx.compose.ui.graphics.Color) {
+-    Text(
+-        text = valor,
+-        modifier = Modifier
+-            .width(anchoColumna)
+-            .padding(8.dp),
+-        color = color,
+-        style = MaterialTheme.typography.bodyMedium,
+-    )
+-}
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasSeccionScreen.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasSeccionScreen.kt
+index f8a97d5..ae69db6 100644
+--- a/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasSeccionScreen.kt
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/EstadisticasSeccionScreen.kt
+@@ -34,6 +34,7 @@ fun EstadisticasSeccionScreen(modifier: Modifier = Modifier) {
+         is EstadisticasDestino.Equipo -> EstadisticasEquipoScreen(
+             onVerJugadores = { destino = EstadisticasDestino.Jugadores },
+             onAbrirFiltros = { destino = EstadisticasDestino.Filtros },
++            onSeleccionarJugador = { jugador -> destino = EstadisticasDestino.JugadorDetalle(jugador.jugadorId) },
+             modifier = modifier,
+             viewModel = viewModel,
+         )
+@@ -55,6 +56,8 @@ fun EstadisticasSeccionScreen(modifier: Modifier = Modifier) {
+             if (jugador != null) {
+                 EstadisticasJugadorDetalleScreen(
+                     jugador = jugador,
++                    esDestacado = com.esan.sportpro.domain.estadisticas.RankingsJugadores
++                        .destacado(state.jugadores)?.jugadorId == jugador.jugadorId,
+                     onVolver = { destino = EstadisticasDestino.Jugadores },
+                     modifier = modifier,
+                 )
+diff --git a/app/src/main/java/com/esan/sportpro/ui/estadisticas/RankingsEquipoSecciones.kt b/app/src/main/java/com/esan/sportpro/ui/estadisticas/RankingsEquipoSecciones.kt
+new file mode 100644
+index 0000000..248dbf0
+--- /dev/null
++++ b/app/src/main/java/com/esan/sportpro/ui/estadisticas/RankingsEquipoSecciones.kt
+@@ -0,0 +1,125 @@
++package com.esan.sportpro.ui.estadisticas
++
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.width
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.EmojiEvents
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
++import com.esan.sportpro.domain.estadisticas.RankingsJugadores
++import com.esan.sportpro.ui.common.TarjetaSportPro
++
++/** Tarjeta del jugador destacado del periodo (ver [RankingsJugadores.puntaje]). */
++@Composable
++fun TarjetaJugadorDestacado(jugador: EstadisticaJugador, onClick: () -> Unit) {
++    TarjetaSportPro(onClick = onClick) {
++        Row(
++            modifier = Modifier.fillMaxWidth().padding(16.dp),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(16.dp),
++        ) {
++            AvatarEstadistica(jugador, tamano = 72.dp)
++            Column(modifier = Modifier.weight(1f)) {
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
++                    Text(
++                        "Jugador destacado",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.primary,
++                        modifier = Modifier.padding(start = 6.dp),
++                    )
++                }
++                Text(jugador.jugadorNombre, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
++                Text(
++                    "${jugador.goles} goles · ${jugador.asistencias} asistencias · ${jugador.partidosJugados} PJ",
++                    style = MaterialTheme.typography.bodyMedium,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
++        }
++    }
++}
++
++/** Ranking corto (hasta 3) con posición, foto, nombre y valor. No se dibuja si nadie suma. */
++@Composable
++fun TarjetaRanking(
++    titulo: String,
++    jugadores: List<EstadisticaJugador>,
++    valorTexto: (EstadisticaJugador) -> String,
++    onSeleccionar: (EstadisticaJugador) -> Unit,
++) {
++    if (jugadores.isEmpty()) return
++    TarjetaSportPro {
++        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
++            Text(titulo, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
++            jugadores.forEachIndexed { indice, jugador ->
++                Row(
++                    modifier = Modifier.fillMaxWidth().clickable { onSeleccionar(jugador) },
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(12.dp),
++                ) {
++                    Text(
++                        "${indice + 1}",
++                        style = MaterialTheme.typography.titleMedium,
++                        color = if (indice == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
++                        modifier = Modifier.width(20.dp),
++                    )
++                    AvatarEstadistica(jugador, tamano = 36.dp)
++                    Text(
++                        jugador.jugadorNombre,
++                        style = MaterialTheme.typography.bodyLarge,
++                        modifier = Modifier.weight(1f),
++                    )
++                    Text(valorTexto(jugador), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
++                }
++            }
++        }
++    }
++}
++
++/** Destacado y rankings del equipo, calculados con [RankingsJugadores]. */
++@Composable
++fun SeccionRankingsEquipo(
++    jugadores: List<EstadisticaJugador>,
++    onSeleccionar: (EstadisticaJugador) -> Unit,
++) {
++    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
++        RankingsJugadores.destacado(jugadores)?.let { TarjetaJugadorDestacado(it) { onSeleccionar(it) } }
++        TarjetaRanking(
++            titulo = "Goleadores",
++            jugadores = RankingsJugadores.top(jugadores) { it.goles.toDouble() },
++            valorTexto = { "${it.goles}" },
++            onSeleccionar = onSeleccionar,
++        )
++        TarjetaRanking(
++            titulo = "Asistencias",
++            jugadores = RankingsJugadores.top(jugadores) { it.asistencias.toDouble() },
++            valorTexto = { "${it.asistencias}" },
++            onSeleccionar = onSeleccionar,
++        )
++        TarjetaRanking(
++            titulo = "Más minutos jugados",
++            jugadores = RankingsJugadores.top(jugadores) { it.minutosJugados.toDouble() },
++            valorTexto = { "${it.minutosJugados} min" },
++            onSeleccionar = onSeleccionar,
++        )
++        TarjetaRanking(
++            titulo = "Asistencia a entrenamientos",
++            jugadores = RankingsJugadores.top(jugadores) { it.porcentajeAsistenciaEntrenamientos },
++            valorTexto = { "%.0f%%".format(it.porcentajeAsistenciaEntrenamientos) },
++            onSeleccionar = onSeleccionar,
++        )
++    }
++}
+diff --git a/app/src/test/java/com/esan/sportpro/domain/RankingsJugadoresTest.kt b/app/src/test/java/com/esan/sportpro/domain/RankingsJugadoresTest.kt
+new file mode 100644
+index 0000000..e719b8f
+--- /dev/null
++++ b/app/src/test/java/com/esan/sportpro/domain/RankingsJugadoresTest.kt
+@@ -0,0 +1,39 @@
++package com.esan.sportpro.domain
++
++import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
++import com.esan.sportpro.domain.estadisticas.RankingsJugadores
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class RankingsJugadoresTest {
++
++    private fun j(id: String, goles: Int = 0, asist: Int = 0, ta: Int = 0, tr: Int = 0, min: Int = 0, sinAsignar: Boolean = false) =
++        EstadisticaJugador(
++            jugadorId = id, jugadorNombre = id, goles = goles, asistencias = asist,
++            tarjetasAmarillas = ta, tarjetasRojas = tr, minutosJugados = min, sinAsignar = sinAsignar,
++        )
++
++    @Test
++    fun `el puntaje suma goles y asistencias y resta tarjetas`() {
++        assertEquals(3 * 2 + 2 * 1 - 1 - 3, RankingsJugadores.puntaje(j("a", goles = 2, asist = 1, ta = 1, tr = 1)))
++    }
++
++    @Test
++    fun `el destacado es el de mayor puntaje y desempata por minutos`() {
++        val lista = listOf(j("a", goles = 1, min = 90), j("b", goles = 1, min = 135), j("c", asist = 1))
++        assertEquals("b", RankingsJugadores.destacado(lista)?.jugadorId)
++    }
++
++    @Test
++    fun `sin puntos nadie es destacado y Sin asignar no cuenta`() {
++        assertNull(RankingsJugadores.destacado(listOf(j("a"), j("x", goles = 5, sinAsignar = true))))
++    }
++
++    @Test
++    fun `el top ordena de mayor a menor, omite ceros y respeta el limite`() {
++        val lista = listOf(j("a", goles = 0), j("b", goles = 2), j("c", goles = 5), j("d", goles = 1), j("e", goles = 3))
++        val top = RankingsJugadores.top(lista, 3) { it.goles.toDouble() }
++        assertEquals(listOf("c", "e", "b"), top.map { it.jugadorId })
++    }
++}
+-- 
+2.43.0
+

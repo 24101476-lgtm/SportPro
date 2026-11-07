@@ -5,11 +5,14 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.mensualidades.MensualidadRepository
+import com.esan.sportpro.domain.jugadores.Jugador
+import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
 import com.esan.sportpro.domain.mensualidades.MedioPago
 import com.esan.sportpro.domain.mensualidades.Mensualidad
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Date
@@ -20,6 +23,10 @@ data class MensualidadRegistrarUiState(
     val jugadorNombre: String = "",
     val equipoId: String = "",
     val equipoNombre: String = "",
+    /** Jugadores activos de la academia: único origen válido para [jugadorId]. */
+    val jugadoresDisponibles: List<Jugador> = emptyList(),
+    val busquedaJugador: String = "",
+    val cargandoJugadores: Boolean = true,
     val mes: Int = LocalDate.now().monthValue,
     val anio: Int = LocalDate.now().year,
     val montoTexto: String = "",
@@ -46,6 +53,7 @@ class MensualidadRegistrarViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val firebaseAuth: FirebaseAuth,
     private val sesionRepository: SesionRepository,
+    private val jugadorRepository: JugadorRepository,
 ) : BaseViewModel<MensualidadRegistrarUiState, MensualidadRegistrarEvent>(MensualidadRegistrarUiState()) {
 
     /** Academia del perfil autenticado (antes era un valor fijo). */
@@ -54,19 +62,43 @@ class MensualidadRegistrarViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sesionRepository.perfilActual()?.let { academiaIdActual = it.academiaId }
+            jugadorRepository.observarJugadores(academiaIdActual)
+                .catch { setState { copy(cargandoJugadores = false, errorMessage = "No se pudo cargar la lista de jugadores") } }
+                .collect { lista ->
+                    val activos = lista.filter { it.activo }
+                    setState {
+                        // Si el jugador elegido ya no existe o se desactivó, se limpia la selección.
+                        val sigueValido = activos.any { it.id == jugadorId }
+                        copy(
+                            jugadoresDisponibles = activos,
+                            cargandoJugadores = false,
+                            jugadorId = if (sigueValido) jugadorId else "",
+                            jugadorNombre = if (sigueValido) jugadorNombre else "",
+                            equipoId = if (sigueValido) equipoId else "",
+                            equipoNombre = if (sigueValido) equipoNombre else "",
+                        )
+                    }
+                }
         }
     }
 
-    fun onJugadorSeleccionado(jugadorId: String, jugadorNombre: String, equipoId: String, equipoNombre: String) {
+    fun onBusquedaJugadorChanged(texto: String) = setState { copy(busquedaJugador = texto) }
+
+    /** Elige un jugador inscrito; el equipo se toma de su ficha, no se escribe a mano. */
+    fun onJugadorElegido(jugador: Jugador) {
         setState {
             copy(
-                jugadorId = jugadorId,
-                jugadorNombre = jugadorNombre,
-                equipoId = equipoId,
-                equipoNombre = equipoNombre,
+                jugadorId = jugador.id,
+                jugadorNombre = jugador.nombreCompleto,
+                equipoId = jugador.equipoId,
+                equipoNombre = jugador.equipoNombre,
+                busquedaJugador = "",
+                errorMessage = null,
             )
         }
     }
+
+    fun onJugadorQuitado() = setState { copy(jugadorId = "", jugadorNombre = "", equipoId = "", equipoNombre = "") }
 
     fun onMesAnioChanged(mes: Int, anio: Int) = setState { copy(mes = mes, anio = anio) }
 
@@ -100,6 +132,12 @@ class MensualidadRegistrarViewModel @Inject constructor(
             setState { copy(errorMessage = "Selecciona un jugador") }
             return
         }
+        // El jugador debe existir entre los inscritos y activos de la academia.
+        val jugador = estado.jugadoresDisponibles.firstOrNull { it.id == estado.jugadorId }
+        if (jugador == null) {
+            setState { copy(errorMessage = "Selecciona un jugador de la lista") }
+            return
+        }
         val (monto, montoError) = validarMonto(estado.montoTexto)
         val observacionError = if (estado.observacion.length > 200) "Máximo 200 caracteres" else null
         if (monto == null || observacionError != null) {
@@ -114,10 +152,10 @@ class MensualidadRegistrarViewModel @Inject constructor(
                 repository.registrarPago(
                     nuevo = Mensualidad(
                         academiaId = academiaIdActual,
-                        equipoId = estado.equipoId,
-                        equipoNombre = estado.equipoNombre,
-                        jugadorId = estado.jugadorId,
-                        jugadorNombre = estado.jugadorNombre,
+                        equipoId = jugador.equipoId,
+                        equipoNombre = jugador.equipoNombre,
+                        jugadorId = jugador.id,
+                        jugadorNombre = jugador.nombreCompleto,
                         mes = estado.mes,
                         anio = estado.anio,
                         montoReferencial = monto,

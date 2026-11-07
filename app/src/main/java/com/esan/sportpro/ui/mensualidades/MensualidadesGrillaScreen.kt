@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.mensualidades
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -116,6 +118,31 @@ fun MensualidadesGrillaScreen(
                 }) { Icon(Icons.Default.ChevronRight, contentDescription = "Mes siguiente") }
             }
 
+            if (state.equiposDisponibles.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = state.equipoFiltro == null,
+                        onClick = { viewModel.onFiltroEquipoChanged(null) },
+                        label = { Text("Todos los equipos") },
+                    )
+                    state.equiposDisponibles.forEach { equipo ->
+                        FilterChip(
+                            selected = state.equipoFiltro == equipo.id,
+                            onClick = {
+                                viewModel.onFiltroEquipoChanged(if (state.equipoFiltro == equipo.id) null else equipo.id)
+                            },
+                            label = { Text(equipo.nombre) },
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -137,7 +164,7 @@ fun MensualidadesGrillaScreen(
                 }
                 state.mensualidades.isEmpty() -> EstadoVacioModulo(
                     titulo = "Aún no hay mensualidades",
-                    mensaje = "No hay pagos registrados en este periodo",
+                    mensaje = "No hay jugadores que coincidan con este periodo o filtro",
                     icono = Icons.Default.Payments,
                 )
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -153,7 +180,12 @@ fun MensualidadesGrillaScreen(
                                 Column {
                                     Text(item.mensualidad.jugadorNombre, style = MaterialTheme.typography.titleSmall)
                                     Text(item.mensualidad.equipoNombre, style = MaterialTheme.typography.bodySmall)
-                                    if (state.rolActual == UserRole.ADMINISTRADOR) {
+                                    if (item.sinRegistro) {
+                                        Text(
+                                            text = "Sin pago registrado",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    } else if (state.rolActual == UserRole.ADMINISTRADOR) {
                                         Text(
                                             text = "S/ %.2f".format(item.mensualidad.montoReferencial),
                                             style = MaterialTheme.typography.bodyMedium,

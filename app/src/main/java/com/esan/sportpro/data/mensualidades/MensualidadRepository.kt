@@ -83,13 +83,15 @@ class MensualidadRepository @Inject constructor(
     fun observarHistorialDeJugador(jugadorId: String): Flow<List<Mensualidad>> = callbackFlow {
         val registro = coleccion
             .whereEqualTo("jugadorId", jugadorId)
-            .orderBy("fechaRegistro", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
                     return@addSnapshotListener
                 }
+                // Se ordena en memoria: un orderBy junto al filtro por jugador exige un índice
+                // compuesto en Firestore y, sin él, la consulta falla y cerraba la pantalla.
                 val lista = snapshot?.documents?.mapNotNull { it.toObject<Mensualidad>() }.orEmpty()
+                    .sortedByDescending { it.fechaRegistro }
                 trySend(lista)
             }
         awaitClose { registro.remove() }

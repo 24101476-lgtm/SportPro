@@ -17,7 +17,6 @@ import com.esan.sportpro.core.fecha.FechasSportPro
 import com.esan.sportpro.domain.anuncios.PrioridadAnuncio
 import com.esan.sportpro.ui.common.ChipEstado
 import com.esan.sportpro.ui.common.TonoEstado
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize

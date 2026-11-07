@@ -203,6 +203,8 @@ fun JugadoresScreen(
                         HistorialParticipacion(
                             jugador = jugador,
                             entrenamientos = state.entrenamientos,
+                            partidos = state.historialPartidos,
+                            cargandoPartidos = state.cargandoPartidos,
                             modifier = Modifier.padding(padding),
                         )
                     }

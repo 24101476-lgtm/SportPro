@@ -4,12 +4,22 @@ import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.cuentas.PerfilActual
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.jugadores.Vinculacion
+import com.esan.sportpro.domain.partido.EstadoPartido
+import com.esan.sportpro.domain.partido.EstadoRespuestaConvocatoria
+import com.esan.sportpro.domain.partido.EventoPartido
+import com.esan.sportpro.domain.partido.JugadorConvocado
+import com.esan.sportpro.domain.partido.Partido
+import com.esan.sportpro.domain.partido.ReglasActa
+import com.esan.sportpro.domain.partido.RespuestaConvocatoria
 import com.esan.sportpro.navigation.UserRole
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.Normalizer
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** Tipo de actividad del historial (US-012, criterio 3). */
 enum class TipoActividad(val etiqueta: String) {
@@ -30,6 +40,8 @@ data class RegistroParticipacion(
     val descripcion: String,
     val estado: EstadoAsistencia,
     val minutosRetraso: Int? = null,
+    /** Solo partidos: minutos que jugó según la alineación y los cambios (0 = suplente sin ingresar). */
+    val minutosJugados: Int? = null,
 )
 
 /** Filtros de la vista: rango de fechas (inclusive) y tipo de actividad; `null` = sin filtro. */
@@ -71,6 +83,9 @@ object ReglasHistorial {
     const val MENSAJE_RANGO_INVALIDO = "La fecha inicial no puede ser posterior a la final"
     const val MESES_GRAFICO = 6
 
+    private val ZONA_PERU: ZoneId = ZoneId.of("America/Lima")
+    private val FORMATO_HORA: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
     private val MESES = listOf("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic")
 
     /**
@@ -98,6 +113,68 @@ object ReglasHistorial {
                     },
                 )
             }
+
+    /** Un partido entra al historial cuando terminó: finalizado o con el acta cerrada. */
+    fun partidoCuenta(partido: Partido): Boolean =
+        partido.estado == EstadoPartido.FINALIZADO || partido.estado == EstadoPartido.ACTA_CERRADA
+
+    /**
+     * Registro de un partido terminado para el jugador, o `null` si no le corresponde:
+     * - En la alineación final (`convocados`): Presente, con los minutos que jugó (0 si fue suplente
+     *   y no ingresó); los minutos salen de [ReglasActa.minutosJugados], igual que en el acta.
+     * - Convocado que respondió "No disponible": falta justificada, con su motivo.
+     * - Convocado que no respondió y no estuvo en la alineación: falta injustificada.
+     * - Convocado que confirmó pero el entrenador no incluyó en la alineación: no se cuenta,
+     *   porque no depende del jugador.
+     */
+    fun desdePartido(
+        jugadorId: String,
+        partido: Partido,
+        convocados: List<JugadorConvocado>,
+        respuestas: List<RespuestaConvocatoria>,
+        eventos: List<EventoPartido>,
+        zona: ZoneId = ZONA_PERU,
+    ): RegistroParticipacion? {
+        if (!partidoCuenta(partido)) return null
+        val instante = partido.fechaMs?.let { Instant.ofEpochMilli(it).atZone(zona) } ?: return null
+        val respuesta = respuestas.firstOrNull { it.jugadorId == jugadorId }
+        val enAlineacion = convocados.any { it.id == jugadorId }
+
+        val marcador = "${partido.golesEquipo}-${partido.golesRival}"
+        val rival = "vs ${partido.nombreRival.ifBlank { "Rival" }} · $marcador"
+
+        val (estado, minutos, detalle) = when {
+            enAlineacion -> {
+                val minutos = ReglasActa.minutosJugados(partido, eventos, convocados)
+                    .firstOrNull { it.jugadorId == jugadorId }?.minutos ?: 0
+                Triple(
+                    EstadoAsistencia.PRESENTE,
+                    minutos,
+                    if (minutos > 0) "Jugó $minutos min" else "Suplente, no ingresó",
+                )
+            }
+            respuesta?.estado == EstadoRespuestaConvocatoria.NO_DISPONIBLE -> Triple(
+                EstadoAsistencia.JUSTIFICADO,
+                null,
+                respuesta.motivo?.trim()?.takeIf { it.isNotEmpty() }?.let { "No disponible: $it" } ?: "No disponible",
+            )
+            respuesta?.estado == EstadoRespuestaConvocatoria.SIN_RESPONDER ->
+                Triple(EstadoAsistencia.AUSENTE, null, "No respondió la convocatoria")
+            else -> return null
+        }
+
+        return RegistroParticipacion(
+            id = partido.id,
+            tipo = TipoActividad.PARTIDO,
+            fecha = instante.toLocalDate(),
+            hora = partido.hora?.takeIf { it.isNotBlank() } ?: instante.format(FORMATO_HORA),
+            equipoNombre = listOfNotNull(partido.nombreEquipo.ifBlank { null }, partido.categoria?.ifBlank { null })
+                .joinToString(" · "),
+            descripcion = "$rival · $detalle",
+            estado = estado,
+            minutosJugados = minutos,
+        )
+    }
 
     /** Criterio 2: de la más reciente a la más antigua. */
     fun ordenar(registros: List<RegistroParticipacion>): List<RegistroParticipacion> =

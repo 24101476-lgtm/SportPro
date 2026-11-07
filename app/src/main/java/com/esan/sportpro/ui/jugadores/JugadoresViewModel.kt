@@ -2,18 +2,20 @@ package com.esan.sportpro.ui.jugadores
 
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
+import com.esan.sportpro.data.estadisticas.StatsRepository
+import com.esan.sportpro.data.jugadores.ParticipacionPartidosRepository
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
-import com.esan.sportpro.data.estadisticas.StatsRepository
 import com.esan.sportpro.domain.cuentas.PerfilActual
-import com.esan.sportpro.domain.estadisticas.FiltroEstadisticas
 import com.esan.sportpro.domain.cuentas.SesionRepository
 import com.esan.sportpro.domain.entrenamientos.CalculoAsistencia
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
+import com.esan.sportpro.domain.entrenamientos.RegistroParticipacion
 import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
+import com.esan.sportpro.domain.estadisticas.FiltroEstadisticas
 import com.esan.sportpro.domain.jugadores.CampoJugador
 import com.esan.sportpro.domain.jugadores.DatosJugador
 import com.esan.sportpro.domain.jugadores.EstadoRegistro
@@ -27,6 +29,7 @@ import com.esan.sportpro.domain.jugadores.Vinculacion
 import com.esan.sportpro.domain.jugadores.VinculacionRepository
 import com.esan.sportpro.navigation.UserRole
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -80,6 +83,9 @@ data class JugadoresUiState(
     val jugadores: List<Jugador> = emptyList(),
     val equipos: List<Equipo> = emptyList(),
     val entrenamientos: List<Entrenamiento> = emptyList(),
+    /** US-012: partidos terminados del jugador cuyo historial está abierto. */
+    val historialPartidos: List<RegistroParticipacion> = emptyList(),
+    val cargandoPartidos: Boolean = false,
     val cargando: Boolean = true,
     val error: String? = null,
     val filtroEquipoId: String? = null,
@@ -156,7 +162,10 @@ class JugadoresViewModel @Inject constructor(
     private val entrenamientoRepository: EntrenamientoRepository,
     private val vinculacionRepository: VinculacionRepository,
     private val statsRepository: StatsRepository,
+    private val participacionPartidos: ParticipacionPartidosRepository,
 ) : BaseViewModel<JugadoresUiState, JugadoresEvent>(JugadoresUiState()) {
+
+    private var partidosJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -231,6 +240,17 @@ class JugadoresViewModel @Inject constructor(
             return
         }
         setState { copy(pantalla = PantallaJugadores.Historial(jugadorId)) }
+        cargarPartidos(jugador)
+    }
+
+    /** US-012, criterio 3: lee una vez los partidos terminados del jugador para el historial. */
+    private fun cargarPartidos(jugador: Jugador) {
+        partidosJob?.cancel()
+        setState { copy(historialPartidos = emptyList(), cargandoPartidos = true) }
+        partidosJob = viewModelScope.launch {
+            val registros = participacionPartidos.registros(jugador.id, jugador.academiaId)
+            setState { copy(historialPartidos = registros, cargandoPartidos = false) }
+        }
     }
 
     fun cerrarHistorial(jugadorId: String) = setState { copy(pantalla = PantallaJugadores.Detalle(jugadorId)) }

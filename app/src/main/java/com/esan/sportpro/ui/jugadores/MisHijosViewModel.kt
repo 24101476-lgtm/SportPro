@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.jugadores
 
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
+import com.esan.sportpro.data.jugadores.ParticipacionPartidosRepository
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
@@ -10,6 +11,7 @@ import com.esan.sportpro.domain.cuentas.SesionRepository
 import com.esan.sportpro.domain.entrenamientos.CalculoAsistencia
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
+import com.esan.sportpro.domain.entrenamientos.RegistroParticipacion
 import com.esan.sportpro.domain.entrenamientos.ReglasHistorial
 import com.esan.sportpro.domain.entrenamientos.ResumenAsistencia
 import com.esan.sportpro.domain.jugadores.DirectorioJugador
@@ -55,6 +57,9 @@ data class MisHijosUiState(
     val directorio: List<DirectorioJugador> = emptyList(),
     val equipos: List<Equipo> = emptyList(),
     val entrenamientos: List<Entrenamiento> = emptyList(),
+    /** US-012: partidos terminados del jugador cuyo historial está abierto. */
+    val historialPartidos: List<RegistroParticipacion> = emptyList(),
+    val cargandoPartidos: Boolean = false,
     val cargando: Boolean = true,
     val error: String? = null,
     val pantalla: PantallaMisHijos = PantallaMisHijos.Lista,
@@ -98,9 +103,11 @@ class MisHijosViewModel @Inject constructor(
     private val vinculacionRepository: VinculacionRepository,
     private val equipoRepository: EquipoRepository,
     private val entrenamientoRepository: EntrenamientoRepository,
+    private val participacionPartidos: ParticipacionPartidosRepository,
 ) : BaseViewModel<MisHijosUiState, MisHijosEvent>(MisHijosUiState()) {
 
     private var detalleJob: Job? = null
+    private var partidosJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -149,6 +156,17 @@ class MisHijosViewModel @Inject constructor(
         val jugador = currentState.jugadorDetalle ?: return
         if (!currentState.puedeVerHistorial(jugador)) return
         setState { copy(pantalla = PantallaMisHijos.Historial(pantalla.jugadorId)) }
+        cargarPartidos(jugador)
+    }
+
+    /** US-012, criterio 3: lee una vez los partidos terminados del jugador para el historial. */
+    private fun cargarPartidos(jugador: Jugador) {
+        partidosJob?.cancel()
+        setState { copy(historialPartidos = emptyList(), cargandoPartidos = true) }
+        partidosJob = viewModelScope.launch {
+            val registros = participacionPartidos.registros(jugador.id, jugador.academiaId)
+            setState { copy(historialPartidos = registros, cargandoPartidos = false) }
+        }
     }
 
     fun cerrarHistorial() {

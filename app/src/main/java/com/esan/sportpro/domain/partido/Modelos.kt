@@ -230,6 +230,13 @@ data class Partido(
 
     /** Último recordatorio de convocatoria (US-014: la acción Recordar se habilita cada 12 h). */
     val ultimoRecordatorioMs: Long? = null,
+
+    /** US-022: marca del servidor del cierre del acta; base de la ventana de 48 h para reabrirla. */
+    val actaCerradaEnMs: Long? = null,
+
+    /** US-022: cuántas veces el administrador reabrió el acta y el motivo de la última reapertura. */
+    val vecesReabierto: Int = 0,
+    val motivoUltimaReapertura: String? = null,
 )
 
 

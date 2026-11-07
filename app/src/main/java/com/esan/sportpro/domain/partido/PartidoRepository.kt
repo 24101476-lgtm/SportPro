@@ -268,6 +268,15 @@ interface PartidoRepository {
         golesRival: Int,
     )
 
+    /**
+     * US-022: el administrador reabre un acta cerrada hace menos de 48 h. El motivo queda en la
+     * subcolección `auditoria` del partido y el partido vuelve a Finalizado, con eventos editables.
+     */
+    fun reabrirActa(
+        partidoId: String,
+        motivo: String,
+    )
+
 
     // ============================================================
     // US-015 · RESPUESTA A CONVOCATORIA

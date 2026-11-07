@@ -6,6 +6,7 @@ import com.esan.sportpro.core.red.ConectividadObserver
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.partido.PartidoEnCursoStore
 import com.esan.sportpro.data.partido.describirErrorFirestore
+import com.esan.sportpro.domain.partido.ActaPartido
 import com.esan.sportpro.domain.partido.BorradorEvento
 import com.esan.sportpro.domain.partido.CatalogoBase
 import com.esan.sportpro.domain.partido.Campos
@@ -16,6 +17,7 @@ import com.esan.sportpro.domain.partido.JugadorConvocado
 import com.esan.sportpro.domain.partido.JugadorEspecial
 import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.PartidoRepository
+import com.esan.sportpro.domain.partido.ReglasActa
 import com.esan.sportpro.domain.partido.ReglasPartido
 import com.esan.sportpro.domain.partido.ResultadoPenal
 import com.esan.sportpro.domain.partido.TipoEvento
@@ -49,6 +51,8 @@ sealed interface DialogoPartido {
     data class Anular(val evento: EventoPartido, val motivo: String = "", val error: String? = null) : DialogoPartido
     data class Historial(val grupoId: String) : DialogoPartido
     data class CerrarActa(val incompletos: Int) : DialogoPartido
+    data object VerActa : DialogoPartido
+    data class ReabrirActa(val motivo: String = "", val error: String? = null) : DialogoPartido
     data object Duplicados : DialogoPartido
     data object Pendientes : DialogoPartido
 }
@@ -76,6 +80,16 @@ data class RegistroUiState(
     val reloj: ReglasPartido.Reloj
         get() = partido?.let { ReglasPartido.reloj(it, ahoraMs) } ?: ReglasPartido.Reloj(0, 0, 0, false, 0f)
     val minutoActual: Int get() = reloj.minuto
+
+    /** US-022: resumen del acta; solo existe con el partido finalizado o con el acta cerrada. */
+    val acta: ActaPartido?
+        get() = partido
+            ?.takeIf { it.estado == EstadoPartido.FINALIZADO || it.estado == EstadoPartido.ACTA_CERRADA }
+            ?.let { ReglasActa.construir(it, eventos, convocados, catalogo) }
+
+    /** US-022: solo el administrador, con el acta cerrada y dentro de las 48 h siguientes. */
+    val puedeReabrirActa: Boolean
+        get() = partido?.let { ReglasActa.puedeReabrir(rol, it, ahoraMs) } ?: false
 
     /** Solo el operador asignado, el entrenador responsable y el administrador corrigen o anulan. */
     val puedeCorregir: Boolean
@@ -564,20 +578,60 @@ class RegistroPartidoViewModel @Inject constructor(
             sendEvent(RegistroEvento.Mensaje("Registra el fin del partido antes de cerrar el acta"))
             return
         }
-        val n = currentState.incompletos.size
-        if (n > 0) {
-            setState { copy(dialogo = DialogoPartido.CerrarActa(n)) }
-        } else {
-            repo.cerrarActa(partidoId, 0, currentState.marcador.propio, currentState.marcador.rival)
-            sendEvent(RegistroEvento.Mensaje("Acta cerrada"))
+        if (!currentState.puedeCorregir) {
+            sendEvent(RegistroEvento.Mensaje("Solo el operador, el entrenador responsable o el administrador pueden cerrar el acta"))
+            return
         }
+        // US-022: siempre se muestra el resumen del acta antes de confirmar el cierre.
+        setState { copy(dialogo = DialogoPartido.CerrarActa(currentState.incompletos.size)) }
     }
 
     fun confirmarCierreActa() {
         val d = currentState.dialogo as? DialogoPartido.CerrarActa ?: return
         repo.cerrarActa(partidoId, d.incompletos, currentState.marcador.propio, currentState.marcador.rival)
         setState { copy(dialogo = null) }
-        sendEvent(RegistroEvento.Mensaje("Acta cerrada con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}"))
+        sendEvent(
+            RegistroEvento.Mensaje(
+                if (d.incompletos > 0) {
+                    "Acta cerrada con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}"
+                } else {
+                    "Acta cerrada"
+                },
+            ),
+        )
+    }
+
+    fun verActa() = setState { copy(dialogo = DialogoPartido.VerActa) }
+
+    // ------------------------------------------------------------ US-022: reapertura del acta
+
+    fun pedirReapertura() {
+        if (!currentState.puedeReabrirActa) {
+            sendEvent(RegistroEvento.Mensaje("Solo el administrador puede reabrir el acta, dentro de las 48 horas siguientes al cierre"))
+            return
+        }
+        setState { copy(dialogo = DialogoPartido.ReabrirActa()) }
+    }
+
+    fun onMotivoReapertura(texto: String) {
+        val d = currentState.dialogo as? DialogoPartido.ReabrirActa ?: return
+        setState { copy(dialogo = d.copy(motivo = texto, error = null)) }
+    }
+
+    fun confirmarReapertura() {
+        val d = currentState.dialogo as? DialogoPartido.ReabrirActa ?: return
+        ReglasPartido.validarMotivo(d.motivo)?.let { error ->
+            setState { copy(dialogo = d.copy(error = error)) }
+            return
+        }
+        if (!currentState.puedeReabrirActa) {
+            setState { copy(dialogo = null) }
+            sendEvent(RegistroEvento.Mensaje("Ya pasaron las 48 horas: el acta no puede reabrirse"))
+            return
+        }
+        repo.reabrirActa(partidoId, d.motivo)
+        setState { copy(dialogo = null) }
+        sendEvent(RegistroEvento.Mensaje("Acta reabierta. Puedes corregir eventos y volver a cerrarla"))
     }
 
     // ------------------------------------------------------------ Utilidades

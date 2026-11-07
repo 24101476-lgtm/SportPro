@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,6 +81,7 @@ import com.esan.sportpro.domain.partido.EstadoEvento
 import com.esan.sportpro.domain.partido.EstadoPartido
 import com.esan.sportpro.domain.partido.EventoPartido
 import com.esan.sportpro.domain.partido.Partido
+import com.esan.sportpro.domain.partido.ReglasActa
 import com.esan.sportpro.domain.partido.ReglasPartido
 import com.esan.sportpro.domain.partido.TipoEvento
 import com.esan.sportpro.domain.partido.TiposEvento
@@ -185,6 +187,8 @@ fun RegistroPartidoScreen(
                             state = state,
                             partido = partido,
                             onCerrarActa = viewModel::pedirCierreActa,
+                            onVerActa = viewModel::verActa,
+                            onReabrirActa = viewModel::pedirReapertura,
                         )
                     }
                 }
@@ -632,7 +636,14 @@ private fun BotonPaleta(tipo: TipoEvento, modifier: Modifier, onClick: () -> Uni
 // ---------------------------------------------------------------- Final
 
 @Composable
-private fun Finalizado(state: RegistroUiState, partido: Partido, onCerrarActa: () -> Unit) {
+private fun Finalizado(
+    state: RegistroUiState,
+    partido: Partido,
+    onCerrarActa: () -> Unit,
+    onVerActa: () -> Unit,
+    onReabrirActa: () -> Unit,
+) {
+    val context = LocalContext.current
     Card(
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -656,6 +667,25 @@ private fun Finalizado(state: RegistroUiState, partido: Partido, onCerrarActa: (
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                state.acta?.let { acta ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onVerActa, modifier = Modifier.weight(1f)) { Text("Ver acta") }
+                        OutlinedButton(
+                            onClick = { compartirActa(context, acta) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Compartir") }
+                    }
+                }
+                if (state.puedeReabrirActa) {
+                    TextButton(onClick = onReabrirActa) { Text("Reabrir acta (administrador)") }
+                    ReglasActa.limiteReaperturaMs(partido)?.let { limite ->
+                        Text(
+                            "Puede reabrirse hasta el ${formatearFechaHora(limite)}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             } else {
                 Text(
                     "Revisa la cronología, completa los pendientes y cierra el acta.",

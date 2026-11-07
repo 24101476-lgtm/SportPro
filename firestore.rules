@@ -357,11 +357,39 @@ service cloud.firestore {
         return datos.get('actaCerrada', false) == true || datos.get('estado', '') == 'ACTA_CERRADA';
       }
 
+      // US-022: solo el administrador reabre un acta cerrada, dentro de las 48 h siguientes al
+      // cierre y con un motivo; solo cambian los campos de la reapertura (el resto queda intacto).
+      function reaperturaPermitida() {
+        return esAdmin()
+          && actaCerrada(resource.data)
+          && resource.data.get('actaCerradaEn', null) != null
+          && request.time <= resource.data.actaCerradaEn + duration.value(48, 'h')
+          && request.resource.data.actaCerrada == false
+          && request.resource.data.estado == 'FINALIZADO'
+          && request.resource.data.motivoReapertura is string
+          && request.resource.data.motivoReapertura.size() >= 5
+          && request.resource.data.motivoReapertura.size() <= 200
+          && request.resource.data.reabiertoPor == request.auth.uid
+          && request.resource.data.reabiertoEn == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'actaCerrada', 'estado', 'motivoReapertura', 'reabiertoPor', 'reabiertoEn', 'vecesReabierto'
+             ]);
+      }
+
       allow read: if autenticado();
       // Solo el personal (administrador o entrenador) programa partidos.
       allow create: if esStaff() && request.resource.data.creadoPor == request.auth.uid;
-      allow update: if puedeOperarCon(resource.data) && !actaCerrada(resource.data);
+      allow update: if (puedeOperarCon(resource.data) && !actaCerrada(resource.data)) || reaperturaPermitida();
       allow delete: if esAdmin();
+
+      // US-022: auditoría del partido (reaperturas del acta). Solo se agregan entradas.
+      match /auditoria/{registroId} {
+        allow read: if esStaff();
+        allow create: if esAdmin()
+          && request.resource.data.uid == request.auth.uid
+          && partido().get('reabiertoPor', '') == request.auth.uid;
+        allow update, delete: if false;
+      }
 
       match /convocados/{jugadorId} {
         allow read: if autenticado();

@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +64,7 @@ import com.esan.sportpro.domain.partido.TiposEvento
 
 @Composable
 fun DialogosPartido(state: RegistroUiState, viewModel: RegistroPartidoViewModel) {
+    val context = LocalContext.current
     when (val d = state.dialogo) {
         null -> Unit
 
@@ -128,13 +130,58 @@ fun DialogosPartido(state: RegistroUiState, viewModel: RegistroPartidoViewModel)
             onDismissRequest = viewModel::cerrarDialogo,
             title = { Text("Cerrar acta") },
             text = {
-                Text(
-                    "Se cerrará el acta con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}. " +
-                        "Esta decisión quedará registrada y ya no se podrán corregir eventos.",
-                )
+                val acta = state.acta
+                if (acta != null) {
+                    ActaResumenContenido(
+                        acta = acta,
+                        advertencia = if (d.incompletos > 0) {
+                            "Se cerrará con ${cantidad(d.incompletos, "evento incompleto", "eventos incompletos")}."
+                        } else {
+                            null
+                        },
+                        pie = "Al confirmar, el partido queda Finalizado y ya no se podrán registrar ni corregir eventos. " +
+                            "Solo el administrador podrá reabrir el acta durante las 48 horas siguientes.",
+                    )
+                } else {
+                    Text("Esta decisión quedará registrada y ya no se podrán corregir eventos.")
+                }
             },
-            confirmButton = { TextButton(onClick = viewModel::confirmarCierreActa) { Text("Cerrar acta") } },
+            confirmButton = { TextButton(onClick = viewModel::confirmarCierreActa) { Text("Confirmar cierre") } },
             dismissButton = { TextButton(onClick = viewModel::cerrarDialogo) { Text("Volver") } },
+        )
+
+        DialogoPartido.VerActa -> AlertDialog(
+            onDismissRequest = viewModel::cerrarDialogo,
+            title = { Text("Acta del partido") },
+            text = { state.acta?.let { ActaResumenContenido(acta = it) } },
+            confirmButton = {
+                TextButton(onClick = { state.acta?.let { compartirActa(context, it) } }) { Text("Compartir") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cerrarDialogo) { Text("Cerrar") } },
+        )
+
+        is DialogoPartido.ReabrirActa -> AlertDialog(
+            onDismissRequest = viewModel::cerrarDialogo,
+            title = { Text("Reabrir acta") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "El partido volverá a Finalizado y se podrán corregir eventos. " +
+                            "El motivo quedará registrado en la auditoría del partido.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedTextField(
+                        value = d.motivo,
+                        onValueChange = viewModel::onMotivoReapertura,
+                        label = { Text("Motivo (obligatorio)") },
+                        isError = d.error != null,
+                        supportingText = { Text(d.error ?: "${d.motivo.trim().length}/${ReglasPartido.MOTIVO_MAX}") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = viewModel::confirmarReapertura) { Text("Reabrir") } },
+            dismissButton = { TextButton(onClick = viewModel::cerrarDialogo) { Text("Cancelar") } },
         )
 
         DialogoPartido.Duplicados -> AlertDialog(

@@ -132,8 +132,16 @@ El inicio de cada tiempo se guarda con `FieldValue.serverTimestamp()` y se lee c
 - Un contador permanente muestra los eventos incompletos junto a la acción **Completar pendientes**, que asigna el jugador faltante creando una nueva versión del evento.
 - **Registro fuera de orden:** si el minuto es menor al del último evento, se avisa, se guarda con `fueraDeOrden = true` y la cronología se ordena por minuto (con la hora real de registro como desempate).
 - **Inicio del segundo tiempo sin fin del primero:** aparece "Falta registrar el fin del primer tiempo" y se ofrece insertarlo con el minuto estimado.
-- **Cierre del acta con incompletos:** requiere confirmar "Se cerrará el acta con X eventos incompletos". La cantidad queda registrada en `actaCerradaConIncompletos`.
+- **Cierre del acta con incompletos:** el resumen del acta (sección 6.1) advierte "Se cerrará con X eventos incompletos". La cantidad queda registrada en `actaCerradaConIncompletos`.
 - Los campos opcionales vacíos quedan en `null` y se muestran como "Sin información".
+
+### 6.1 Cierre y acta final (US-022)
+
+- **Cierre:** solo existe con el partido en `FINALIZADO`, es decir, después de registrar *Fin de partido*. Antes de confirmar, el diálogo muestra el resumen del acta: marcador final, eventos vigentes, anulados e incompletos, operador, hora real de inicio y fin, versión del catálogo de eventos y minutos jugados por jugador. Al confirmar se guardan `actaCerrada = true`, `actaCerradaPor` y `actaCerradaEn` (marca del servidor); el estado sigue en `FINALIZADO` para que Estadísticas lo consulte, y las reglas bloquean todo evento nuevo.
+- **Minutos jugados** (`ReglasActa.minutosJugados`, función pura): titulares desde el 0'; suplentes desde que entran; hasta que salen por un cambio, son expulsados o termina el partido. Solo cuentan cambios y rojas vigentes del equipo propio. Como el minuto del 2.º tiempo vuelve a empezar en la duración del tiempo, se le suma el tiempo añadido del 1.º (45+3' → el 2.º tiempo arranca en el minuto real 48).
+- **Reapertura:** solo el administrador, con el acta cerrada y dentro de las **48 horas** posteriores a `actaCerradaEn`, indicando un motivo de 5 a 200 caracteres. El partido vuelve a `FINALIZADO` con `actaCerrada = false`, se incrementa `vecesReabierto` y se agrega una entrada inmutable en `partidos/{id}/auditoria` (`accion = REABRIR_ACTA`, motivo, uid, nombre, fecha). La ventana se valida en la app (`ReglasActa.puedeReabrir`) y en `firestore.rules`.
+- **Compartir:** el acta se comparte como texto plano con el selector nativo de Android (`ReglasActa.textoCompartible`).
+- **Habilitación del resumen con IA (US-023):** un partido con `actaCerrada = true` es el que podrá generar el resumen narrativo.
 
 ## 7. Operación sin conexión y resincronización
 
@@ -154,7 +162,8 @@ Las reglas están en `firestore.rules` y se publican en Firebase Console → Fir
 
 - Leer exige estar autenticado.
 - Para crear eventos hay que ser el operador, el entrenador, el creador del partido o un administrador. Además, `operadorUid` debe ser el usuario autenticado, el estado inicial debe ser `VIGENTE` y el minuto debe estar entre 0 y 130.
-- Con el acta cerrada se bloquea cualquier escritura del partido.
+- Con el acta cerrada se bloquea cualquier escritura del partido, salvo la reapertura del administrador dentro de las 48 h (solo cambian `actaCerrada`, `estado`, `motivoReapertura`, `reabiertoPor`, `reabiertoEn` y `vecesReabierto`).
+- `auditoria` solo admite crear entradas: el administrador, a su nombre y junto con una reapertura; nunca se editan ni se borran.
 - El catálogo de eventos solo lo modifica el administrador.
 
 ## 9. Matriz de pruebas de casos sucios

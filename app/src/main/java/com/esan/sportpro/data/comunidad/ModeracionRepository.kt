@@ -96,6 +96,43 @@ class ModeracionRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
+    /** Últimos reportes ya resueltos (historial del panel de moderación). Se ordena en memoria: no necesita índice. */
+    fun observarResueltos(limite: Int = 20): Flow<List<Reporte>> = callbackFlow {
+        val registro = reportes
+            .whereEqualTo("resuelto", true)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val lista = snapshot?.documents
+                    ?.mapNotNull { it.toObject<Reporte>() }
+                    ?.sortedByDescending { it.fechaResolucion?.time ?: 0L }
+                    ?.take(limite)
+                    .orEmpty()
+                trySend(lista)
+            }
+        awaitClose { registro.remove() }
+    }
+
+    /** Cuántas cuentas tienen hoy una suspensión vigente. */
+    fun observarCantidadSuspendidos(): Flow<Int> = callbackFlow {
+        val registro = suspensiones.addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            val ahora = Date()
+            trySend(snapshot?.documents?.mapNotNull { it.toObject<Suspension>() }?.count { it.estaActivaRespectoDe(ahora) } ?: 0)
+        }
+        awaitClose { registro.remove() }
+    }
+
+    /** Cuántas publicaciones están en revisión (ocultas automáticamente o pendientes de aprobación). */
+    fun observarCantidadEnRevision(): Flow<Int> = callbackFlow {
+        val registro = firestore.collection("publicaciones")
+            .whereEqualTo("estado", "EN_REVISION")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                trySend(snapshot?.size() ?: 0)
+            }
+        awaitClose { registro.remove() }
+    }
+
     /**
      * Resuelve un reporte (criterio 6): aplica la acción sobre el contenido, registra quién y
      * cuándo resolvió, y notifica — hoy solo deja constancia en el propio documento del reporte,

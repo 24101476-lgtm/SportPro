@@ -84,6 +84,42 @@ class AvisosViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Carga convocatorias de ejemplo para poder demostrar el módulo. Quedan marcadas en
+     * "requisitos" como datos de ejemplo; un administrador puede ocultarlas con el flujo de moderación.
+     */
+    fun cargarEjemplos() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val dia = 24L * 60 * 60 * 1000
+        val ahora = System.currentTimeMillis()
+        fun ejemplo(titulo: String, categoria: String, posiciones: List<String>, dias: Int, hora: String, distrito: String, referencia: String) =
+            Aviso(
+                titulo = titulo,
+                academiaId = currentState.academiaId,
+                academiaNombre = currentState.academiaNombre,
+                categoria = categoria,
+                posicionesBuscadas = posiciones,
+                fechaPrueba = java.util.Date(ahora + dias * dia),
+                hora = hora,
+                ubicacionDistrito = distrito,
+                ubicacionReferencia = referencia,
+                requisitos = "Traer DNI, botines y ropa deportiva. (Datos de ejemplo)",
+                contactoInstitucional = "contacto@academia.pe",
+                autorUid = uid,
+            )
+        val ejemplos = listOf(
+            ejemplo("Prueba de arqueros Sub-15", "Sub-15", listOf("ARQUERO"), 4, "9:00", "San Miguel", "Cancha municipal, puerta 2"),
+            ejemplo("Convocatoria delanteros y extremos Sub-13", "Sub-13", listOf("DELANTERO", "EXTREMO"), 9, "15:30", "Surco", "Complejo deportivo Los Pinos"),
+            ejemplo("Captación de volantes Sub-17", "Sub-17", listOf("VOLANTE_MIXTO", "VOLANTE_OFENSIVO"), 14, "10:00", "La Molina", "Losa deportiva del parque central"),
+        )
+        viewModelScope.launch {
+            ejemplos.forEach { aviso ->
+                runCatching { repository.publicar(aviso, currentState.academiaVerificada) }
+                    .onFailure { sendEvent(AvisosEvent.Error(it.message ?: "No se pudo cargar el ejemplo")) }
+            }
+        }
+    }
+
     fun reportar(avisoId: String, autorUid: String, motivo: MotivoReporte, detalle: String?) {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {

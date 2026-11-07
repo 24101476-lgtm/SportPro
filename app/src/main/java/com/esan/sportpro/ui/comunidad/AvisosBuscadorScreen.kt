@@ -34,7 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.esan.sportpro.domain.comunidad.Aviso
+import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.DatoEstadistica
 import com.esan.sportpro.ui.common.EstadoVacioModulo
+import com.esan.sportpro.ui.common.FilaEstadisticas
+import com.esan.sportpro.ui.common.TonoEstado
 import com.esan.sportpro.ui.common.TarjetaSportPro
 import com.esan.sportpro.ui.partido.ColoresPartido
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -85,12 +89,18 @@ fun AvisosBuscadorScreen(
                 }
             }
 
+            val botonEjemplos: @Composable () -> Unit = {
+                androidx.compose.material3.OutlinedButton(onClick = viewModel::cargarEjemplos) {
+                    Text("Cargar convocatorias de ejemplo")
+                }
+            }
             if (!state.isLoading && state.avisos.isEmpty()) {
                 EstadoVacioModulo(
                     titulo = if (state.filtro.tieneFiltrosActivos) "Sin resultados" else "Aún no hay convocatorias",
                     mensaje = if (state.filtro.tieneFiltrosActivos) "No encontramos convocatorias con esos filtros" else "Cuando una academia publique una prueba, aparecerá aquí",
                     icono = Icons.Default.SearchOff,
                     modifier = Modifier.weight(1f, fill = true),
+                    accion = if (state.filtro.tieneFiltrosActivos) null else botonEjemplos,
                 )
                 if (state.filtro.tieneFiltrosActivos) {
                     TextButton(onClick = viewModel::limpiarFiltros, modifier = Modifier.align(Alignment.CenterHorizontally)) {
@@ -103,6 +113,7 @@ fun AvisosBuscadorScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    item(key = "resumen") { ResumenAvisos(state.avisos) }
                     items(state.avisos, key = { it.id }) { aviso ->
                         AvisoCard(aviso = aviso, onClick = { onAbrirAviso(aviso) })
                     }
@@ -141,6 +152,8 @@ private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
                 Surface(shape = RoundedCornerShape(50), color = ColoresPartido.Verde.copy(alpha = 0.12f)) {
                     Text(
                         aviso.categoria,
+                        maxLines = 1,
+                        softWrap = false,
                         color = ColoresPartido.Verde,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
@@ -161,6 +174,17 @@ private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
                     )
                 }
             }
+            diasParaPrueba(aviso)?.let { dias ->
+                ChipEstado(
+                    texto = when {
+                        dias <= 0 -> "¡Es hoy!"
+                        dias == 1L -> "Mañana"
+                        else -> "Faltan $dias días"
+                    },
+                    tono = if (dias <= 3) TonoEstado.ADVERTENCIA else TonoEstado.EXITO,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
             if (aviso.posicionesBuscadas.isNotEmpty()) {
                 Text(
                     "Buscamos: " + aviso.posicionesBuscadas.joinToString(", ") { nombre ->
@@ -173,4 +197,25 @@ private fun AvisoCard(aviso: Aviso, onClick: () -> Unit) {
             }
         }
     }
+}
+
+private fun diasParaPrueba(aviso: Aviso): Long? {
+    val fecha = aviso.fechaPrueba ?: return null
+    val hoy = java.time.LocalDate.now()
+    val prueba = fecha.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    return java.time.temporal.ChronoUnit.DAYS.between(hoy, prueba)
+}
+
+/** Resumen con datos de las convocatorias activas: cuántas hay, cuándo es la próxima prueba y cuántas academias publican. */
+@Composable
+private fun ResumenAvisos(avisos: List<Aviso>) {
+    if (avisos.isEmpty()) return
+    val proxima = avisos.minByOrNull { it.fechaPrueba?.time ?: Long.MAX_VALUE }
+    FilaEstadisticas(
+        datos = listOf(
+            DatoEstadistica(avisos.size.toString(), "Convocatorias activas"),
+            DatoEstadistica(diasParaPrueba(proxima ?: avisos.first())?.let { if (it <= 0) "Hoy" else "${it} d" } ?: "—", "Próxima prueba"),
+            DatoEstadistica(avisos.map { it.academiaId }.distinct().size.toString(), "Academias"),
+        ),
+    )
 }

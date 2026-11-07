@@ -23,6 +23,9 @@ data class ModeracionUiState(
     // el perfil real se asume el rol de menor privilegio.
     val rolActual: UserRole = UserRole.JUGADOR,
     val bandeja: List<Reporte> = emptyList(),
+    val resueltos: List<Reporte> = emptyList(),
+    val suspendidosActivos: Int = 0,
+    val enRevision: Int = 0,
     val isLoadingBandeja: Boolean = true,
     val reporteSeleccionado: Reporte? = null,
     val bloqueados: List<Bloqueo> = emptyList(),
@@ -52,6 +55,18 @@ class ModeracionViewModel @Inject constructor(
                 repository.observarBandeja()
                     .onEach { lista -> setState { copy(bandeja = lista, isLoadingBandeja = false) } }
                     .catch { setState { copy(isLoadingBandeja = false) } }
+                    .launchIn(viewModelScope)
+                repository.observarResueltos()
+                    .onEach { lista -> setState { copy(resueltos = lista) } }
+                    .catch { }
+                    .launchIn(viewModelScope)
+                repository.observarCantidadSuspendidos()
+                    .onEach { n -> setState { copy(suspendidosActivos = n) } }
+                    .catch { }
+                    .launchIn(viewModelScope)
+                repository.observarCantidadEnRevision()
+                    .onEach { n -> setState { copy(enRevision = n) } }
+                    .catch { }
                     .launchIn(viewModelScope)
             }
         }

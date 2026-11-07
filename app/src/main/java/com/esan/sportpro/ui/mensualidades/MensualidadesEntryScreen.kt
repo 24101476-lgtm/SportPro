@@ -55,14 +55,19 @@ fun MensualidadesEntryScreen(
             },
             modifier = modifier,
         )
-        is MensualidadesDestino.Registrar -> MensualidadRegistrarScreen(
+        is MensualidadesDestino.Registrar -> {
+            // "Atrás" del sistema vuelve a la grilla en vez de cerrar la app.
+            androidx.activity.compose.BackHandler { destino = MensualidadesDestino.Grilla }
+            MensualidadRegistrarScreen(
             onGuardado = { destino = MensualidadesDestino.Grilla },
             onCancelar = { destino = MensualidadesDestino.Grilla },
             modifier = modifier,
-        )
+            )
+        }
         is MensualidadesDestino.Historial -> MensualidadHistorialScreen(
             jugadorId = actual.jugadorId,
             jugadorNombre = actual.jugadorNombre,
+            onVolver = { destino = MensualidadesDestino.Grilla },
             modifier = modifier,
         )
     }

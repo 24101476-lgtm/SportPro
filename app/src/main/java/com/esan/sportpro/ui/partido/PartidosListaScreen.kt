@@ -89,6 +89,9 @@ fun PartidosListaScreen(
     viewModel: PartidosViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+    val puedeGestionarPartidos =
+        state.rolActual == "ADMINISTRADOR" ||
+                state.rolActual == "ENTRENADOR"
     val snackbar = remember { SnackbarHostState() }
     var filtro by rememberSaveable { mutableStateOf(FiltroPartidos.TODOS) }
 
@@ -165,6 +168,7 @@ fun PartidosListaScreen(
                     item {
                         Encabezado(
                             partidos = state.partidos,
+                            puedeGestionarPartidos = puedeGestionarPartidos,
                             onNuevoPartido = onNuevoPartido,
                             onAbrirCatalogo = onAbrirCatalogo,
                         )
@@ -192,7 +196,11 @@ fun PartidosListaScreen(
                         }
                     }
                     if (state.partidos.isEmpty()) {
-                        item { EstadoVacio(state.puedeCrear) }
+                        item {
+                            EstadoVacio(
+                                puedeCrear = state.puedeCrear && puedeGestionarPartidos
+                            )
+                        }
                     } else if (grupos.isEmpty()) {
                         item {
                             Text(
@@ -224,7 +232,7 @@ fun PartidosListaScreen(
             }
         }
 
-        if (state.puedeCrear) {
+        if (state.puedeCrear && puedeGestionarPartidos) {
             ExtendedFloatingActionButton(
                 onClick = viewModel::abrirFormulario,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -245,8 +253,14 @@ fun PartidosListaScreen(
         )
     }
 
-    state.formulario?.let { form ->
-        NuevoPartidoSheet(state = state, form = form, viewModel = viewModel)
+    if (puedeGestionarPartidos) {
+        state.formulario?.let { form ->
+            NuevoPartidoSheet(
+                state = state,
+                form = form,
+                viewModel = viewModel
+            )
+        }
     }
 }
 
@@ -255,7 +269,12 @@ fun PartidosListaScreen(
  * acciones de la pantalla (programar y catálogo). El texto es blanco porque va sobre la foto.
  */
 @Composable
-private fun Encabezado(partidos: List<Partido>, onNuevoPartido: () -> Unit, onAbrirCatalogo: () -> Unit) {
+private fun Encabezado(
+    partidos: List<Partido>,
+    puedeGestionarPartidos: Boolean,
+    onNuevoPartido: () -> Unit,
+    onAbrirCatalogo: () -> Unit,
+) {
     val enVivo = partidos.count { it.estado == EstadoPartido.EN_CURSO }
     FondoFotoSportPro(
         foto = FotoSportPro.JUVENILES,
@@ -279,21 +298,33 @@ private fun Encabezado(partidos: List<Partido>, onNuevoPartido: () -> Unit, onAb
                 modifier = Modifier.padding(top = 8.dp, bottom = 18.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
-                    onClick = onNuevoPartido,
-                    shape = CircleShape,
-                    color = Color.White,
-                    contentColor = PaletaSportPro.Carbon,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                if (puedeGestionarPartidos) {
+                    Surface(
+                        onClick = onNuevoPartido,
+                        shape = CircleShape,
+                        color = Color.White,
+                        contentColor = PaletaSportPro.Carbon,
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("Programar partido", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                "Programar partido",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
+                        }
                     }
                 }
+
                 Surface(
                     onClick = onAbrirCatalogo,
                     shape = CircleShape,
@@ -555,3 +586,4 @@ private val FORMATO_DIA_SEMANA: DateTimeFormatter = DateTimeFormatter.ofPattern(
 /** "Sáb", "Jue"… sin el punto que agrega el formato abreviado. */
 private fun diaSemana(fecha: LocalDate): String =
     fecha.format(FORMATO_DIA_SEMANA).removeSuffix(".").replaceFirstChar { it.uppercase() }
+

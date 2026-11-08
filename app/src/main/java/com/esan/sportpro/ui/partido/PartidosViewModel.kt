@@ -44,6 +44,7 @@ data class FormularioPartido(
 }
 
 data class PartidosUiState(
+    val rolActual: String? = null,
     val cargando: Boolean = true,
     val perfil: PerfilActual? = null,
     val partidos: List<Partido> = emptyList(),
@@ -94,6 +95,7 @@ class PartidosViewModel @Inject constructor(
     private var equiposPermitidos: Set<String>? = null
 
     init {
+
         viewModelScope.launch {
             val perfil = runCatching { sesionRepository.perfilActual() }.getOrNull()
             equiposPermitidos = if (perfil != null && !perfil.esStaff) emptySet() else null
@@ -136,12 +138,26 @@ class PartidosViewModel @Inject constructor(
             }
         }
         escuchar()
+        escucharRol()
         viewModelScope.launch {
             repo.erroresEscritura.collect { setState { copy(mensaje = it) } }
         }
     }
 
     /** (Re)inicia la escucha en tiempo real de los partidos. */
+
+    private fun escucharRol() {
+        viewModelScope.launch {
+            repo.observarRolActual()
+                .collect { rol ->
+                    setState {
+                        copy(
+                            rolActual = rol
+                        )
+                    }
+                }
+        }
+    }
     fun escuchar() {
         escucha?.cancel()
         setState { copy(cargando = true, error = null, aviso = null) }

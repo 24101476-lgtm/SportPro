@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
@@ -92,6 +93,7 @@ import kotlinx.coroutines.launch
 fun RegistroPartidoScreen(
     onVolver: () -> Unit,
     onResumenIa: () -> Unit = {},
+    onConfigurarAlineacion: () -> Unit = {},
     viewModel: RegistroPartidoViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -145,7 +147,12 @@ fun RegistroPartidoScreen(
 
                 when (partido.estado) {
                     EstadoPartido.PROGRAMADO -> item {
-                        PreInicio(state, partido, onIniciar = viewModel::abrirInicioPartido)
+                        PreInicio(
+                            state = state,
+                            partido = partido,
+                            onIniciar = viewModel::abrirInicioPartido,
+                            onConfigurarAlineacion = onConfigurarAlineacion,
+                        )
                     }
                     else -> item {
                         Indicadores(
@@ -412,49 +419,143 @@ private fun EquipoMarcador(nombre: String, color: Color, modifier: Modifier) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PreInicio(state: RegistroUiState, partido: Partido, onIniciar: () -> Unit) {
+private fun PreInicio(
+    state: RegistroUiState,
+    partido: Partido,
+    onIniciar: () -> Unit,
+    onConfigurarAlineacion: () -> Unit,
+) {
     val titulares = state.convocados.filter { it.titular }
     val suplentes = state.convocados.count { !it.titular }
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Text("Listo para iniciar", style = MaterialTheme.typography.titleMedium)
+
             FilaDato(
-                icono = if (partido.alineacionConfirmada) Icons.Default.CheckCircle else Icons.Default.Warning,
-                color = if (partido.alineacionConfirmada) ColoresPartido.Verde else MaterialTheme.colorScheme.error,
-                texto = if (partido.alineacionConfirmada) "Alineación confirmada" else "Alineación pendiente de confirmar",
+                icono = if (partido.alineacionConfirmada) {
+                    Icons.Default.CheckCircle
+                } else {
+                    Icons.Default.Warning
+                },
+                color = if (partido.alineacionConfirmada) {
+                    ColoresPartido.Verde
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+                texto = if (partido.alineacionConfirmada) {
+                    "Alineación confirmada"
+                } else {
+                    "Alineación pendiente de confirmar"
+                },
             )
-            FilaDato(Icons.Default.Groups, ColoresPartido.Azul, "${titulares.size} titulares · $suplentes suplentes")
-            FilaDato(Icons.Default.SwapHoriz, ColoresPartido.Azul, "${partido.cambiosPermitidos} cambios permitidos")
-            FilaDato(Icons.Default.Timer, ColoresPartido.Azul, "2 tiempos de ${partido.duracionTiempoMin} min · termina al ${partido.duracionTiempoMin * 2}'")
+
+            FilaDato(
+                Icons.Default.Groups,
+                ColoresPartido.Azul,
+                "${titulares.size} titulares · $suplentes suplentes",
+            )
+            FilaDato(
+                Icons.Default.SwapHoriz,
+                ColoresPartido.Azul,
+                "${partido.cambiosPermitidos} cambios permitidos",
+            )
+            FilaDato(
+                Icons.Default.Timer,
+                ColoresPartido.Azul,
+                "2 tiempos de ${partido.duracionTiempoMin} min · termina al ${partido.duracionTiempoMin * 2}'",
+            )
+
             if (titulares.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     titulares.forEach { j ->
-                        Surface(shape = CircleShape, color = ColoresPartido.Verde.copy(alpha = 0.12f), modifier = Modifier.size(34.dp)) {
+                        Surface(
+                            shape = CircleShape,
+                            color = ColoresPartido.Verde.copy(alpha = 0.12f),
+                            modifier = Modifier.size(34.dp),
+                        ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("${j.dorsal ?: "?"}", color = ColoresPartido.Verde, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${j.dorsal ?: "?"}",
+                                    color = ColoresPartido.Verde,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             }
                         }
                     }
                 }
             }
+
             if (state.puedeCorregir) {
+
+                if (!partido.alineacionConfirmada) {
+                    Button(
+                        onClick = onConfigurarAlineacion,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ColoresPartido.Verde,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.SportsSoccer,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Configurar alineación",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
                 Button(
                     onClick = onIniciar,
+                    enabled = partido.alineacionConfirmada,
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ColoresPartido.Verde),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ColoresPartido.Verde,
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 56.dp),
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("Iniciar partido", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Iniciar partido",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
+
+                if (!partido.alineacionConfirmada) {
+                    Text(
+                        "Confirma la alineación antes de iniciar el partido.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
             } else {
                 Text(
                     "El entrenador u operador del partido lo iniciará. Aquí verás el marcador en vivo.",
@@ -559,10 +660,10 @@ private fun ControlTiempo(controles: List<TipoEvento>, state: RegistroUiState, p
                 // Se resalta la acción que corresponde al momento del partido.
                 val recomendado = when (tipo.id) {
                     TiposEvento.FIN_PRIMER_TIEMPO -> partido.inicioSegundoTiempoMs == null && !partido.enDescanso &&
-                        state.reloj.minuto >= partido.duracionTiempoMin
+                            state.reloj.minuto >= partido.duracionTiempoMin
                     TiposEvento.INICIO_SEGUNDO_TIEMPO -> partido.enDescanso
                     TiposEvento.FIN_PARTIDO -> partido.inicioSegundoTiempoMs != null &&
-                        state.reloj.minuto >= partido.duracionTiempoMin * 2
+                            state.reloj.minuto >= partido.duracionTiempoMin * 2
                     else -> false
                 }
                 if (recomendado) {
@@ -866,3 +967,4 @@ fun EventoItem(
 fun BotonSecundario(texto: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     OutlinedButton(onClick = onClick, shape = RoundedCornerShape(14.dp), modifier = modifier.heightIn(min = 52.dp)) { Text(texto) }
 }
+

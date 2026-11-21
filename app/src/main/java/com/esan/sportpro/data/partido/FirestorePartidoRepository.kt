@@ -179,7 +179,7 @@ class FirestorePartidoRepository @Inject constructor(
                         // vinculado no puede ser convocado (ReglasApoderado).
                         .filter { doc ->
                             doc.getBoolean("activo") != false &&
-                                doc.getString("estadoRegistro") != "PENDIENTE_APODERADO"
+                                    doc.getString("estadoRegistro") != "PENDIENTE_APODERADO"
                         }
                         .map { doc ->
 
@@ -323,6 +323,20 @@ class FirestorePartidoRepository @Inject constructor(
 
                     val lista = snap?.documents
                         .orEmpty()
+                        /*
+                         * Los partidos creados desde el formulario integrado
+                         * pasan primero por una pizarra táctica.
+                         *
+                         * Mientras "borrador" sea true, el documento existe
+                         * únicamente como soporte técnico del flujo y NO debe
+                         * aparecer todavía como partido oficial en la lista.
+                         *
+                         * Los partidos antiguos, que no tienen este campo,
+                         * siguen mostrándose normalmente.
+                         */
+                        .filter {
+                            it.getBoolean("borrador") != true
+                        }
                         .mapNotNull {
                             it.toPartido()
                         }
@@ -835,9 +849,16 @@ class FirestorePartidoRepository @Inject constructor(
         batch.update(
             partidoRef,
             mapOf(
+                /*
+                 * Al confirmar la pizarra, el borrador se convierte
+                 * oficialmente en partido visible para la aplicación.
+                 */
+                "borrador" to false,
                 "alineacionConfirmada" to true,
                 "alineacionConfirmadaPor" to uidActual,
                 "alineacionConfirmadaEn" to
+                        FieldValue.serverTimestamp(),
+                "creacionOficialEn" to
                         FieldValue.serverTimestamp(),
             )
         )
@@ -1472,7 +1493,15 @@ class FirestorePartidoRepository @Inject constructor(
                 "temporada" to nuevo.temporada,
                 "estado" to EstadoPartido.PROGRAMADO.name,
                 "actaCerrada" to false,
-                "alineacionConfirmada" to nuevo.convocados.any { it.titular },
+
+                /*
+                 * Este documento todavía NO representa un partido oficial.
+                 * Sirve como borrador para que la pizarra pueda leer
+                 * partidoId + convocados antes de la publicación final.
+                 */
+                "borrador" to true,
+                "alineacionConfirmada" to false,
+
                 "cambiosPermitidos" to nuevo.cambiosPermitidos,
                 "duracionTiempoMin" to nuevo.duracionTiempoMin,
                 "enDescanso" to false,
@@ -2449,3 +2478,4 @@ class FirestorePartidoRepository @Inject constructor(
             "usuarios"
     }
 }
+

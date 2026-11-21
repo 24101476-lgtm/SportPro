@@ -1,6 +1,9 @@
 package com.esan.sportpro.ui.partido
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -64,11 +67,17 @@ private const val RUTA_CONVOCATORIA_VENCIDA =
 private const val RUTA_ALINEACION =
     "partidos/{partidoId}/alineacion-flujo"
 
+private const val RUTA_ALINEACION_DIRECTA =
+    "partidos/{partidoId}/alineacion-tablero-directo"
+
 private const val RUTA_ALINEACION_PREPARAR =
     "alineacion/preparar"
 
 private const val RUTA_ALINEACION_TITULARES =
     "alineacion/titulares"
+
+private const val RUTA_ALINEACION_TABLERO =
+    "alineacion/tablero"
 
 private const val RUTA_ALINEACION_POSICIONES =
     "alineacion/posiciones"
@@ -198,6 +207,12 @@ private fun rutaAlineacion(
     "partidos/$partidoId/alineacion-flujo"
 
 
+private fun rutaAlineacionDirecta(
+    partidoId: String
+): String =
+    "partidos/$partidoId/alineacion-tablero-directo"
+
+
 // ============================================================
 // MÓDULO PARTIDO
 // ============================================================
@@ -257,6 +272,22 @@ fun PartidoScreen(
                     }
                 },
 
+                /*
+                 * El formulario integrado genera un borrador técnico.
+                 * Antes de publicarlo como partido oficial, abrimos
+                 * la pizarra táctica.
+                 */
+                onConfigurarAlineacion = { partidoId ->
+
+                    navController.navigate(
+                        rutaAlineacionDirecta(
+                            partidoId
+                        )
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
+
                 onSeguirPartido = { partidoId ->
 
                     navController.navigate(
@@ -288,7 +319,7 @@ fun PartidoScreen(
                 onPartidoCreado = { partidoId ->
 
                     navController.navigate(
-                        rutaConvocatoria(
+                        rutaAlineacionDirecta(
                             partidoId
                         )
                     ) {
@@ -739,6 +770,137 @@ fun PartidoScreen(
 
 
         // ====================================================
+        // ALINEACIÓN DIRECTA DESDE "NUEVO PARTIDO"
+        // ====================================================
+
+        composable(
+            route =
+                RUTA_ALINEACION_DIRECTA,
+
+            arguments = listOf(
+
+                navArgument(
+                    "partidoId"
+                ) {
+                    type =
+                        NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+
+            val partidoId =
+                backStackEntry
+                    .arguments
+                    ?.getString(
+                        "partidoId"
+                    )
+                    .orEmpty()
+
+            /*
+             * Esta pantalla tiene su propio AlineacionViewModel.
+             * El partidoId entra por SavedStateHandle porque forma
+             * parte de la ruta.
+             */
+            val viewModel:
+                    AlineacionViewModel =
+                hiltViewModel(
+                    backStackEntry
+                )
+
+            val state by
+            viewModel.uiState.collectAsState()
+
+            /*
+             * Cuando guardarAlineacionFinal() termina localmente,
+             * el borrador deja de ser borrador y pasa a ser el partido
+             * oficial. Después abrimos su pantalla de preinicio.
+             */
+            LaunchedEffect(
+                state.alineacionGuardada
+            ) {
+
+                if (
+                    state.alineacionGuardada
+                ) {
+
+                    navController.navigate(
+                        rutaRegistro(
+                            partidoId
+                        )
+                    ) {
+
+                        popUpTo(
+                            RUTA_ALINEACION_DIRECTA
+                        ) {
+                            inclusive = true
+                        }
+
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+
+            AlineacionTableroScreen(
+
+                titulares =
+                    state.titularesCancha,
+
+                suplentes =
+                    state.suplentesCancha,
+
+                esEntrenador = true,
+
+                onVolver = {
+                    navController.popBackStack()
+                },
+
+                /*
+                 * En este flujo los titulares ya fueron elegidos
+                 * en "Nuevo partido". Al terminar la pizarra se publica
+                 * oficialmente el partido.
+                 */
+                onGuardar = {
+                    viewModel.confirmarAlineacion()
+                },
+
+                textoAccion =
+                    "Crear partido",
+
+                onPosicionJugadorChange =
+                    viewModel::moverJugadorEnCancha,
+
+                obtenerDetalleJugador = {
+                        jugadorId ->
+
+                    state.jugadores
+                        .firstOrNull {
+                            it.id == jugadorId
+                        }
+                        ?.let {
+                                jugador ->
+
+                            DetalleJugadorUi(
+                                id = jugador.id,
+                                nombreCompleto =
+                                    jugador.nombre,
+                                dorsal =
+                                    jugador.dorsal,
+                                edad = null,
+                                posicion =
+                                    jugador.posicion,
+                                categoria =
+                                    state.partido
+                                        ?.categoria,
+                                pieDominante = null,
+                            )
+                        }
+                },
+            )
+        }
+
+
+        // ====================================================
         // US-016 · GRAPH DE ALINEACIÓN
         // ====================================================
 
@@ -854,7 +1016,7 @@ fun PartidoScreen(
                     onContinuar = {
 
                         navController.navigate(
-                            RUTA_ALINEACION_POSICIONES
+                            RUTA_ALINEACION_TABLERO
                         ) {
                             launchSingleTop = true
                         }
@@ -862,6 +1024,106 @@ fun PartidoScreen(
 
                     viewModel =
                         viewModel,
+                )
+            }
+
+
+            // =================================================
+            // PIZARRA TÁCTICA · 11 TITULARES EN CANCHA
+            // =================================================
+
+            composable(
+                route =
+                    RUTA_ALINEACION_TABLERO
+            ) { backStackEntry ->
+
+                val parentEntry =
+                    remember(
+                        backStackEntry
+                    ) {
+
+                        navController
+                            .getBackStackEntry(
+                                RUTA_ALINEACION
+                            )
+                    }
+
+                val viewModel:
+                        AlineacionViewModel =
+                    hiltViewModel(
+                        parentEntry
+                    )
+
+                val state by
+                viewModel.uiState.collectAsState()
+
+
+                AlineacionTableroScreen(
+
+                    titulares =
+                        state.titularesCancha,
+
+                    suplentes =
+                        state.suplentesCancha,
+
+                    /*
+                     * Esta ruta forma parte del flujo de edición
+                     * del entrenador. Más adelante añadiremos una
+                     * ruta equivalente en modo solo lectura para
+                     * padre/jugador.
+                     */
+                    esEntrenador = true,
+
+                    onVolver = {
+                        navController.popBackStack()
+                    },
+
+                    onGuardar = {
+
+                        navController.navigate(
+                            RUTA_ALINEACION_POSICIONES
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    textoAccion =
+                        "Continuar",
+
+                    onPosicionJugadorChange =
+                        viewModel::moverJugadorEnCancha,
+
+                    /*
+                     * Por ahora mostramos los datos que ya existen
+                     * en la alineación. Edad y pie dominante se
+                     * conectarán después con la ficha real del jugador.
+                     */
+                    obtenerDetalleJugador = {
+                            jugadorId ->
+
+                        state.jugadores
+                            .firstOrNull {
+                                it.id == jugadorId
+                            }
+                            ?.let {
+                                    jugador ->
+
+                                DetalleJugadorUi(
+                                    id = jugador.id,
+                                    nombreCompleto =
+                                        jugador.nombre,
+                                    dorsal =
+                                        jugador.dorsal,
+                                    edad = null,
+                                    posicion =
+                                        jugador.posicion,
+                                    categoria =
+                                        state.partido
+                                            ?.categoria,
+                                    pieDominante = null,
+                                )
+                            }
+                    },
                 )
             }
 
@@ -1158,6 +1420,21 @@ fun PartidoScreen(
                     navController.popBackStack()
                 },
 
+                onConfigurarAlineacion = {
+                    entrada.arguments
+                        ?.getString("partidoId")
+                        ?.let { partidoId ->
+
+                            navController.navigate(
+                                rutaAlineacionDirecta(
+                                    partidoId
+                                )
+                            ) {
+                                launchSingleTop = true
+                            }
+                        }
+                },
+
                 onResumenIa = {
                     entrada.arguments?.getString("partidoId")?.let { partidoId ->
                         navController.navigate(
@@ -1229,3 +1506,4 @@ fun PartidoScreen(
         }
     }
 }
+

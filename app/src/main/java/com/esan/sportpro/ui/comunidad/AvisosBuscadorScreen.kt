@@ -66,12 +66,15 @@ fun AvisosBuscadorScreen(
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNuevoAviso,
-                containerColor = ColoresPartido.Verde,
-                contentColor = androidx.compose.ui.graphics.Color.White,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nuevo aviso")
+            // Solo el personal de una academia publica avisos de pruebas.
+            if (state.academiaVerificada) {
+                FloatingActionButton(
+                    onClick = onNuevoAviso,
+                    containerColor = ColoresPartido.Verde,
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Nuevo aviso")
+                }
             }
         },
     ) { padding ->

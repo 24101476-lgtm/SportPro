@@ -12,8 +12,9 @@ import com.esan.sportpro.navigation.UserRole
 /** Estados internos de la navegación anidada del módulo Mensualidades (US-008). */
 private sealed interface MensualidadesDestino {
     data object Grilla : MensualidadesDestino
-    data object Registrar : MensualidadesDestino
-    data class Historial(val jugadorId: String, val jugadorNombre: String) : MensualidadesDestino
+    /** [jugadorId] vacío = el administrador elige al jugador en el formulario. */
+    data class Registrar(val jugadorId: String, val mes: Int, val anio: Int) : MensualidadesDestino
+    data class Historial(val jugadorId: String, val jugadorNombre: String, val fotoUrl: String) : MensualidadesDestino
 }
 
 /**
@@ -49,9 +50,11 @@ fun MensualidadesEntryScreen(
 
     when (val actual = destino) {
         is MensualidadesDestino.Grilla -> MensualidadesGrillaScreen(
-            onNuevoRegistro = { destino = MensualidadesDestino.Registrar },
-            onVerHistorial = { jugadorId, jugadorNombre ->
-                destino = MensualidadesDestino.Historial(jugadorId, jugadorNombre)
+            onNuevoRegistro = { jugadorId, mes, anio ->
+                destino = MensualidadesDestino.Registrar(jugadorId.orEmpty(), mes, anio)
+            },
+            onVerHistorial = { jugadorId, jugadorNombre, fotoUrl ->
+                destino = MensualidadesDestino.Historial(jugadorId, jugadorNombre, fotoUrl)
             },
             modifier = modifier,
         )
@@ -59,6 +62,9 @@ fun MensualidadesEntryScreen(
             // "Atrás" del sistema vuelve a la grilla en vez de cerrar la app.
             androidx.activity.compose.BackHandler { destino = MensualidadesDestino.Grilla }
             MensualidadRegistrarScreen(
+            jugadorInicialId = actual.jugadorId.ifBlank { null },
+            mesInicial = actual.mes,
+            anioInicial = actual.anio,
             onGuardado = { destino = MensualidadesDestino.Grilla },
             onCancelar = { destino = MensualidadesDestino.Grilla },
             modifier = modifier,
@@ -67,6 +73,7 @@ fun MensualidadesEntryScreen(
         is MensualidadesDestino.Historial -> MensualidadHistorialScreen(
             jugadorId = actual.jugadorId,
             jugadorNombre = actual.jugadorNombre,
+            fotoUrl = actual.fotoUrl,
             onVolver = { destino = MensualidadesDestino.Grilla },
             modifier = modifier,
         )
@@ -81,17 +88,31 @@ private val DestinoSaver = androidx.compose.runtime.saveable.Saver<Mensualidades
     save = { destino ->
         when (destino) {
             is MensualidadesDestino.Grilla -> "grilla"
-            is MensualidadesDestino.Registrar -> "registrar"
-            is MensualidadesDestino.Historial -> "historial|${destino.jugadorId}|${destino.jugadorNombre}"
+            is MensualidadesDestino.Registrar -> "registrar|${destino.jugadorId}|${destino.mes}|${destino.anio}"
+            is MensualidadesDestino.Historial ->
+                "historial|${destino.jugadorId}|${destino.jugadorNombre}|${destino.fotoUrl}"
         }
     },
     restore = { guardado ->
         when {
             guardado == "grilla" -> MensualidadesDestino.Grilla
-            guardado == "registrar" -> MensualidadesDestino.Registrar
-            guardado.startsWith("historial|") -> {
+            guardado.startsWith("registrar") -> {
                 val partes = guardado.split("|")
-                MensualidadesDestino.Historial(partes.getOrElse(1) { "" }, partes.getOrElse(2) { "" })
+                val hoy = java.time.LocalDate.now()
+                MensualidadesDestino.Registrar(
+                    jugadorId = partes.getOrElse(1) { "" },
+                    mes = partes.getOrNull(2)?.toIntOrNull() ?: hoy.monthValue,
+                    anio = partes.getOrNull(3)?.toIntOrNull() ?: hoy.year,
+                )
+            }
+            guardado.startsWith("historial|") -> {
+                // La URL de la foto puede traer "|" en teoría: se une todo lo que sigue al nombre.
+                val partes = guardado.split("|")
+                MensualidadesDestino.Historial(
+                    partes.getOrElse(1) { "" },
+                    partes.getOrElse(2) { "" },
+                    partes.drop(3).joinToString("|"),
+                )
             }
             else -> MensualidadesDestino.Grilla
         }

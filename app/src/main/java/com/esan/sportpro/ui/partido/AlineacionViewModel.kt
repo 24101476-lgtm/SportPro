@@ -3,12 +3,21 @@ package com.esan.sportpro.ui.partido
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
+import com.esan.sportpro.domain.partido.EstadoPartido
 import com.esan.sportpro.domain.partido.EstadoRespuestaConvocatoria
+import com.esan.sportpro.domain.partido.NuevoPartido
 import com.esan.sportpro.domain.partido.JugadorConvocado
 import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.PartidoRepository
+import com.esan.sportpro.domain.jugadores.JugadorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,6 +49,10 @@ data class AlineacionUiState(
      * Se mantienen en el ViewModel mientras el entrenador arma la alineación.
      */
     val posicionesTacticas: Map<String, PosicionTacticaUi> =
+        emptyMap(),
+
+    /** Foto de cada jugador (id → URL), leída de su ficha; vacía si el rol no puede leerla. */
+    val fotosJugadores: Map<String, String> =
         emptyMap(),
 
     val cargando: Boolean = true,
@@ -85,6 +98,7 @@ data class AlineacionUiState(
                         titular = true,
                         x = posicionGuardada?.x ?: 0.5f,
                         y = posicionGuardada?.y ?: 0.5f,
+                        fotoUrl = fotosJugadores[jugador.id].orEmpty(),
                     )
                 }
 
@@ -117,6 +131,7 @@ data class AlineacionUiState(
                     titular = false,
                     x = 0.5f,
                     y = 0.5f,
+                    fotoUrl = fotosJugadores[jugador.id].orEmpty(),
                 )
             }
 
@@ -137,6 +152,8 @@ sealed interface AlineacionEvent
 class AlineacionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: PartidoRepository,
+    private val jugadorRepository: JugadorRepository,
+    private val borradores: BorradoresPartido,
 ) : BaseViewModel<AlineacionUiState, AlineacionEvent>(
     AlineacionUiState()
 ) {
@@ -144,6 +161,13 @@ class AlineacionViewModel @Inject constructor(
     private val partidoId: String =
         savedStateHandle["partidoId"]
             ?: ""
+
+    /**
+     * Partido armado en "Nuevo partido" que todavía no existe en Firestore.
+     * Si es null, el partido ya está publicado y se lee de la base de datos.
+     */
+    private val borrador: NuevoPartido? =
+        borradores.obtener(partidoId)
 
     /**
      * IDs que ya existían dentro de convocados.
@@ -178,7 +202,12 @@ class AlineacionViewModel @Inject constructor(
 
         } else {
 
-            observarDatos()
+            if (borrador != null) {
+                cargarBorrador(borrador)
+            } else {
+                observarDatos()
+            }
+            observarFotos()
             observarErrores()
         }
     }
@@ -187,6 +216,40 @@ class AlineacionViewModel @Inject constructor(
     // =========================================================
     // CARGA DE DATOS
     // =========================================================
+
+    /** El partido aún no existe en Firestore: la pizarra trabaja sobre los datos en memoria. */
+    private fun cargarBorrador(nuevo: NuevoPartido) {
+        alineacionInicializada = true
+        convocadosPreviosIds = emptyList()
+
+        setState {
+            copy(
+                partido = Partido(
+                    id = partidoId,
+                    nombreEquipo = nuevo.nombreEquipo,
+                    nombreRival = nuevo.nombreRival,
+                    categoria = nuevo.categoria,
+                    estado = EstadoPartido.PROGRAMADO,
+                    alineacionConfirmada = false,
+                    cambiosPermitidos = nuevo.cambiosPermitidos,
+                    duracionTiempoMin = nuevo.duracionTiempoMin,
+                    inicioPrimerTiempoMs = null,
+                    inicioSegundoTiempoMs = null,
+                    enDescanso = false,
+                    operadorUid = null,
+                    entrenadorUid = null,
+                    creadoPor = null,
+                    fechaMs = null,
+                    equipoId = nuevo.equipoId,
+                    academiaId = nuevo.academiaId,
+                    tipo = nuevo.tipo,
+                    temporada = nuevo.temporada,
+                ),
+                jugadores = nuevo.convocados,
+                cargando = false,
+            )
+        }
+    }
 
     private fun observarDatos() {
 
@@ -362,6 +425,40 @@ class AlineacionViewModel @Inject constructor(
                             cargando = false,
                         )
                     }
+                }
+        }
+    }
+
+
+    /**
+     * Fotos de las fichas de la academia del partido para pintarlas en la pizarra.
+     * Si las reglas no dejan leer `jugadores` (o no hay conexión) las fichas muestran iniciales.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observarFotos() {
+        val academia =
+            if (borrador != null) flowOf(borrador.academiaId)
+            else repository.observarPartido(partidoId).map { it?.academiaId }
+
+        viewModelScope.launch {
+            academia
+                .distinctUntilChanged()
+                .flatMapLatest { academiaId ->
+                    if (academiaId.isNullOrBlank()) {
+                        flowOf(emptyMap())
+                    } else {
+                        jugadorRepository.observarJugadores(academiaId)
+                            .map { jugadores ->
+                                jugadores
+                                    .filter { it.fotoUrl.isNotBlank() }
+                                    .associate { it.id to it.fotoUrl }
+                            }
+                            .catch { emit(emptyMap()) }
+                    }
+                }
+                .catch { emit(emptyMap()) }
+                .collect { fotos ->
+                    setState { copy(fotosJugadores = fotos) }
                 }
         }
     }
@@ -708,16 +805,29 @@ class AlineacionViewModel @Inject constructor(
             )
         }
 
-        repository.guardarAlineacionFinal(
-            partidoId =
-                partidoId,
+        if (borrador != null) {
+            /*
+             * Recién aquí el partido se escribe en Firestore, ya con la
+             * alineación confirmada. Antes solo existía en memoria.
+             */
+            repository.crearPartido(
+                nuevo = borrador.copy(convocados = state.jugadores),
+                id = partidoId,
+                alineacionConfirmada = true,
+            )
+            borradores.quitar(partidoId)
+        } else {
+            repository.guardarAlineacionFinal(
+                partidoId =
+                    partidoId,
 
-            jugadores =
-                state.jugadores,
+                jugadores =
+                    state.jugadores,
 
-            convocadosPreviosIds =
-                convocadosPreviosIds,
-        )
+                convocadosPreviosIds =
+                    convocadosPreviosIds,
+            )
+        }
 
         /*
          * El repositorio trabaja offline-first:
@@ -767,5 +877,10 @@ class AlineacionViewModel @Inject constructor(
                 }
         }
     }
-}
 
+    /** Si el entrenador sale de la pizarra sin crear el partido, el borrador se descarta. */
+    override fun onCleared() {
+        borradores.quitar(partidoId)
+        super.onCleared()
+    }
+}

@@ -12,6 +12,7 @@ import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -54,7 +55,11 @@ class PadreMensualidadesViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val vinculacionRepository: VinculacionRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val academiaRepository: com.esan.sportpro.domain.academia.AcademiaRepository,
 ) : BaseViewModel<PadreMensualidadesUiState, Unit>(PadreMensualidadesUiState()) {
+
+    /** Día de corte de la academia de los hijos (US-004). */
+    private var diaCorte = EstadoMensualidad.DIA_CORTE
 
     init {
         cargar()
@@ -73,8 +78,14 @@ class PadreMensualidadesViewModel @Inject constructor(
                 if (aprobadas.isEmpty()) {
                     flowOf(PadreMensualidadesUiState(isLoading = false, sinJugadoresVinculados = true, solicitudesPendientes = pendientes))
                 } else {
-                    repository.observarMensualidadesDeJugadores(aprobadas.map { it.jugadorId })
-                        .map { pagos -> construir(aprobadas, pagos, pendientes) }
+                    val academia = aprobadas.first().academiaId
+                    combine(
+                        repository.observarMensualidadesDeJugadores(aprobadas.map { it.jugadorId }),
+                        academiaRepository.observarConfiguracion(academia),
+                    ) { pagos, configuracion ->
+                        diaCorte = configuracion.diaCorte
+                        construir(aprobadas, pagos, pendientes)
+                    }
                 }
             }
             .onEach { nuevo -> setState { nuevo } }
@@ -85,9 +96,7 @@ class PadreMensualidadesViewModel @Inject constructor(
     private fun construir(aprobadas: List<Vinculacion>, pagos: List<Mensualidad>, pendientes: Int): PadreMensualidadesUiState {
         val hoy = LocalDate.now()
         fun efectivo(m: Mensualidad, sinRegistro: Boolean = false): MensualidadConEstadoEfectivo {
-            val diaCorte = 10.coerceAtMost(YearMonth.of(m.anio, m.mes).lengthOfMonth())
-            val corte = LocalDate.of(m.anio, m.mes, diaCorte)
-            return MensualidadConEstadoEfectivo(m, EstadoMensualidad.calcular(m.estadoRegistrado, corte, hoy), sinRegistro)
+            return MensualidadConEstadoEfectivo(m, EstadoMensualidad.efectivo(m.estadoRegistrado, m.mes, m.anio, hoy, diaCorte), sinRegistro)
         }
         val hijos = aprobadas.sortedBy { it.jugadorNombre.lowercase() }.map { v ->
             val propios = pagos.filter { it.jugadorId == v.jugadorId }

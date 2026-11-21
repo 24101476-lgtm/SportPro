@@ -144,6 +144,20 @@ class PublicacionRepository @Inject constructor(
         return true
     }
 
+    /**
+     * US-028: el personal aprueba (queda PUBLICADA) o rechaza (queda OCULTA) una publicación de un
+     * menor que estaba EN_REVISION. Queda registrado quién y cuándo la revisó.
+     */
+    suspend fun revisar(publicacionId: String, aprobar: Boolean, revisorUid: String) {
+        coleccion.document(publicacionId).update(
+            mapOf(
+                "estado" to if (aprobar) EstadoPublicacion.PUBLICADA.name else EstadoPublicacion.OCULTA.name,
+                "revisadoPor" to revisorUid,
+                "revisadoEn" to FieldValue.serverTimestamp(),
+            ),
+        ).await()
+    }
+
     /** Eliminación lógica; los comentarios de la subcolección dejan de mostrarse junto con ella (criterio 6). */
     suspend fun eliminar(publicacionId: String) {
         coleccion.document(publicacionId).update("eliminada", true).await()

@@ -1472,11 +1472,16 @@ class FirestorePartidoRepository @Inject constructor(
         return ref.id
     }
 
+    override fun nuevoIdPartido(): String =
+        partidos.document().id
+
     override fun crearPartido(
-        nuevo: NuevoPartido
+        nuevo: NuevoPartido,
+        id: String,
+        alineacionConfirmada: Boolean,
     ): String {
         val uid = uidActual
-        val ref = partidos.document()
+        val ref = partidos.document(id)
         val batch = firestore.batch()
 
         batch.set(
@@ -1495,12 +1500,13 @@ class FirestorePartidoRepository @Inject constructor(
                 "actaCerrada" to false,
 
                 /*
-                 * Este documento todavía NO representa un partido oficial.
-                 * Sirve como borrador para que la pizarra pueda leer
-                 * partidoId + convocados antes de la publicación final.
+                 * El partido se escribe recién al pulsar "Crear partido" en la pizarra
+                 * (antes vive en memoria, ver BorradoresPartido), así que ya es oficial.
+                 * "borrador" se mantiene en false por compatibilidad con versiones
+                 * anteriores que filtraban los borradores técnicos.
                  */
-                "borrador" to true,
-                "alineacionConfirmada" to false,
+                "borrador" to false,
+                "alineacionConfirmada" to alineacionConfirmada,
 
                 "cambiosPermitidos" to nuevo.cambiosPermitidos,
                 "duracionTiempoMin" to nuevo.duracionTiempoMin,
@@ -1511,7 +1517,15 @@ class FirestorePartidoRepository @Inject constructor(
                 "entrenadorUid" to uid,
                 "creadoPor" to uid,
                 "fecha" to FieldValue.serverTimestamp(),
-            ),
+            ) + if (alineacionConfirmada) {
+                mapOf(
+                    "alineacionConfirmadaPor" to uid,
+                    "alineacionConfirmadaEn" to FieldValue.serverTimestamp(),
+                    "creacionOficialEn" to FieldValue.serverTimestamp(),
+                )
+            } else {
+                emptyMap()
+            },
         )
 
         // Solo se copian datos deportivos: los convocados los ve cualquier

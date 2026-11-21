@@ -19,15 +19,14 @@ import javax.inject.Singleton
 data class ResultadoPublicacion(val anuncioId: String, val notificacionEnviada: Boolean)
 
 /**
- * Acceso a la colección "anuncios" (US-027). El envío real por Firebase Cloud Messaging requiere
- * una Cloud Function con credenciales de servidor que está fuera del alcance de este módulo
- * cliente; [publicar] siempre persiste el anuncio y reporta `notificacionEnviada = false`, para
- * que la pantalla muestre honestamente el aviso del criterio 10 en vez de simular un envío que no
- * ocurre de verdad.
+ * Acceso a la colección "anuncios" (US-027). Al publicar, el push real lo envía la Edge Function
+ * `notificar` (Supabase) por FCM; si no se pudo enviar, [publicar] lo reporta con
+ * `notificacionEnviada = false` para que la pantalla muestre el aviso del criterio 10.
  */
 @Singleton
 class AnuncioRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val notificador: com.esan.sportpro.data.notificaciones.NotificadorPush,
 ) {
     private val coleccion get() = firestore.collection("anuncios")
     private val preferencias get() = firestore.collection("preferencias_notificaciones")
@@ -75,9 +74,10 @@ class AnuncioRepository @Inject constructor(
         require(anuncio.mensaje.length in 10..500) { "El mensaje debe tener entre 10 y 500 caracteres" }
 
         val documento = coleccion.add(anuncio).await()
-        // TODO(backend): disparar una Cloud Function que envíe la notificación FCM real a los
-        // tokens de los destinatarios; por ahora no hay envío real, ver KDoc de la clase.
-        return ResultadoPublicacion(anuncioId = documento.id, notificacionEnviada = false)
+        // El push lo envía el servidor al tema de los destinatarios (academia, rol o equipo).
+        val enviada = notificador.notificarAnuncio(documento.id)
+        if (!enviada) runCatching { documento.update("envioNotificacionFallido", true).await() }
+        return ResultadoPublicacion(anuncioId = documento.id, notificacionEnviada = enviada)
     }
 
     suspend fun marcarLeido(anuncioId: String, uid: String) {

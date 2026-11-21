@@ -12,6 +12,7 @@ import com.esan.sportpro.domain.mensualidades.MedioPago
 import com.esan.sportpro.domain.mensualidades.Mensualidad
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -38,10 +39,18 @@ data class MensualidadRegistrarUiState(
     val montoError: String? = null,
     val observacionError: String? = null,
     val errorMessage: String? = null,
-)
+    /** Registro vigente del jugador en el mes elegido: si existe, el nuevo lo reemplaza (anula). */
+    val registroExistente: Mensualidad? = null,
+    /** Historial vigente del jugador elegido (para el aviso y el monto sugerido). */
+    val historialJugador: List<Mensualidad> = emptyList(),
+) {
+    /** Exonerado no lleva monto: se guarda en 0. */
+    val requiereMonto: Boolean get() = estadoSeleccionado != EstadoMensualidad.EXONERADO
+}
 
 sealed interface MensualidadRegistrarEvent {
-    data object RegistroGuardado : MensualidadRegistrarEvent
+    /** [sincronizado] = false: quedó guardado en el dispositivo y se enviará al volver la conexión. */
+    data class RegistroGuardado(val sincronizado: Boolean) : MensualidadRegistrarEvent
 }
 
 /**
@@ -58,6 +67,28 @@ class MensualidadRegistrarViewModel @Inject constructor(
 
     /** Academia del perfil autenticado (antes era un valor fijo). */
     private var academiaIdActual = PerfilActual.ACADEMIA_POR_DEFECTO
+    private var historialJob: Job? = null
+    private var jugadorInicialId: String? = null
+    private var inicializado = false
+
+    /**
+     * Abre el formulario con el mes que se estaba viendo en la grilla y, si se registró desde una
+     * fila, con ese jugador ya elegido. Antes siempre usaba el mes actual.
+     */
+    fun inicializar(jugadorId: String?, mes: Int, anio: Int) {
+        if (inicializado) return
+        inicializado = true
+        jugadorInicialId = jugadorId
+        setState { copy(mes = mes, anio = anio) }
+        preseleccionar()
+    }
+
+    private fun preseleccionar() {
+        val id = jugadorInicialId ?: return
+        val jugador = currentState.jugadoresDisponibles.firstOrNull { it.id == id } ?: return
+        jugadorInicialId = null
+        onJugadorElegido(jugador)
+    }
 
     init {
         viewModelScope.launch {
@@ -78,6 +109,7 @@ class MensualidadRegistrarViewModel @Inject constructor(
                             equipoNombre = if (sigueValido) equipoNombre else "",
                         )
                     }
+                    preseleccionar()
                 }
         }
     }
@@ -96,11 +128,59 @@ class MensualidadRegistrarViewModel @Inject constructor(
                 errorMessage = null,
             )
         }
+        observarHistorial(jugador.id)
     }
 
-    fun onJugadorQuitado() = setState { copy(jugadorId = "", jugadorNombre = "", equipoId = "", equipoNombre = "") }
+    /** Lee los registros del jugador: sugiere su último monto y detecta si el mes ya tiene registro. */
+    private fun observarHistorial(jugadorId: String) {
+        historialJob?.cancel()
+        historialJob = viewModelScope.launch {
+            repository.observarHistorialDeJugador(jugadorId, academiaIdActual)
+                .catch { }
+                .collect { registros ->
+                    val vigentes = registros.filter { it.vigente }
+                    setState {
+                        val ultimoMonto = vigentes
+                            .filter { it.estadoRegistrado == EstadoMensualidad.PAGADO && it.montoReferencial > 0 }
+                            .maxWithOrNull(compareBy<Mensualidad> { it.anio }.thenBy { it.mes })
+                            ?.montoReferencial
+                        copy(
+                            historialJugador = vigentes,
+                            registroExistente = vigentes.firstOrNull { it.mes == mes && it.anio == anio },
+                            // Solo se sugiere si el administrador aún no escribió un monto.
+                            montoTexto = montoTexto.ifBlank { ultimoMonto?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() },
+                        )
+                    }
+                }
+        }
+    }
 
-    fun onMesAnioChanged(mes: Int, anio: Int) = setState { copy(mes = mes, anio = anio) }
+    fun onJugadorQuitado() {
+        historialJob?.cancel()
+        setState {
+            copy(
+                jugadorId = "", jugadorNombre = "", equipoId = "", equipoNombre = "",
+                historialJugador = emptyList(), registroExistente = null,
+            )
+        }
+    }
+
+    fun onMesAnioChanged(mes: Int, anio: Int) = setState {
+        copy(
+            mes = mes,
+            anio = anio,
+            registroExistente = historialJugador.firstOrNull { it.mes == mes && it.anio == anio },
+        )
+    }
+
+    fun onMesAnterior() = moverMes(-1)
+
+    fun onMesSiguiente() = moverMes(1)
+
+    private fun moverMes(delta: Long) {
+        val nuevo = java.time.YearMonth.of(currentState.anio, currentState.mes).plusMonths(delta)
+        onMesAnioChanged(nuevo.monthValue, nuevo.year)
+    }
 
     fun onMontoChanged(texto: String) = setState { copy(montoTexto = texto, montoError = null) }
 
@@ -138,7 +218,8 @@ class MensualidadRegistrarViewModel @Inject constructor(
             setState { copy(errorMessage = "Selecciona un jugador de la lista") }
             return
         }
-        val (monto, montoError) = validarMonto(estado.montoTexto)
+        // Exonerado no lleva monto: se guarda en 0 sin pedirlo.
+        val (monto, montoError) = if (estado.requiereMonto) validarMonto(estado.montoTexto) else 0.0 to null
         val observacionError = if (estado.observacion.length > 200) "Máximo 200 caracteres" else null
         if (monto == null || observacionError != null) {
             setState { copy(montoError = montoError, observacionError = observacionError) }
@@ -149,7 +230,7 @@ class MensualidadRegistrarViewModel @Inject constructor(
         viewModelScope.launch {
             setState { copy(isSaving = true, errorMessage = null) }
             try {
-                repository.registrarPago(
+                val sincronizado = repository.registrarPago(
                     nuevo = Mensualidad(
                         academiaId = academiaIdActual,
                         equipoId = jugador.equipoId,
@@ -167,7 +248,7 @@ class MensualidadRegistrarViewModel @Inject constructor(
                     uidAdministrador = uidAdmin,
                 )
                 setState { copy(isSaving = false) }
-                sendEvent(MensualidadRegistrarEvent.RegistroGuardado)
+                sendEvent(MensualidadRegistrarEvent.RegistroGuardado(sincronizado))
             } catch (e: Exception) {
                 setState { copy(isSaving = false, errorMessage = e.localizedMessage ?: "No se pudo registrar el pago") }
             }

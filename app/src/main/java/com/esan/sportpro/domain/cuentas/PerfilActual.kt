@@ -24,5 +24,8 @@ data class PerfilActual(
          * US-004). Coincide con el valor temporal que ya usan Mensualidades y Comunidad.
          */
         const val ACADEMIA_POR_DEFECTO = "academia-demo"
+
+        /** `clubId` tal como se guarda en `usuarios` (null para la academia por defecto). */
+        fun clubIdDe(academiaId: String): String? = academiaId.takeIf { it != ACADEMIA_POR_DEFECTO }
     }
 }

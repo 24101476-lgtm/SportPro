@@ -8,7 +8,10 @@ import com.google.firebase.firestore.toObject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,16 +60,37 @@ class MensualidadRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
-    /** Mensualidades (todas, incluidas las ya vinculadas a jugadores del padre) vigentes de una lista de jugadores. */
-    fun observarMensualidadesDeJugadores(jugadorIds: List<String>): Flow<List<Mensualidad>> = callbackFlow {
-        if (jugadorIds.isEmpty()) {
-            trySend(emptyList())
-            awaitClose { }
-            return@callbackFlow
+    /**
+     * Grilla del entrenador: una consulta por cada equipo que dirige. Las reglas solo le dejan leer
+     * las mensualidades de sus equipos y lo comprueban con el filtro de igualdad por `equipoId`.
+     */
+    fun observarGrillaDeEquipos(
+        academiaId: String,
+        equipoIds: List<String>,
+        mes: Int,
+        anio: Int,
+    ): Flow<List<Mensualidad>> {
+        if (equipoIds.isEmpty()) return flowOf(emptyList())
+        return combine(equipoIds.distinct().map { observarGrilla(academiaId, mes, anio, equipoId = it) }) { listas ->
+            listas.toList().flatten().distinctBy { it.id }
         }
-        // Firestore limita whereIn a 30 valores; suficiente para los hijos vinculados a un padre.
+    }
+
+    /**
+     * Mensualidades vigentes de los hijos de un padre. Una consulta por jugador (antes un `whereIn`):
+     * las reglas comprueban el vínculo aprobado de cada `jugadorId`, y eso solo se puede verificar
+     * con un filtro de igualdad.
+     */
+    fun observarMensualidadesDeJugadores(jugadorIds: List<String>): Flow<List<Mensualidad>> {
+        if (jugadorIds.isEmpty()) return flowOf(emptyList())
+        return combine(jugadorIds.distinct().map { observarVigentesDeJugador(it) }) { listas ->
+            listas.toList().flatten()
+        }
+    }
+
+    private fun observarVigentesDeJugador(jugadorId: String): Flow<List<Mensualidad>> = callbackFlow {
         val registro = coleccion
-            .whereIn("jugadorId", jugadorIds.take(30))
+            .whereEqualTo("jugadorId", jugadorId)
             .whereEqualTo("vigente", true)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -79,10 +103,14 @@ class MensualidadRepository @Inject constructor(
         awaitClose { registro.remove() }
     }
 
-    /** Historial completo (vigentes y anulados) de un jugador, más reciente primero. */
-    fun observarHistorialDeJugador(jugadorId: String): Flow<List<Mensualidad>> = callbackFlow {
-        val registro = coleccion
-            .whereEqualTo("jugadorId", jugadorId)
+    /**
+     * Historial completo (vigentes y anulados) de un jugador, más reciente primero.
+     * [academiaId] lo necesitan el administrador y el entrenador: sus reglas comparan la academia.
+     */
+    fun observarHistorialDeJugador(jugadorId: String, academiaId: String? = null): Flow<List<Mensualidad>> = callbackFlow {
+        var query: Query = coleccion.whereEqualTo("jugadorId", jugadorId)
+        if (academiaId != null) query = query.whereEqualTo("academiaId", academiaId)
+        val registro = query
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -102,13 +130,18 @@ class MensualidadRepository @Inject constructor(
      * este se marca `vigente = false` y el nuevo documento queda enlazado mediante
      * [Mensualidad.anulaRegistroId] — nunca se elimina el anterior (criterio de aceptación 6).
      */
-    suspend fun registrarPago(nuevo: Mensualidad, uidAdministrador: String) {
+    /**
+     * @return `true` si el servidor confirmó; `false` si quedó guardado en el dispositivo y se
+     * sincronizará al volver la conexión (antes la pantalla se quedaba esperando sin fin).
+     */
+    suspend fun registrarPago(nuevo: Mensualidad, uidAdministrador: String): Boolean {
         require(nuevo.montoReferencial in 0.0..5000.0) { "Monto inválido" }
         require(nuevo.estadoRegistrado != EstadoMensualidad.VENCIDO) {
             "Vencido es un estado calculado; no se persiste directamente"
         }
 
         val vigenteAnterior = coleccion
+            .whereEqualTo("academiaId", nuevo.academiaId)
             .whereEqualTo("jugadorId", nuevo.jugadorId)
             .whereEqualTo("mes", nuevo.mes)
             .whereEqualTo("anio", nuevo.anio)
@@ -118,15 +151,24 @@ class MensualidadRepository @Inject constructor(
             .documents
             .firstOrNull()
 
-        if (vigenteAnterior != null) {
-            vigenteAnterior.reference.update("vigente", false).await()
-        }
-
         val aRegistrar = nuevo.copy(
             registradoPorUid = uidAdministrador,
             anulaRegistroId = vigenteAnterior?.id,
             vigente = true,
         )
-        coleccion.add(aRegistrar).await()
+
+        // Anular el anterior y crear el nuevo van en un mismo lote: o se aplican ambos o ninguno,
+        // así nunca quedan dos registros vigentes ni un mes sin registro vigente.
+        val lote = firestore.batch()
+        vigenteAnterior?.let { lote.update(it.reference, "vigente", false) }
+        lote.set(coleccion.document(), aRegistrar)
+        val confirmacion = lote.commit()
+
+        // Sin conexión Firestore aplica el lote localmente pero no confirma: no se bloquea la pantalla.
+        return withTimeoutOrNull(ESPERA_CONFIRMACION_MS) { confirmacion.await(); true } ?: false
+    }
+
+    private companion object {
+        const val ESPERA_CONFIRMACION_MS = 6_000L
     }
 }

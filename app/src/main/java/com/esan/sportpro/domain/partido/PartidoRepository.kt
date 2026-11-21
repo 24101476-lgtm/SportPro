@@ -166,7 +166,12 @@ interface PartidoRepository {
      */
     fun crearPartido(
         nuevo: NuevoPartido,
+        id: String = nuevoIdPartido(),
+        alineacionConfirmada: Boolean = false,
     ): String
+
+    /** Id para un partido nuevo, generado en el dispositivo (no escribe nada). */
+    fun nuevoIdPartido(): String
 
     /**
      * Guarda en el documento del partido el marcador calculado

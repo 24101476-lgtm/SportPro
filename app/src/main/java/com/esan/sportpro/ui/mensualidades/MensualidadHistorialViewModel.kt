@@ -11,6 +11,7 @@ import com.esan.sportpro.navigation.UserRole
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -50,7 +51,11 @@ data class MensualidadHistorialUiState(
 class MensualidadHistorialViewModel @Inject constructor(
     private val repository: MensualidadRepository,
     private val sesionRepository: SesionRepository,
+    private val academiaRepository: com.esan.sportpro.domain.academia.AcademiaRepository,
 ) : BaseViewModel<MensualidadHistorialUiState, Unit>(MensualidadHistorialUiState()) {
+
+    /** Día de corte de la academia (US-004). */
+    private var diaCorte = EstadoMensualidad.DIA_CORTE
 
     private var observacionJob: Job? = null
 
@@ -59,9 +64,17 @@ class MensualidadHistorialViewModel @Inject constructor(
         setState { copy(jugadorId = jugadorId, jugadorNombre = jugadorNombre, isLoading = true, errorMessage = null) }
         observacionJob?.cancel()
         observacionJob = viewModelScope.launch {
-            val rol = sesionRepository.perfilActual()?.rol
+            val perfil = sesionRepository.perfilActual()
+            perfil?.let {
+                diaCorte = kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    academiaRepository.observarConfiguracion(it.academiaId).first().diaCorte
+                } ?: diaCorte
+            }
+            val rol = perfil?.rol
             setState { copy(puedeVerMontos = rol == UserRole.ADMINISTRADOR) }
-            repository.observarHistorialDeJugador(jugadorId)
+            // Administrador y entrenador: sus reglas comparan la academia, así que la consulta la filtra.
+            val academia = perfil?.academiaId?.takeIf { perfil.esStaff }
+            repository.observarHistorialDeJugador(jugadorId, academia)
                 .catch { e -> setState { copy(isLoading = false, errorMessage = describirErrorFirestore(e)) } }
                 .collect { registros ->
                     val vigentes = registros.filter { it.vigente }
@@ -85,9 +98,7 @@ class MensualidadHistorialViewModel @Inject constructor(
         var exoneradas = 0
         var total = 0.0
         vigentes.forEach { m ->
-            val corte = LocalDate.of(m.anio, m.mes, 1)
-                .withDayOfMonth(minOf(DIA_CORTE, YearMonth.of(m.anio, m.mes).lengthOfMonth()))
-            when (EstadoMensualidad.calcular(m.estadoRegistrado, corte)) {
+            when (EstadoMensualidad.efectivo(m.estadoRegistrado, m.mes, m.anio, diaCorte = diaCorte)) {
                 EstadoMensualidad.PAGADO -> { pagadas++; total += m.montoReferencial }
                 EstadoMensualidad.PENDIENTE -> pendientes++
                 EstadoMensualidad.VENCIDO -> vencidas++
@@ -95,10 +106,5 @@ class MensualidadHistorialViewModel @Inject constructor(
             }
         }
         return ResumenHistorial(pagadas, pendientes, vencidas, exoneradas, total)
-    }
-
-    private companion object {
-        /** Mismo día de corte que la grilla (TODO: leerlo de la academia). */
-        const val DIA_CORTE = 10
     }
 }

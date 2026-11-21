@@ -112,6 +112,14 @@ fun PartidosListaScreen(
     LaunchedEffect(Unit) {
         viewModel.revisarPartidoEnCurso()
     }
+    // El partido recién armado solo existe en memoria: siempre va a la pizarra, nunca al registro.
+    LaunchedEffect(state.armarEquipoId) {
+        state.armarEquipoId?.let { id ->
+            viewModel.navegacionRealizada()
+            creandoParaAlineacion = false
+            if (onConfigurarAlineacion != null) onConfigurarAlineacion(id) else onAbrirPartido(id)
+        }
+    }
     LaunchedEffect(state.abrirPartidoId) {
         state.abrirPartidoId?.let { id ->
 

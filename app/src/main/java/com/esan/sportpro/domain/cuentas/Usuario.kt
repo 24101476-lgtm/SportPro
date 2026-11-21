@@ -4,11 +4,14 @@ import com.esan.sportpro.navigation.UserRole
 import java.time.LocalDate
 
 /**
- * Estado de una cuenta. Todo usuario nace en [ACTIVO] (US-001); el administrador de la academia
- * pasa la cuenta a [DESACTIVADO] y el login la rechaza con el mensaje de US-002.
+ * Estado de una cuenta. Las cuentas de entrenador nacen en [PENDIENTE] hasta que un administrador
+ * las aprueba (así nadie se registra como entrenador para leer las fichas de los menores); el resto
+ * nace en [ACTIVO] (US-001). El administrador pasa una cuenta a [DESACTIVADO] y el login la rechaza
+ * con el mensaje de US-002.
  */
 enum class EstadoUsuario {
     ACTIVO,
+    PENDIENTE,
     DESACTIVADO,
 }
 

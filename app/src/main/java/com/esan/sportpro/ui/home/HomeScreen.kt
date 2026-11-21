@@ -108,6 +108,7 @@ fun HomeScreen(
 
 @Composable
 private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
+    PedirPermisoNotificaciones()
     val pestanas = MenuPrincipal.para(perfil.rol)
     var pestanaId by rememberSaveable { mutableStateOf(pestanas.first().id) }
     // Módulo elegido dentro de cada sección con pestañas internas: "idPestana" -> nombre del módulo.
@@ -301,7 +302,7 @@ private fun MasScreen(
                     IconoCircular(iconoDe(modulo))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(etiquetaModulo(modulo, perfil.rol), style = MaterialTheme.typography.titleSmall)
-                        Text(descripcionModulo(modulo), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(descripcionModulo(modulo, perfil.rol), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -345,12 +346,15 @@ internal fun etiquetaRol(rol: UserRole): String = when (rol) {
 }
 
 /** Nombre del módulo para el rol: para el padre, "Jugadores" son sus hijos. */
-internal fun etiquetaModulo(modulo: HomeModule, rol: UserRole): String =
-    if (modulo == HomeModule.JUGADORES && rol == UserRole.PADRE_DE_FAMILIA) "Mis hijos" else modulo.label
+internal fun etiquetaModulo(modulo: HomeModule, rol: UserRole): String = when {
+    modulo == HomeModule.JUGADORES && rol == UserRole.PADRE_DE_FAMILIA -> "Mis hijos"
+    modulo == HomeModule.JUGADORES && rol == UserRole.JUGADOR -> "Mi perfil"
+    else -> modulo.label
+}
 
-internal fun descripcionModulo(modulo: HomeModule): String = when (modulo) {
+internal fun descripcionModulo(modulo: HomeModule, rol: UserRole? = null): String = when (modulo) {
     HomeModule.ACADEMIA -> "Equipos y categorías"
-    HomeModule.JUGADORES -> "Perfiles y apoderados"
+    HomeModule.JUGADORES -> if (rol == UserRole.JUGADOR) "Tu ficha e historial" else "Perfiles y apoderados"
     HomeModule.ENTRENAMIENTOS -> "Sesiones, ejercicios y asistencia"
     HomeModule.PARTIDO -> "Programación, convocatoria y partido en vivo"
     HomeModule.MENSUALIDADES -> "Registro simulado de pagos"
@@ -378,5 +382,25 @@ private fun iconoPestana(pestana: PestanaNavegacion, rol: UserRole): ImageVector
         rol == UserRole.PADRE_DE_FAMILIA -> Icons.Default.FamilyRestroom
         pestana.modulos.size == 1 -> iconoDe(pestana.modulos.first())
         else -> Icons.Default.Groups2
+    }
+}
+
+/**
+ * US-027: desde Android 13 las notificaciones necesitan permiso en tiempo de ejecución. Se pide una
+ * vez al entrar; si el usuario lo niega, los anuncios siguen visibles dentro de la app.
+ */
+@Composable
+private fun PedirPermisoNotificaciones() {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+    val contexto = androidx.compose.ui.platform.LocalContext.current
+    val lanzador = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val concedido = androidx.core.content.ContextCompat.checkSelfPermission(
+            contexto,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!concedido) lanzador.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 }

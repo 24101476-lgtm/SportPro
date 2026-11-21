@@ -64,6 +64,8 @@ data class FormularioJugador(
     val fotoActual: String = "",
     /** US-006: URI local de una foto nueva (cámara o galería), todavía sin subir. */
     val fotoNueva: String? = null,
+    /** US-006: cuenta de la app del propio jugador; vacía = sin enlazar. */
+    val usuarioUid: String = "",
 ) {
     val fotoVisible: String? get() = fotoNueva ?: fotoActual.takeIf { it.isNotBlank() }
 }
@@ -100,7 +102,17 @@ data class JugadoresUiState(
     val dialogoRechazo: DialogoRechazo? = null,
     val revocando: Vinculacion? = null,
     val procesandoSolicitud: String? = null,
+    /** US-006: cuentas con rol Jugador de la academia, para enlazar a una ficha. */
+    val cuentasJugador: List<com.esan.sportpro.domain.jugadores.CuentaJugador> = emptyList(),
 ) {
+    /** Cuentas que se pueden enlazar a la ficha que se edita: libres o ya enlazadas a ella. */
+    val cuentasDisponibles: List<com.esan.sportpro.domain.jugadores.CuentaJugador>
+        get() {
+            val ocupadas = jugadores.filter { it.id != formulario.id && it.usuarioUid.isNotBlank() }
+                .map { it.usuarioUid }.toSet()
+            return cuentasJugador.filter { it.uid !in ocupadas }
+        }
+
     /**
      * Privacidad: el perfil incluye datos físicos y de contacto de menores, así que solo lo ven
      * administrador y entrenador. Jugador y padre de familia no entran a este módulo.
@@ -119,6 +131,9 @@ data class JugadoresUiState(
     val esAdmin: Boolean get() = perfil?.rol == UserRole.ADMINISTRADOR
 
     val esPadre: Boolean get() = perfil?.rol == UserRole.PADRE_DE_FAMILIA
+
+    /** US-006: el jugador ve aquí su propio perfil ("Mi perfil"). */
+    val esJugador: Boolean get() = perfil?.rol == UserRole.JUGADOR
 
     /** Solicitudes pendientes, de la más antigua a la más reciente (criterio 3). */
     val solicitudesPendientes: List<Vinculacion> get() = ReglasVinculacion.pendientes(vinculaciones)
@@ -193,6 +208,11 @@ class JugadoresViewModel @Inject constructor(
                 entrenamientoRepository.observarEntrenamientos(perfil.academiaId)
                     .catch { /* el historial de asistencia es opcional */ }
                     .collect { lista -> setState { copy(entrenamientos = lista) } }
+            }
+            launch {
+                jugadorRepository.observarCuentasJugador(perfil.academiaId)
+                    .catch { /* sin cuentas la ficha se guarda sin enlazar */ }
+                    .collect { lista -> setState { copy(cuentasJugador = lista) } }
             }
             launch {
                 vinculacionRepository.observarSolicitudes(perfil.academiaId)
@@ -274,7 +294,12 @@ class JugadoresViewModel @Inject constructor(
     fun editarJugador(jugador: Jugador) {
         setState {
             copy(
-                formulario = FormularioJugador(id = jugador.id, datos = jugador.aDatos(), fotoActual = jugador.fotoUrl),
+                formulario = FormularioJugador(
+                    id = jugador.id,
+                    datos = jugador.aDatos(),
+                    fotoActual = jugador.fotoUrl,
+                    usuarioUid = jugador.usuarioUid,
+                ),
                 pantalla = PantallaJugadores.Formulario,
             )
         }
@@ -287,6 +312,9 @@ class JugadoresViewModel @Inject constructor(
             copy(pantalla = if (id != null) PantallaJugadores.Detalle(id) else PantallaJugadores.Lista)
         }
     }
+
+    /** US-006: enlaza (o quita, con `null`) la cuenta del propio jugador a la ficha. */
+    fun onCuentaElegida(uid: String?) = setState { copy(formulario = formulario.copy(usuarioUid = uid.orEmpty())) }
 
     /** Aplica un cambio sobre los datos del formulario y limpia el error de [campo]. */
     fun onCampoChanged(campo: CampoJugador, cambio: DatosJugador.() -> DatosJugador) = setState {
@@ -325,7 +353,7 @@ class JugadoresViewModel @Inject constructor(
             codigoVinculacion = codigo,
             activo = original?.activo ?: true,
             fotoUrl = original?.fotoUrl.orEmpty(),
-            usuarioUid = original?.usuarioUid.orEmpty(),
+            usuarioUid = formulario.usuarioUid,
         )
         // Regla del apoderado: un menor no queda registrado hasta tener un apoderado vinculado.
         val estadoRegistro = ReglasApoderado.estadoPara(jugador, estado.apoderadosDe(jugador.id).size)

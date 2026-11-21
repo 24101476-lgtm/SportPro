@@ -33,16 +33,19 @@ enum class HomeModule(val label: String) {
          * - Administrador: todo el producto.
          * - Entrenador: gestiona plantel, entrenamientos y partido; no ve la configuración de la
          *   academia más allá de la lectura de equipos (la escritura se restringe en pantalla).
-         * - Jugador: sus entrenamientos, partidos, estadísticas y la comunidad.
+         *   En Mensualidades ve solo el estado (sin montos) de los equipos asignados a su cuenta.
+         * - Jugador: su perfil (el módulo Jugadores le muestra solo "Mi perfil", US-006), sus
+         *   entrenamientos, partidos, estadísticas y la comunidad (US-008, criterio 7: no accede a
+         *   mensualidades).
          * - Padre de familia: sus hijos vinculados (US-007: el módulo Jugadores le muestra solo
          *   "Mis hijos", nunca a otros jugadores), mensualidades, partidos, estadísticas y comunidad.
          */
         fun visiblesPara(rol: UserRole): List<HomeModule> = when (rol) {
             UserRole.ADMINISTRADOR -> entries.toList()
             UserRole.ENTRENADOR -> listOf(
-                ACADEMIA, JUGADORES, ENTRENAMIENTOS, PARTIDO, ESTADISTICAS, COMUNIDAD, IA,
+                ACADEMIA, JUGADORES, ENTRENAMIENTOS, MENSUALIDADES, PARTIDO, ESTADISTICAS, COMUNIDAD, IA,
             )
-            UserRole.JUGADOR -> listOf(ENTRENAMIENTOS, PARTIDO, ESTADISTICAS, COMUNIDAD)
+            UserRole.JUGADOR -> listOf(JUGADORES, ENTRENAMIENTOS, PARTIDO, ESTADISTICAS, COMUNIDAD)
             UserRole.PADRE_DE_FAMILIA -> listOf(JUGADORES, MENSUALIDADES, PARTIDO, ESTADISTICAS, COMUNIDAD)
         }
     }
@@ -87,7 +90,7 @@ object MenuPrincipal {
             inicio,
             PestanaNavegacion(
                 "plantel", "Plantel", TipoPestana.SECCION,
-                listOf(HomeModule.ACADEMIA, HomeModule.JUGADORES, HomeModule.ENTRENAMIENTOS),
+                listOf(HomeModule.ACADEMIA, HomeModule.JUGADORES, HomeModule.ENTRENAMIENTOS, HomeModule.MENSUALIDADES),
             ),
             partidos,
             PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD, HomeModule.IA)),
@@ -96,7 +99,10 @@ object MenuPrincipal {
             inicio,
             PestanaNavegacion("entrenos", "Entrenos", TipoPestana.SECCION, listOf(HomeModule.ENTRENAMIENTOS)),
             partidos,
-            PestanaNavegacion("mas", "Más", TipoPestana.MAS, listOf(HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD)),
+            PestanaNavegacion(
+                "mas", "Más", TipoPestana.MAS,
+                listOf(HomeModule.JUGADORES, HomeModule.ESTADISTICAS, HomeModule.COMUNIDAD),
+            ),
         )
         UserRole.PADRE_DE_FAMILIA -> listOf(
             inicio,

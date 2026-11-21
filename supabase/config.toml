@@ -7,3 +7,7 @@ verify_jwt = false
 # US-023: valida el ID token de Firebase por su cuenta y guarda GEMINI_API_KEY como secreto.
 [functions.resumen-ia]
 verify_jwt = false
+
+# US-027: valida el ID token de Firebase por su cuenta y envía por FCM con FIREBASE_SERVICE_ACCOUNT.
+[functions.notificar]
+verify_jwt = false

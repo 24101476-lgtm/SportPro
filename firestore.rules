@@ -13,17 +13,32 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol;
     }
 
+    // Cuenta activa: las de entrenador nacen PENDIENTE hasta que un administrador las aprueba, y
+    // el administrador puede desactivar cualquiera. El personal además debe tener el correo verificado.
+    function cuentaActiva() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('estado', 'ACTIVO') == 'ACTIVO'
+        && request.auth.token.email_verified == true;
+    }
+
     function esAdmin() {
       return autenticado()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && rol() == 'ADMINISTRADOR';
+        && rol() == 'ADMINISTRADOR'
+        && cuentaActiva();
     }
 
-    // Administrador o entrenador: personal que gestiona el plantel.
+    // Administrador o entrenador: personal que gestiona el plantel. Antes bastaba con registrarse
+    // como ENTRENADOR para leer las fichas de todos los jugadores (menores incluidos).
     function esStaff() {
       return autenticado()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && rol() in ['ADMINISTRADOR', 'ENTRENADOR'];
+        && rol() in ['ADMINISTRADOR', 'ENTRENADOR']
+        && cuentaActiva();
+    }
+
+    // Club tal como está guardado en el perfil (null = academia por defecto).
+    function clubPropio() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('clubId', null);
     }
 
     // Academia del usuario autenticado. Mientras no esté vinculado a un club (clubId nulo)
@@ -48,14 +63,23 @@ service cloud.firestore {
     //   ADMINISTRADOR sin un código de invitación válido (antes bastaba con escribirlo).
     // - El usuario edita sus datos, pero no su rol, estado, academia ni la marca de menor de edad;
     //   eso solo lo cambia un administrador.
+    // - Lectura: cada uno su perfil; el personal, los de su misma academia (antes cualquier
+    //   autenticado leía correo, teléfono y fecha de nacimiento de todas las cuentas). Las
+    //   consultas del personal filtran por clubId para que esto se pueda comprobar.
+    // - Una cuenta de ENTRENADOR nace PENDIENTE: no es personal hasta que un administrador la aprueba.
     match /usuarios/{uid} {
-      allow read: if autenticado();
+      allow get: if autenticado() && (
+        request.auth.uid == uid
+        || (esStaff() && resource.data.get('clubId', null) == clubPropio())
+      );
+      allow list: if esStaff() && resource.data.clubId == clubPropio();
       allow create: if autenticado()
         && request.auth.uid == uid
-        && request.resource.data.estado == 'ACTIVO'
         && request.resource.data.get('clubId', null) == null
-        && (request.resource.data.rol in ['ENTRENADOR', 'JUGADOR', 'PADRE_DE_FAMILIA']
+        && ((request.resource.data.rol in ['JUGADOR', 'PADRE_DE_FAMILIA'] && request.resource.data.estado == 'ACTIVO')
+          || (request.resource.data.rol == 'ENTRENADOR' && request.resource.data.estado == 'PENDIENTE')
           || (request.resource.data.rol == 'ADMINISTRADOR'
+            && request.resource.data.estado == 'ACTIVO'
             && codigoInvitacionValido(request.resource.data.get('codigoInvitacion', ''))));
       allow update: if autenticado() && (
         esAdmin()
@@ -89,10 +113,17 @@ service cloud.firestore {
       // Durante el registro la app solo hace `get` del código: la cuenta de Firebase Auth ya
       // existe (el usuario queda autenticado) pero todavía no tiene documento en `usuarios`.
       allow get: if autenticado();
-      // Recorrer el listado de códigos es una operación del administrador de una academia.
-      allow list: if esAdmin();
+      // Recorrer el listado de códigos es una operación del administrador de una academia
+      // (la app filtra por academiaId).
+      allow list: if esAdmin() && resource.data.academiaId == academiaPropia();
 
-      allow create: if esAdmin();
+      // US-004: el administrador genera códigos de su academia, sin usar y a su nombre.
+      allow create: if esAdmin()
+        && codigo.size() == 8
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.creadoPor == request.auth.uid
+        && request.resource.data.usado == false
+        && request.resource.data.revocado == false;
 
       // Marcar el código como usado: lo hace el propio usuario que se registra, y solo puede
       // escribir esos tres campos sobre un código que todavía no fue usado.
@@ -106,6 +137,18 @@ service cloud.firestore {
                ]));
 
       allow delete: if esAdmin();
+    }
+
+    // US-004: configuración de la academia (nombre y día de corte de las mensualidades). La leen
+    // los usuarios de esa academia; solo su administrador la cambia.
+    match /academias/{academiaId} {
+      allow read: if autenticado() && academiaId == academiaPropia();
+      allow write: if esAdmin()
+        && academiaId == academiaPropia()
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() >= 3 && request.resource.data.nombre.size() <= 60
+        && request.resource.data.diaCorte is int
+        && request.resource.data.diaCorte >= 1 && request.resource.data.diaCorte <= 28;
     }
 
     // US-004/US-005: equipos por categoría. Los lee cualquier usuario autenticado; solo el
@@ -129,6 +172,13 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/vinculaciones/$(request.auth.uid + '_' + jugadorId)).data.estado == 'APROBADA';
     }
 
+    // La ficha del jugador está enlazada a la cuenta que hace la petición (US-006).
+    function esFichaPropia(jugadorId) {
+      return autenticado()
+        && exists(/databases/$(database)/documents/jugadores/$(jugadorId))
+        && get(/databases/$(database)/documents/jugadores/$(jugadorId)).data.get('usuarioUid', '') == request.auth.uid;
+    }
+
     // US-006/US-007: perfil del jugador. Incluye datos físicos y de contacto de posibles menores
     // de edad, por eso solo lo leen el administrador y el entrenador de su academia, y el
     // apoderado con vínculo aprobado (solo el de su hijo). Solo el personal lo edita.
@@ -141,9 +191,13 @@ service cloud.firestore {
       allow create: if esStaff()
         && request.resource.data.academiaId == academiaPropia()
         && request.resource.data.creadoPor == request.auth.uid;
-      allow update: if esStaff()
+      allow update: if (esStaff()
         && resource.data.academiaId == academiaPropia()
-        && request.resource.data.academiaId == resource.data.academiaId;
+        && request.resource.data.academiaId == resource.data.academiaId)
+        // US-006, criterio 9: el propio jugador cambia solo su foto, teléfono y pie hábil.
+        || (autenticado()
+          && resource.data.get('usuarioUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fotoUrl', 'telefono', 'pieHabil']));
       allow delete: if false;
     }
 
@@ -212,21 +266,50 @@ service cloud.firestore {
 
     // ------------------------------------------------------------------------------------
     // Colecciones de los módulos Mensualidades, Estadísticas/Anuncios y Comunidad.
-    // TEMPORAL: sin una regla explícita Firestore las rechaza y esas pantallas fallan. Estas
-    // reglas permiten el uso a usuarios autenticados; cada responsable de módulo debe
-    // endurecerlas (por rol y por academia) antes de manejar datos reales.
+    // Mensualidades y Comunidad ya están restringidas por rol, academia y autor; Anuncios sigue
+    // abierto a la lectura de cualquier autenticado.
     // ------------------------------------------------------------------------------------
 
-    // US-008 (simulado, sin cobros reales): todos leen su información; solo el administrador
-    // registra o anula pagos.
-    // Al crear, el jugador debe existir y ser de la misma academia del administrador.
+    // US-008: el entrenador asignado al equipo por cuenta (equipos/{id}.entrenadorUid).
+    function entrenaEquipo(equipoId) {
+      return equipoId is string && equipoId != ''
+        && exists(/databases/$(database)/documents/equipos/$(equipoId))
+        && get(/databases/$(database)/documents/equipos/$(equipoId)).data.get('entrenadorUid', '') == request.auth.uid;
+    }
+
+    // El entrenador del equipo actual del jugador (sirve para el historial de un jugador).
+    function entrenaJugador(jugadorId) {
+      return jugadorId is string && jugadorId != ''
+        && exists(/databases/$(database)/documents/jugadores/$(jugadorId))
+        && entrenaEquipo(get(/databases/$(database)/documents/jugadores/$(jugadorId)).data.get('equipoId', ''));
+    }
+
+    // US-008: mensualidades (registro simulado). Antes las leía cualquier usuario autenticado,
+    // de cualquier academia y con montos. Ahora:
+    // - el administrador, las de su academia;
+    // - el entrenador, las de los equipos que dirige (las consultas filtran por equipoId o jugadorId);
+    // - el padre, las de sus hijos con vínculo aprobado (criterio 8);
+    // - el jugador no accede (criterio 7).
+    // Las consultas de la app filtran por academiaId, equipoId o jugadorId con igualdad para que
+    // estas condiciones se puedan comprobar sobre la consulta.
+    // Escritura (simulada, sin cobros reales): solo el administrador registra o anula pagos, y el
+    // jugador debe existir y ser de su misma academia.
     match /mensualidades/{id} {
-      allow read: if autenticado();
+      allow read: if autenticado() && (
+        (esAdmin() && resource.data.academiaId == academiaPropia())
+        || (rol() == 'ENTRENADOR'
+            && resource.data.academiaId == academiaPropia()
+            && (entrenaEquipo(resource.data.equipoId) || entrenaJugador(resource.data.jugadorId)))
+        || vinculoAprobado(resource.data.jugadorId)
+      );
       allow create: if esAdmin()
         && request.resource.data.academiaId == academiaPropia()
         && exists(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId))
         && get(/databases/$(database)/documents/jugadores/$(request.resource.data.jugadorId)).data.academiaId == academiaPropia();
-      allow update: if esAdmin();
+      // Solo se marca como anulado (vigente = false) un registro de la propia academia.
+      allow update: if esAdmin()
+        && resource.data.academiaId == academiaPropia()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vigente']);
       allow delete: if false;
     }
 
@@ -301,18 +384,97 @@ service cloud.firestore {
     }
 
     // US-028/US-029/US-030: comunidad, avisos y moderación.
+    // Antes la escritura era libre para cualquier autenticado (editar o borrar contenido ajeno,
+    // falsificar el autor, saltarse la suspensión). Ahora cada cambio se limita a quien lo puede hacer
+    // y a los campos que le corresponden. Nada se borra: la eliminación es lógica.
+
+    // Suspensión vigente (US-030): un usuario suspendido no publica, comenta ni reacciona.
+    function sinSuspension() {
+      return !exists(/databases/$(database)/documents/suspensiones/$(request.auth.uid))
+        || get(/databases/$(database)/documents/suspensiones/$(request.auth.uid)).data.fechaFin < request.time;
+    }
+
+    function cambia(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // Suma exactamente 1 a un contador (reportes, comentarios).
+    function sumaUno(campo) {
+      return cambia([campo]) && request.resource.data.get(campo, 0) == resource.data.get(campo, 0) + 1;
+    }
+
+    // Ocultamiento automático al llegar a 3 reportes (US-030, criterio 3).
+    function ocultaPorReportes(campo, valor) {
+      return cambia([campo]) && request.resource.data.get(campo, null) == valor
+        && resource.data.get('reportesCount', 0) >= 3;
+    }
+
     match /publicaciones/{id} {
       allow read: if autenticado();
-      allow write: if autenticado();
+      // El autor es quien escribe y declara lo mismo que su perfil sobre la minoría de edad; si es
+      // menor y publica para toda la comunidad, entra EN_REVISION hasta que lo apruebe el personal.
+      allow create: if autenticado() && sinSuspension()
+        && request.resource.data.autorUid == request.auth.uid
+        && request.resource.data.get('autorEsMenorDeEdad', false)
+          == get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('esMenor', false)
+        && request.resource.data.get('eliminada', false) == false
+        && request.resource.data.get('reportesCount', 0) == 0
+        && request.resource.data.get('comentariosCount', 0) == 0
+        && (request.resource.data.estado == 'EN_REVISION'
+          || (request.resource.data.estado == 'PUBLICADA'
+            && !(request.resource.data.get('autorEsMenorDeEdad', false) == true
+              && request.resource.data.get('visibilidad', '') == 'COMUNIDAD_ABIERTA')));
+      allow update: if autenticado() && (
+        // El autor edita su texto o la elimina (lógico).
+        (resource.data.autorUid == request.auth.uid && sinSuspension() && cambia(['texto', 'editado', 'eliminada']))
+        // Cada usuario pone, cambia o quita solo su propia reacción.
+        || (sinSuspension() && cambia(['reaccionesPorUsuario'])
+          && request.resource.data.get('reaccionesPorUsuario', {})
+            .diff(resource.data.get('reaccionesPorUsuario', {})).affectedKeys().hasOnly([request.auth.uid]))
+        || sumaUno('comentariosCount')
+        || sumaUno('reportesCount')
+        || ocultaPorReportes('estado', 'EN_REVISION')
+        // US-028: el personal aprueba o rechaza las publicaciones de menores en revisión.
+        || (esStaff() && resource.data.estado == 'EN_REVISION'
+          && resource.data.get('academiaId', '') == academiaPropia()
+          && cambia(['estado', 'revisadoPor', 'revisadoEn'])
+          && request.resource.data.estado in ['PUBLICADA', 'OCULTA']
+          && request.resource.data.revisadoPor == request.auth.uid)
+        // US-030: el administrador modera.
+        || (esAdmin() && cambia(['estado']))
+      );
+      allow delete: if false;
 
       match /comentarios/{comentarioId} {
         allow read: if autenticado();
-        allow write: if autenticado();
+        allow create: if autenticado() && sinSuspension()
+          && request.resource.data.autorUid == request.auth.uid
+          && request.resource.data.get('eliminado', false) == false
+          && request.resource.data.get('reportesCount', 0) == 0;
+        allow update: if autenticado() && (
+          (resource.data.autorUid == request.auth.uid && cambia(['eliminado']))
+          || sumaUno('reportesCount')
+          || ocultaPorReportes('estado', 'EN_REVISION')
+          || (esAdmin() && cambia(['estado', 'eliminado']))
+        );
+        allow delete: if false;
       }
     }
+
+    // US-029: avisos de pruebas. Los publica el personal de una academia, a su nombre.
     match /avisos/{id} {
       allow read: if autenticado();
-      allow write: if autenticado();
+      allow create: if esStaff() && sinSuspension()
+        && request.resource.data.autorUid == request.auth.uid
+        && request.resource.data.academiaId == academiaPropia()
+        && request.resource.data.get('oculto', false) == false
+        && request.resource.data.get('reportesCount', 0) == 0;
+      allow update: if autenticado() && (
+        sumaUno('reportesCount')
+        || ocultaPorReportes('oculto', true)
+        || (esAdmin() && cambia(['oculto']))
+      );
+      allow delete: if false;
     }
     // Reportes: cualquiera reporta a su nombre y ve sus propios reportes (para no duplicarlos);
     // solo el administrador ve la bandeja y los resuelve.
@@ -333,9 +495,9 @@ service cloud.firestore {
       allow delete: if autenticado() && resource.data.uidBloqueador == request.auth.uid;
       allow update: if false;
     }
-    // Suspensiones: las aplica el administrador; cada usuario puede leer la suya.
+    // Suspensiones: las aplica el administrador; cada usuario puede leer solo la suya.
     match /suspensiones/{uid} {
-      allow read: if autenticado();
+      allow read: if autenticado() && (request.auth.uid == uid || esAdmin());
       allow write: if esAdmin();
     }
 
@@ -501,8 +663,10 @@ service cloud.firestore {
       match /respuestasConvocatoria/{jugadorId} {
         allow read: if autenticado();
         allow create: if puedeOperar();
+        // Solo responde el propio jugador (ficha enlazada a su cuenta) o su apoderado aprobado.
         allow update: if puedeOperar()
           || (autenticado()
+            && (vinculoAprobado(jugadorId) || esFichaPropia(jugadorId))
             && request.resource.data.respondidoPorUid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                  'estado', 'motivo', 'respondidoPorUid', 'respondidoPorNombre', 'fechaRespuesta'

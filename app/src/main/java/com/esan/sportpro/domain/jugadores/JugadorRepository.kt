@@ -15,6 +15,18 @@ interface JugadorRepository {
     fun observarFichaPropia(usuarioUid: String): Flow<Jugador?>
 
     /**
+     * US-006: cuentas con rol Jugador de la academia, para enlazar una a su ficha. Solo el personal
+     * lo usa (las reglas dejan leer `usuarios` a cualquier autenticado).
+     */
+    fun observarCuentasJugador(academiaId: String): Flow<List<CuentaJugador>>
+
+    /**
+     * US-006, criterio 9: el propio jugador cambia solo su teléfono y su pie hábil.
+     * @return `true` si el servidor confirmó, `false` si quedó pendiente por falta de conexión.
+     */
+    suspend fun actualizarDatosPropios(jugadorId: String, telefono: String, pieHabil: String): Boolean
+
+    /**
      * Crea el jugador si [Jugador.id] está vacío; si no, actualiza su perfil. Además mantiene su
      * entrada en `directorio_jugadores` (nombre, equipo y código, sin datos sensibles) que usan
      * los apoderados para pedir la vinculación (US-007).
@@ -41,3 +53,6 @@ interface JugadorRepository {
     /** Activa o desactiva un jugador (nunca se borra); un jugador inactivo no acepta solicitudes. */
     suspend fun cambiarEstado(jugador: Jugador, activo: Boolean): Boolean
 }
+
+/** Cuenta de la app (rol Jugador) que se puede enlazar a una ficha. */
+data class CuentaJugador(val uid: String, val nombre: String, val correo: String)

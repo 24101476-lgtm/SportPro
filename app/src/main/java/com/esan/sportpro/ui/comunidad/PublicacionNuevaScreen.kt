@@ -120,7 +120,7 @@ fun PublicacionNuevaScreen(
                 is PublicacionesEvent.RequiereConfirmacionTelefono -> mostrarAlertaTelefono = true
                 is PublicacionesEvent.Publicada -> onPublicada()
                 is PublicacionesEvent.Error -> errorMensaje = event.mensaje
-                PublicacionesEvent.Reportada -> Unit
+                else -> Unit
             }
         }
     }

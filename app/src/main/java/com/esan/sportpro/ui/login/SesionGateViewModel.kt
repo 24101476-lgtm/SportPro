@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.login
 
+import com.esan.sportpro.data.notificaciones.SuscripcionPush
 import com.esan.sportpro.domain.cuentas.SesionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SesionGateViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
+    private val suscripcionPush: SuscripcionPush,
 ) : androidx.lifecycle.ViewModel() {
 
     private val scope = CoroutineScope(Dispatchers.Main.immediate)
@@ -27,6 +29,8 @@ class SesionGateViewModel @Inject constructor(
     /** Cierra la sesión y ejecuta [alTerminar] en el hilo principal, aunque Firebase falle. */
     fun cerrarSesion(alTerminar: () -> Unit) {
         scope.launch {
+            // US-027: el dispositivo deja de recibir los anuncios de esta cuenta.
+            runCatching { withContext(Dispatchers.IO) { suscripcionPush.limpiar() } }
             runCatching { withContext(Dispatchers.IO) { sesionRepository.cerrarSesion() } }
             alTerminar()
         }

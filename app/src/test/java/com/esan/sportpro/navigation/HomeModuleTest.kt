@@ -14,18 +14,19 @@ class HomeModuleTest {
     }
 
     @Test
-    fun entrenador_gestionaPlantelPeroNoMensualidades() {
+    fun entrenador_gestionaPlantelYVeMensualidadesDeSusEquipos() {
         val modulos = HomeModule.visiblesPara(UserRole.ENTRENADOR)
         assertTrue(HomeModule.JUGADORES in modulos)
         assertTrue(HomeModule.ENTRENAMIENTOS in modulos)
         assertTrue(HomeModule.PARTIDO in modulos)
-        assertFalse(HomeModule.MENSUALIDADES in modulos)
+        assertTrue(HomeModule.MENSUALIDADES in modulos)
     }
 
     @Test
-    fun jugador_noAccedeAJugadoresNiMensualidadesNiAcademia() {
+    fun jugador_veSuPerfilPeroNoMensualidadesNiAcademia() {
+        // US-006: para el jugador, el módulo Jugadores es "Mi perfil" (solo su propia ficha).
         val modulos = HomeModule.visiblesPara(UserRole.JUGADOR)
-        assertFalse(HomeModule.JUGADORES in modulos)
+        assertTrue(HomeModule.JUGADORES in modulos)
         assertFalse(HomeModule.MENSUALIDADES in modulos)
         assertFalse(HomeModule.ACADEMIA in modulos)
         assertTrue(HomeModule.ENTRENAMIENTOS in modulos)

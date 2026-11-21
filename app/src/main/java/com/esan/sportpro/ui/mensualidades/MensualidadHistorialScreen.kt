@@ -48,6 +48,7 @@ fun MensualidadHistorialScreen(
     jugadorId: String,
     jugadorNombre: String,
     onVolver: () -> Unit,
+    fotoUrl: String = "",
     modifier: Modifier = Modifier,
     viewModel: MensualidadHistorialViewModel = hiltViewModel(),
 ) {
@@ -85,7 +86,16 @@ fun MensualidadHistorialScreen(
                 item { RegistroSimuladoLegend(modifier = Modifier.padding(bottom = 4.dp)) }
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        androidx.compose.foundation.layout.Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                        com.esan.sportpro.ui.partido.AvatarJugador(
+                            nombre = state.jugadorNombre.ifBlank { jugadorNombre },
+                            fotoUrl = fotoUrl,
+                            tamano = 64.dp,
+                        )
+                        Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(state.jugadorNombre.ifBlank { "Jugador" }, style = MaterialTheme.typography.titleMedium)
                             Text(
                                 state.equipoNombre.ifBlank { "Sin equipo asignado" },
@@ -102,6 +112,7 @@ fun MensualidadHistorialScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
+                        }
                         }
                     }
                 }

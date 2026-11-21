@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.CampoEquipo
+import com.esan.sportpro.domain.academia.EntrenadorCuenta
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
 import com.esan.sportpro.domain.academia.ValidacionEquipo
@@ -21,6 +22,8 @@ data class FormularioEquipo(
     val nombre: String = "",
     val categoria: String = "",
     val entrenador: String = "",
+    /** Cuenta del entrenador elegido; vacía = sin asignar (o equipo antiguo solo con nombre). */
+    val entrenadorUid: String = "",
     val errores: Map<CampoEquipo, String> = emptyMap(),
     val guardando: Boolean = false,
     /** Escudo ya guardado (al editar). */
@@ -38,6 +41,16 @@ data class AcademiaUiState(
     val error: String? = null,
     val mostrarInactivos: Boolean = false,
     val formulario: FormularioEquipo? = null,
+    /** Cuentas con rol Entrenador de la academia, para asignar a un equipo. */
+    val entrenadores: List<EntrenadorCuenta> = emptyList(),
+    /** Cuentas de entrenador que esperan aprobación (solo las ve el administrador). */
+    val entrenadoresPendientes: List<EntrenadorCuenta> = emptyList(),
+    /** US-004: nombre de la academia y día de corte de las mensualidades. */
+    val configuracion: com.esan.sportpro.domain.academia.ConfiguracionAcademia =
+        com.esan.sportpro.domain.academia.ConfiguracionAcademia(),
+    /** US-004: códigos de invitación para cuentas de administrador. */
+    val codigos: List<com.esan.sportpro.domain.academia.CodigoInvitacion> = emptyList(),
+    val editandoConfiguracion: FormularioConfiguracion? = null,
 ) {
     /** Solo el administrador crea y edita equipos; el entrenador los consulta. */
     val puedeEditar: Boolean get() = perfil?.rol == UserRole.ADMINISTRADOR
@@ -45,6 +58,14 @@ data class AcademiaUiState(
     val equiposVisibles: List<Equipo>
         get() = if (mostrarInactivos) equipos else equipos.filter { it.activo }
 }
+
+/** Edición del nombre y el día de corte de la academia. */
+data class FormularioConfiguracion(
+    val nombre: String,
+    val diaCorteTexto: String,
+    val error: String? = null,
+    val guardando: Boolean = false,
+)
 
 sealed interface AcademiaEvent {
     data class Mensaje(val texto: String) : AcademiaEvent
@@ -55,6 +76,8 @@ sealed interface AcademiaEvent {
 class AcademiaViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
     private val equipoRepository: EquipoRepository,
+    private val usuarioRepository: com.esan.sportpro.domain.cuentas.UsuarioRepository,
+    private val academiaRepository: com.esan.sportpro.domain.academia.AcademiaRepository,
 ) : BaseViewModel<AcademiaUiState, AcademiaEvent>(AcademiaUiState()) {
 
     init {
@@ -65,6 +88,27 @@ class AcademiaViewModel @Inject constructor(
                 return@launch
             }
             setState { copy(perfil = perfil) }
+            launch {
+                academiaRepository.observarConfiguracion(perfil.academiaId)
+                    .collect { setState { copy(configuracion = it) } }
+            }
+            if (perfil.rol == UserRole.ADMINISTRADOR) {
+                launch {
+                    academiaRepository.observarCodigos(perfil.academiaId)
+                        .catch { }
+                        .collect { setState { copy(codigos = it) } }
+                }
+                launch {
+                    equipoRepository.observarEntrenadores(perfil.academiaId)
+                        .catch { }
+                        .collect { setState { copy(entrenadores = it) } }
+                }
+                launch {
+                    usuarioRepository.observarEntrenadoresPendientes(perfil.academiaId)
+                        .catch { }
+                        .collect { setState { copy(entrenadoresPendientes = it) } }
+                }
+            }
             equipoRepository.observarEquipos(perfil.academiaId)
                 .catch { setState { copy(cargando = false, error = describirErrorFirestore(it)) } }
                 .collect { lista -> setState { copy(equipos = lista, cargando = false, error = null) } }
@@ -87,6 +131,10 @@ class AcademiaViewModel @Inject constructor(
                     nombre = equipo.nombre,
                     categoria = equipo.categoria,
                     entrenador = equipo.entrenadorNombre,
+                    // Equipos antiguos: si el nombre coincide con una cuenta, se propone esa cuenta.
+                    entrenadorUid = equipo.entrenadorUid.ifBlank {
+                        currentState.entrenadores.firstOrNull { equipo.copy(entrenadorUid = "").dirigidoPor(it.uid, it.nombre) }?.uid.orEmpty()
+                    },
                     escudoActual = equipo.escudoUrl,
                 ),
             )
@@ -107,6 +155,15 @@ class AcademiaViewModel @Inject constructor(
 
     fun onEntrenadorChanged(valor: String) =
         editarFormulario { copy(entrenador = valor, errores = errores - CampoEquipo.ENTRENADOR) }
+
+    /** Asigna una cuenta de entrenador (o ninguna con `null`). */
+    fun onEntrenadorElegido(cuenta: EntrenadorCuenta?) = editarFormulario {
+        copy(
+            entrenadorUid = cuenta?.uid.orEmpty(),
+            entrenador = cuenta?.nombre.orEmpty(),
+            errores = errores - CampoEquipo.ENTRENADOR,
+        )
+    }
 
     fun guardar() {
         val estado = currentState
@@ -139,6 +196,7 @@ class AcademiaViewModel @Inject constructor(
                         nombre = formulario.nombre,
                         categoria = formulario.categoria,
                         entrenadorNombre = formulario.entrenador,
+                        entrenadorUid = formulario.entrenadorUid,
                         creadoPor = perfil.uid,
                     ),
                     esNuevo = esNuevo,
@@ -155,6 +213,88 @@ class AcademiaViewModel @Inject constructor(
                 sendEvent(AcademiaEvent.Mensaje(texto))
             } catch (e: Exception) {
                 editarFormulario { copy(guardando = false) }
+                sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    // ---- US-004: configuración y códigos de invitación ---------------------------------------
+
+    fun editarConfiguracion() {
+        if (!currentState.puedeEditar) return
+        val c = currentState.configuracion
+        setState { copy(editandoConfiguracion = FormularioConfiguracion(c.nombre, c.diaCorte.toString())) }
+    }
+
+    fun cerrarConfiguracion() = setState { copy(editandoConfiguracion = null) }
+
+    fun onConfiguracion(nombre: String, diaCorteTexto: String) = setState {
+        copy(
+            editandoConfiguracion = editandoConfiguracion?.copy(
+                nombre = nombre,
+                diaCorteTexto = diaCorteTexto.filter(Char::isDigit).take(2),
+                error = null,
+            ),
+        )
+    }
+
+    fun guardarConfiguracion() {
+        val formulario = currentState.editandoConfiguracion ?: return
+        val perfil = currentState.perfil ?: return
+        val dia = formulario.diaCorteTexto.toIntOrNull()
+        com.esan.sportpro.domain.academia.ConfiguracionAcademia.validar(formulario.nombre, dia)?.let { error ->
+            setState { copy(editandoConfiguracion = formulario.copy(error = error)) }
+            return
+        }
+        setState { copy(editandoConfiguracion = formulario.copy(guardando = true)) }
+        viewModelScope.launch {
+            try {
+                val confirmado = academiaRepository.guardarConfiguracion(
+                    com.esan.sportpro.domain.academia.ConfiguracionAcademia(perfil.academiaId, formulario.nombre.trim(), dia!!),
+                )
+                setState { copy(editandoConfiguracion = null) }
+                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Configuración guardada")))
+            } catch (e: Exception) {
+                setState { copy(editandoConfiguracion = formulario.copy(guardando = false)) }
+                sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    fun generarCodigo() {
+        val perfil = currentState.perfil ?: return
+        if (!currentState.puedeEditar) return
+        viewModelScope.launch {
+            try {
+                val codigo = academiaRepository.generarCodigo(perfil.academiaId, perfil.uid)
+                sendEvent(AcademiaEvent.Mensaje("Código $codigo generado: vale 7 días y un solo uso"))
+            } catch (e: Exception) {
+                sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    fun revocarCodigo(codigo: String) {
+        if (!currentState.puedeEditar) return
+        viewModelScope.launch {
+            try {
+                val confirmado = academiaRepository.revocarCodigo(codigo)
+                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Código revocado")))
+            } catch (e: Exception) {
+                sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    /** Aprueba (ACTIVO) o rechaza (DESACTIVADO) una cuenta de entrenador pendiente. */
+    fun resolverEntrenador(cuenta: EntrenadorCuenta, aprobar: Boolean) {
+        if (!currentState.puedeEditar) return
+        viewModelScope.launch {
+            try {
+                val confirmado = usuarioRepository.resolverEntrenador(cuenta.uid, aprobar)
+                val texto = if (aprobar) "Entrenador aprobado" else "Cuenta de entrenador rechazada"
+                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, texto)))
+            } catch (e: Exception) {
                 sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
             }
         }

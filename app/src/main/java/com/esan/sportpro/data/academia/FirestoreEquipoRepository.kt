@@ -5,7 +5,9 @@ import com.esan.sportpro.data.esperarConfirmacion
 import com.esan.sportpro.data.imagenes.CarpetaImagen
 import com.esan.sportpro.data.imagenes.CompresorImagen
 import com.esan.sportpro.data.imagenes.ImagenesSupabase
+import com.esan.sportpro.domain.academia.EntrenadorCuenta
 import com.esan.sportpro.domain.academia.Equipo
+import com.esan.sportpro.domain.cuentas.PerfilActual
 import com.esan.sportpro.domain.academia.EquipoRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObject
@@ -46,6 +48,7 @@ class FirestoreEquipoRepository @Inject constructor(
             "nombre" to equipo.nombre.trim(),
             "categoria" to equipo.categoria,
             "entrenadorNombre" to equipo.entrenadorNombre.trim(),
+            "entrenadorUid" to equipo.entrenadorUid,
         )
         return if (esNuevo) {
             val documento = if (equipo.id.isBlank()) coleccion.document() else coleccion.document(equipo.id)
@@ -65,6 +68,32 @@ class FirestoreEquipoRepository @Inject constructor(
         coleccion.document(equipoId).update("activo", activo).esperarConfirmacion()
 
     override fun nuevoId(): String = coleccion.document().id
+
+    override fun observarEntrenadores(academiaId: String): Flow<List<EntrenadorCuenta>> = callbackFlow {
+        // Un solo filtro de igualdad (sin índice compuesto); la academia se compara aquí porque los
+        // usuarios sin club pertenecen a la academia por defecto (clubId nulo).
+        // Las reglas solo dejan al personal listar cuentas de su propio club: se filtra por clubId.
+        val registro = firestore.collection("usuarios")
+            .whereEqualTo("rol", "ENTRENADOR")
+            .whereEqualTo("clubId", PerfilActual.clubIdDe(academiaId))
+            .whereEqualTo("estado", "ACTIVO")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val lista = snapshot?.documents.orEmpty()
+                    .filter { (it.getString("clubId") ?: PerfilActual.ACADEMIA_POR_DEFECTO) == academiaId }
+                    .filter { (it.getString("estado") ?: "ACTIVO") == "ACTIVO" }
+                    .map { doc ->
+                        val nombre = "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
+                        EntrenadorCuenta(uid = doc.id, nombre = nombre.ifBlank { doc.getString("correo").orEmpty() })
+                    }
+                    .sortedBy { it.nombre.lowercase() }
+                trySend(lista)
+            }
+        awaitClose { registro.remove() }
+    }
 
     // Igual que la foto del jugador: comprimir, subir a Supabase, guardar la URL y borrar la anterior.
     override suspend fun subirEscudo(equipoId: String, uriLocal: String): String? = runCatching {

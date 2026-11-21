@@ -1,18 +1,21 @@
 package com.esan.sportpro.ui.partido
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,17 +23,24 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -59,47 +69,49 @@ fun AlineacionTableroScreen(
 ) {
     var formacion by remember { mutableStateOf("4-3-3") }
     var jugadorSeleccionado by remember { mutableStateOf<JugadorCanchaUi?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val sinArquero = titulares.isNotEmpty() && titulares.none { abreviaturaPosicion(it.posicion) == "POR" }
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        if (esEntrenador) "Armar equipo"
-                        else "Alineación"
-                    )
+                    Column {
+                        Text(
+                            text = if (esEntrenador) "Armar equipo" else "Alineación",
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Pizarra táctica",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Volver"
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
                         )
                     }
-                }
+                },
             )
         },
         bottomBar = {
             if (esEntrenador) {
-                Surface(
-                    tonalElevation = 4.dp,
-                    shadowElevation = 8.dp,
-                ) {
+                Surface(tonalElevation = 4.dp, shadowElevation = 8.dp) {
                     Button(
                         onClick = onGuardar,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(
-                                horizontal = 16.dp,
-                                vertical = 10.dp,
-                            ),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         contentPadding = PaddingValues(vertical = 14.dp),
                     ) {
-                        Text(
-                            text = textoAccion,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        Text(text = textoAccion, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -109,55 +121,43 @@ fun AlineacionTableroScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
-            Column(
+            ResumenEquipo(
+                formacion = formacion,
+                titulares = titulares.size,
+                suplentes = suplentes.size,
                 modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = if (esEntrenador) {
-                        "Pizarra táctica"
-                    } else {
-                        "Formación del equipo"
-                    },
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = if (esEntrenador) {
-                        "Ubica a los 11 titulares en el campo. Puedes arrastrar cada ficha."
-                    } else {
-                        "Esta es la alineación definida por el entrenador. Toca un jugador para ver sus datos."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            )
 
             if (esEntrenador) {
                 Formaciones(
                     seleccionada = formacion,
-                    onSeleccionar = { nuevaFormacion ->
-
-                        formacion = nuevaFormacion
-
-                        if (nuevaFormacion != "Personalizada") {
-                            posicionesFormacion(
-                                formacion = nuevaFormacion,
-                                jugadores = titulares,
-                            ).forEach { jugador ->
-                                onPosicionJugadorChange(
-                                    jugador.id,
-                                    jugador.x,
-                                    jugador.y,
-                                )
+                    onSeleccionar = { nueva ->
+                        formacion = nueva
+                        if (nueva != FORMACION_PERSONALIZADA) {
+                            distribuirEnFormacion(nueva, titulares).forEach { jugador ->
+                                onPosicionJugadorChange(jugador.id, jugador.x, jugador.y)
                             }
                         }
-                    }
+                    },
+                )
+            } else {
+                Text(
+                    text = "Alineación definida por el entrenador. Toca un jugador para ver sus datos.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+
+            if (esEntrenador && sinArquero) {
+                AvisoAlineacion(
+                    texto = "Ningún titular es arquero. Pon a un jugador en el arco antes de crear el partido.",
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
 
@@ -166,22 +166,24 @@ fun AlineacionTableroScreen(
                 suplentes = suplentes,
                 editable = esEntrenador,
                 modifier = Modifier.padding(horizontal = 12.dp),
-                onJugadorClick = {
-                    jugadorSeleccionado = it
-                },
+                onJugadorClick = { jugadorSeleccionado = it },
                 onPosicionJugadorChange = { jugadorId, x, y ->
-                    if (esEntrenador) {
-                        formacion = "Personalizada"
+                    if (esEntrenador) formacion = FORMACION_PERSONALIZADA
+                    onPosicionJugadorChange(jugadorId, x, y)
+                },
+                // El intercambio respeta la formación: no la marca como personalizada.
+                onIntercambiarJugadores = { arrastrado, destino ->
+                    onPosicionJugadorChange(arrastrado.id, arrastrado.x, arrastrado.y)
+                    onPosicionJugadorChange(destino.id, destino.x, destino.y)
+                    scope.launch {
+                        snackbar.currentSnackbarData?.dismiss()
+                        snackbar.showSnackbar(
+                            message = "${nombrePila(arrastrado.nombre)} ⇄ ${nombrePila(destino.nombre)}",
+                            duration = SnackbarDuration.Short,
+                        )
                     }
-
-                    onPosicionJugadorChange(
-                        jugadorId,
-                        x,
-                        y,
-                    )
-                }
+                },
             )
-
         }
     }
 
@@ -189,55 +191,105 @@ fun AlineacionTableroScreen(
         val detalle = obtenerDetalleJugador(jugador.id)
 
         AlertDialog(
-            onDismissRequest = {
-                jugadorSeleccionado = null
-            },
+            onDismissRequest = { jugadorSeleccionado = null },
+            icon = { FotoJugadorGrande(jugador) },
             title = {
                 Text(
                     text = detalle?.nombreCompleto ?: jugador.nombre,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             },
             text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DatoJugador(
-                        etiqueta = "Dorsal",
-                        valor = (detalle?.dorsal ?: jugador.dorsal)?.toString()
-                    )
-
-                    DatoJugador(
-                        etiqueta = "Edad",
-                        valor = detalle?.edad?.let { "$it años" }
-                    )
-
-                    DatoJugador(
-                        etiqueta = "Posición",
-                        valor = detalle?.posicion ?: jugador.posicion
-                    )
-
-                    DatoJugador(
-                        etiqueta = "Categoría",
-                        valor = detalle?.categoria
-                    )
-
-                    DatoJugador(
-                        etiqueta = "Pie dominante",
-                        valor = detalle?.pieDominante
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DatoJugador("Dorsal", (detalle?.dorsal ?: jugador.dorsal)?.toString())
+                    DatoJugador("Edad", detalle?.edad?.let { "$it años" })
+                    DatoJugador("Posición", detalle?.posicion ?: jugador.posicion)
+                    DatoJugador("Categoría", detalle?.categoria)
+                    DatoJugador("Pie dominante", detalle?.pieDominante)
+                    DatoJugador("Rol", if (jugador.titular) "Titular" else "Suplente")
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        jugadorSeleccionado = null
-                    }
-                ) {
-                    Text("Cerrar")
-                }
-            }
+                Button(onClick = { jugadorSeleccionado = null }) { Text("Cerrar") }
+            },
         )
+    }
+}
+
+@Composable
+private fun AvisoAlineacion(texto: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = texto,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+        )
+    }
+}
+
+private fun nombrePila(nombre: String): String =
+    nombre.trim().substringBefore(" ").replaceFirstChar { it.uppercase() }
+
+/** Franja con la formación activa y cuántos jugadores hay en cancha y en el banco. */
+@Composable
+private fun ResumenEquipo(
+    formacion: String,
+    titulares: Int,
+    suplentes: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DatoResumen("Formación", formacion, Modifier.weight(1.3f))
+        DatoResumen("Titulares", "$titulares/11", Modifier.weight(1f), alerta = titulares != 11)
+        DatoResumen("Banco", suplentes.toString(), Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun DatoResumen(
+    etiqueta: String,
+    valor: String,
+    modifier: Modifier = Modifier,
+    alerta: Boolean = false,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = etiqueta.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (alerta) {
+                Box(
+                    Modifier
+                        .padding(end = 6.dp)
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error)
+                )
+            }
+            Text(
+                text = valor,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -246,148 +298,27 @@ private fun Formaciones(
     seleccionada: String,
     onSeleccionar: (String) -> Unit,
 ) {
-    val opciones = listOf(
-        "4-3-3",
-        "4-4-2",
-        "4-2-3-1",
-        "3-5-2",
-        "3-4-3",
-        "Personalizada"
-    )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        opciones.forEach { opcion ->
+        (FORMACIONES_DISPONIBLES + FORMACION_PERSONALIZADA).forEach { opcion ->
             FilterChip(
                 selected = seleccionada == opcion,
-                onClick = {
-                    onSeleccionar(opcion)
-                },
+                onClick = { onSeleccionar(opcion) },
                 label = {
-                    Text(opcion)
-                }
+                    Text(
+                        text = opcion,
+                        fontWeight = if (seleccionada == opcion) FontWeight.Bold else FontWeight.Normal,
+                    )
+                },
             )
         }
     }
 }
-
-
-private fun posicionesFormacion(
-    formacion: String,
-    jugadores: List<JugadorCanchaUi>,
-): List<JugadorCanchaUi> {
-
-    val posiciones =
-        when (formacion) {
-
-            "4-3-3" -> listOf(
-                0.50f to 0.90f, // POR
-
-                0.14f to 0.72f,
-                0.38f to 0.76f,
-                0.62f to 0.76f,
-                0.86f to 0.72f,
-
-                0.30f to 0.52f,
-                0.50f to 0.57f,
-                0.70f to 0.52f,
-
-                0.18f to 0.27f,
-                0.50f to 0.19f,
-                0.82f to 0.27f,
-            )
-
-            "4-4-2" -> listOf(
-                0.50f to 0.90f, // POR
-
-                0.14f to 0.73f,
-                0.38f to 0.76f,
-                0.62f to 0.76f,
-                0.86f to 0.73f,
-
-                0.16f to 0.50f,
-                0.39f to 0.55f,
-                0.61f to 0.55f,
-                0.84f to 0.50f,
-
-                0.36f to 0.24f,
-                0.64f to 0.24f,
-            )
-
-            "4-2-3-1" -> listOf(
-                0.50f to 0.90f, // POR
-
-                0.14f to 0.74f,
-                0.38f to 0.77f,
-                0.62f to 0.77f,
-                0.86f to 0.74f,
-
-                0.38f to 0.59f,
-                0.62f to 0.59f,
-
-                0.18f to 0.39f,
-                0.50f to 0.42f,
-                0.82f to 0.39f,
-
-                0.50f to 0.19f,
-            )
-
-            "3-5-2" -> listOf(
-                0.50f to 0.90f, // POR
-
-                0.25f to 0.74f,
-                0.50f to 0.78f,
-                0.75f to 0.74f,
-
-                0.10f to 0.50f,
-                0.30f to 0.55f,
-                0.50f to 0.52f,
-                0.70f to 0.55f,
-                0.90f to 0.50f,
-
-                0.36f to 0.24f,
-                0.64f to 0.24f,
-            )
-
-            "3-4-3" -> listOf(
-                0.50f to 0.90f, // POR
-
-                0.25f to 0.74f,
-                0.50f to 0.78f,
-                0.75f to 0.74f,
-
-                0.15f to 0.51f,
-                0.39f to 0.55f,
-                0.61f to 0.55f,
-                0.85f to 0.51f,
-
-                0.18f to 0.26f,
-                0.50f to 0.19f,
-                0.82f to 0.26f,
-            )
-
-            else -> return jugadores
-        }
-
-    return jugadores
-        .take(11)
-        .mapIndexed { index, jugador ->
-
-            val (x, y) =
-                posiciones[index]
-
-            jugador.copy(
-                x = x,
-                y = y,
-            )
-        }
-}
-
 
 @Composable
 private fun DatoJugador(
@@ -399,15 +330,13 @@ private fun DatoJugador(
             Text(
                 text = etiqueta,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
             Text(
                 text = valor,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }
 }
-

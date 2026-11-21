@@ -54,6 +54,8 @@ data class PartidosUiState(
     val formulario: FormularioPartido? = null,
     /** Partido que la pantalla debe abrir (restauración o recién creado). */
     val abrirPartidoId: String? = null,
+    /** Partido armado en memoria que debe abrirse en la pizarra táctica (aún no existe en Firestore). */
+    val armarEquipoId: String? = null,
     val error: String? = null,
     val aviso: String? = null,
     val mensaje: String? = null,
@@ -85,6 +87,7 @@ class PartidosViewModel @Inject constructor(
     private val equipoRepository: EquipoRepository,
     private val jugadorRepository: JugadorRepository,
     private val accesoEspectador: AccesoEspectador,
+    private val borradores: BorradoresPartido,
 ) : BaseViewModel<PartidosUiState, Unit>(PartidosUiState()) {
 
     private var restauracionRevisada = false
@@ -300,7 +303,13 @@ class PartidosViewModel @Inject constructor(
                 else -> null
             }
         }
-        val id = repo.crearPartido(
+        /*
+         * "Armar equipo" todavía no crea nada en Firestore: el partido queda en memoria
+         * y la pizarra lo publica al pulsar "Crear partido".
+         */
+        val id = repo.nuevoIdPartido()
+        borradores.guardar(
+            id,
             NuevoPartido(
                 equipoId = equipo.id,
                 academiaId = perfil.academiaId,
@@ -314,7 +323,7 @@ class PartidosViewModel @Inject constructor(
                 convocados = convocados,
             ),
         )
-        setState { copy(formulario = null, abrirPartidoId = id) }
+        setState { copy(formulario = null, armarEquipoId = id) }
     }
 
     private fun Jugador.aConvocado(titular: Boolean) = JugadorConvocado(
@@ -325,7 +334,7 @@ class PartidosViewModel @Inject constructor(
         posicion = posicion.ifBlank { null },
     )
 
-    fun navegacionRealizada() = setState { copy(abrirPartidoId = null) }
+    fun navegacionRealizada() = setState { copy(abrirPartidoId = null, armarEquipoId = null) }
 
     fun mensajeMostrado() = setState { copy(mensaje = null) }
 

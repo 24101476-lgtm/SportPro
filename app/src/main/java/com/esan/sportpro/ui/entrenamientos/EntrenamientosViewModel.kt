@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.entrenamientos
 
 import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
+import com.esan.sportpro.data.notificaciones.NotificadorPush
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
@@ -11,8 +12,8 @@ import com.esan.sportpro.domain.entrenamientos.BibliotecaEjercicios
 import com.esan.sportpro.domain.entrenamientos.CampoEjercicio
 import com.esan.sportpro.domain.entrenamientos.CampoEntrenamiento
 import com.esan.sportpro.domain.entrenamientos.DatosEntrenamiento
-import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Ejercicio
+import com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca
 import com.esan.sportpro.domain.entrenamientos.Entrenamiento
 import com.esan.sportpro.domain.entrenamientos.EntrenamientoRepository
 import com.esan.sportpro.domain.entrenamientos.FiltroBiblioteca
@@ -108,6 +109,7 @@ class EntrenamientosViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
     private val entrenamientoRepository: EntrenamientoRepository,
     private val equipoRepository: EquipoRepository,
+    private val notificador: NotificadorPush,
 ) : BaseViewModel<EntrenamientosUiState, EntrenamientosEvent>(EntrenamientosUiState()) {
 
     init {
@@ -350,7 +352,17 @@ class EntrenamientosViewModel @Inject constructor(
                 val confirmado = entrenamientoRepository.cancelar(dialogo.entrenamiento, dialogo.motivo, perfil.uid, perfil.nombre)
                 setState { copy(dialogoCancelacion = null, procesando = false) }
                 val texto = "Sesión cancelada. Queda en el historial con su motivo"
-                sendEvent(EntrenamientosEvent.Mensaje(if (confirmado) "$texto." else "$texto. Se sincronizará cuando vuelva la conexión."))
+                if (!confirmado) {
+                    sendEvent(EntrenamientosEvent.Mensaje("$texto. Se sincronizará cuando vuelva la conexión."))
+                    return@launch
+                }
+                // Criterio 9: aviso push a jugadores y padres del equipo (US-027).
+                val avisado = notificador.notificarSesionCancelada(dialogo.entrenamiento.id)
+                sendEvent(
+                    EntrenamientosEvent.Mensaje(
+                        if (avisado) "$texto. Se avisó a los jugadores y apoderados." else "$texto. No se pudo enviar la notificación.",
+                    ),
+                )
             } catch (e: Exception) {
                 setState { copy(procesando = false) }
                 sendEvent(EntrenamientosEvent.Mensaje(describirErrorFirestore(e)))

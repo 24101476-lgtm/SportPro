@@ -16,9 +16,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * US-027: pide a la Edge Function `notificar` que envíe el push de un anuncio a su tema de FCM
- * (ver `supabase/functions/notificar/index.ts`). Nunca lanza excepción: si no hay red o la función
- * no está desplegada devuelve `false` y la pantalla lo informa (criterio 10).
+ * US-027: pide a la Edge Function `notificar` que envíe un push a su tema de FCM
+ * (ver `supabase/functions/notificar/index.ts`). La app solo manda el id: el servidor arma el texto
+ * con los datos de Firestore y comprueba que quien lo pide hizo la acción.
+ *
+ * Nunca lanza excepción: si no hay red o la función no está desplegada devuelve `false` y la
+ * pantalla lo informa (criterio 10).
  */
 @Singleton
 class NotificadorPush @Inject constructor(
@@ -28,12 +31,23 @@ class NotificadorPush @Inject constructor(
         .callTimeout(15_000L, TimeUnit.MILLISECONDS)
         .build()
 
-    suspend fun notificarAnuncio(anuncioId: String): Boolean = runCatching {
+    suspend fun notificarAnuncio(anuncioId: String): Boolean =
+        enviar(JSONObject().put("anuncioId", anuncioId))
+
+    /** US-010: avisa a jugadores y padres del equipo que la sesión se canceló, con su motivo. */
+    suspend fun notificarSesionCancelada(entrenamientoId: String): Boolean =
+        enviar(JSONObject().put("tipo", "sesion_cancelada").put("entrenamientoId", entrenamientoId))
+
+    /** US-007: avisa al padre que su solicitud se aprobó, se rechazó o se revocó. */
+    suspend fun notificarVinculacion(vinculacionId: String): Boolean =
+        enviar(JSONObject().put("tipo", "vinculacion").put("vinculacionId", vinculacionId))
+
+    private suspend fun enviar(cuerpo: JSONObject): Boolean = runCatching {
         val token = auth.currentUser?.getIdToken(false)?.await()?.token ?: return false
         val peticion = Request.Builder()
             .url("$URL_SUPABASE/functions/v1/notificar")
             .header("Authorization", "Bearer $token")
-            .post(JSONObject().put("anuncioId", anuncioId).toString().toRequestBody(JSON))
+            .post(cuerpo.toString().toRequestBody(JSON))
             .build()
         withContext(Dispatchers.IO) {
             cliente.newCall(peticion).execute().use { respuesta ->
@@ -45,7 +59,7 @@ class NotificadorPush @Inject constructor(
                 }
             }
         }
-    }.onFailure { Log.w(TAG, "No se pudo enviar el push del anuncio", it) }.getOrDefault(false)
+    }.onFailure { Log.w(TAG, "No se pudo enviar el push", it) }.getOrDefault(false)
 
     private companion object {
         const val TAG = "NotificadorPush"

@@ -20,11 +20,13 @@ import javax.inject.Singleton
  * - `academia_{id}`: todo el club.
  * - `academia_{id}_rol_{ROL}`: solo entrenadores, solo jugadores o solo padres.
  * - `equipo_{id}`: un equipo (sus jugadores, su entrenador y los padres de sus jugadores).
+ * - `usuario_{uid}`: avisos para una sola persona, como la respuesta a una vinculación (US-007).
  */
 object TemasPush {
     fun academia(academiaId: String) = "academia_${limpio(academiaId)}"
     fun rol(academiaId: String, rol: UserRole) = "${academia(academiaId)}_rol_${rol.name}"
     fun equipo(equipoId: String) = "equipo_${limpio(equipoId)}"
+    fun usuario(uid: String) = "usuario_${limpio(uid)}"
 
     /** FCM solo acepta letras, números y `-_.~%` en el nombre del tema. */
     private fun limpio(texto: String) = texto.replace(Regex("[^A-Za-z0-9_.~%-]"), "-")
@@ -43,6 +45,7 @@ class SuscripcionPush @Inject constructor(
         val temas = buildSet {
             add(TemasPush.academia(perfil.academiaId))
             add(TemasPush.rol(perfil.academiaId, perfil.rol))
+            add(TemasPush.usuario(perfil.uid))
             equiposDe(perfil).forEach { add(TemasPush.equipo(it)) }
         }
         val mensajeria = FirebaseMessaging.getInstance()

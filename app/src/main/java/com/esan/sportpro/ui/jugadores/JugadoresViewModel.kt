@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.estadisticas.StatsRepository
 import com.esan.sportpro.data.jugadores.ParticipacionPartidosRepository
+import com.esan.sportpro.data.notificaciones.NotificadorPush
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
@@ -178,6 +179,7 @@ class JugadoresViewModel @Inject constructor(
     private val vinculacionRepository: VinculacionRepository,
     private val statsRepository: StatsRepository,
     private val participacionPartidos: ParticipacionPartidosRepository,
+    private val notificador: NotificadorPush,
 ) : BaseViewModel<JugadoresUiState, JugadoresEvent>(JugadoresUiState()) {
 
     private var partidosJob: Job? = null
@@ -493,7 +495,13 @@ class JugadoresViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val confirmado = accion()
-                sendEvent(JugadoresEvent.Mensaje(if (confirmado) texto else "$texto. Se sincronizará cuando vuelva la conexión."))
+                if (!confirmado) {
+                    sendEvent(JugadoresEvent.Mensaje("$texto. Se sincronizará cuando vuelva la conexión."))
+                    return@launch
+                }
+                // Aviso push al padre (US-007 con US-027); si falla, la acción ya quedó guardada.
+                val avisado = notificador.notificarVinculacion(vinculacion.id)
+                sendEvent(JugadoresEvent.Mensaje(if (avisado) texto else "$texto. No se pudo notificar al apoderado."))
             } catch (e: Exception) {
                 sendEvent(JugadoresEvent.Mensaje(describirErrorFirestore(e)))
             } finally {

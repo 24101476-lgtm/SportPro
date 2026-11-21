@@ -84,6 +84,12 @@ fun PartidosListaScreen(
     onAbrirPartido: (String) -> Unit,
     onAbrirCatalogo: () -> Unit,
     onNuevoPartido: () -> Unit,
+    /**
+     * Flujo de creación integrado:
+     * el formulario genera primero un borrador técnico y,
+     * en lugar de abrir el partido, avanzamos a la pizarra.
+     */
+    onConfigurarAlineacion: ((String) -> Unit)? = null,
     /** US-021: jugador y padre abren el seguimiento en vivo en lugar del registro. */
     onSeguirPartido: ((String) -> Unit)? = null,
     viewModel: PartidosViewModel = hiltViewModel(),
@@ -95,13 +101,31 @@ fun PartidosListaScreen(
     val snackbar = remember { SnackbarHostState() }
     var filtro by rememberSaveable { mutableStateOf(FiltroPartidos.TODOS) }
 
+    /*
+     * Solo se activa cuando el usuario abre el formulario integrado
+     * desde el FAB "Nuevo partido".
+     */
+    var creandoParaAlineacion by rememberSaveable {
+        mutableStateOf(false)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.revisarPartidoEnCurso()
     }
     LaunchedEffect(state.abrirPartidoId) {
         state.abrirPartidoId?.let { id ->
+
             viewModel.navegacionRealizada()
-            onAbrirPartido(id)
+
+            if (
+                creandoParaAlineacion &&
+                onConfigurarAlineacion != null
+            ) {
+                creandoParaAlineacion = false
+                onConfigurarAlineacion(id)
+            } else {
+                onAbrirPartido(id)
+            }
         }
     }
     LaunchedEffect(state.mensaje) {
@@ -234,7 +258,10 @@ fun PartidosListaScreen(
 
         if (state.puedeCrear && puedeGestionarPartidos) {
             ExtendedFloatingActionButton(
-                onClick = viewModel::abrirFormulario,
+                onClick = {
+                    creandoParaAlineacion = true
+                    viewModel.abrirFormulario()
+                },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("Nuevo partido", fontWeight = FontWeight.Bold) },
                 containerColor = SportProTema.colores.acento,

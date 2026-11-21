@@ -13,6 +13,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 
+
+data class PosicionTacticaUi(
+    val x: Float,
+    val y: Float,
+)
+
+
 data class AlineacionUiState(
 
     val partido: Partido? = null,
@@ -27,6 +34,13 @@ data class AlineacionUiState(
      */
     val jugadores: List<JugadorConvocado> =
         emptyList(),
+
+    /**
+     * Coordenadas normalizadas (0f..1f) de los titulares sobre la cancha.
+     * Se mantienen en el ViewModel mientras el entrenador arma la alineación.
+     */
+    val posicionesTacticas: Map<String, PosicionTacticaUi> =
+        emptyMap(),
 
     val cargando: Boolean = true,
 
@@ -47,6 +61,63 @@ data class AlineacionUiState(
         get() =
             jugadores.filterNot {
                 it.titular
+            }
+
+    /**
+     * Modelo listo para pintar los titulares en [CanchaTactica].
+     *
+     * Cuando todavía no existe una coordenada manual usamos una distribución
+     * 4-3-3 como posición inicial. Si el entrenador ya movió a un jugador,
+     * conservamos su coordenada.
+     */
+    val titularesCancha: List<JugadorCanchaUi>
+        get() {
+            val base =
+                titulares.map { jugador ->
+                    val posicionGuardada =
+                        posicionesTacticas[jugador.id]
+
+                    JugadorCanchaUi(
+                        id = jugador.id,
+                        nombre = jugador.nombre,
+                        dorsal = jugador.dorsal,
+                        posicion = jugador.posicion,
+                        titular = true,
+                        x = posicionGuardada?.x ?: 0.5f,
+                        y = posicionGuardada?.y ?: 0.5f,
+                    )
+                }
+
+            val distribuidos =
+                posiciones433(base)
+
+            return distribuidos.map { jugador ->
+                val posicionGuardada =
+                    posicionesTacticas[jugador.id]
+
+                if (posicionGuardada != null) {
+                    jugador.copy(
+                        x = posicionGuardada.x,
+                        y = posicionGuardada.y,
+                    )
+                } else {
+                    jugador
+                }
+            }
+        }
+
+    val suplentesCancha: List<JugadorCanchaUi>
+        get() =
+            suplentes.map { jugador ->
+                JugadorCanchaUi(
+                    id = jugador.id,
+                    nombre = jugador.nombre,
+                    dorsal = jugador.dorsal,
+                    posicion = jugador.posicion,
+                    titular = false,
+                    x = 0.5f,
+                    y = 0.5f,
+                )
             }
 
     val cantidadTitulares: Int
@@ -163,9 +234,17 @@ class AlineacionViewModel @Inject constructor(
                     /*
                      * US-016:
                      *
-                     * SOLO pueden formar parte de
-                     * la alineación quienes hayan
-                     * confirmado la convocatoria.
+                     * Hay dos formas válidas de llegar a la alineación:
+                     *
+                     * 1. Flujo convocatoria:
+                     *    solo entran quienes respondieron CONFIRMADO.
+                     *
+                     * 2. Flujo "Nuevo partido":
+                     *    los jugadores ya fueron guardados directamente
+                     *    en la subcolección convocados.
+                     *
+                     * Si no existen respuestas de convocatoria y sí hay
+                     * convocados, usamos esos convocados como base.
                      */
                     val confirmados =
                         respuestas.filter {
@@ -190,66 +269,83 @@ class AlineacionViewModel @Inject constructor(
                                 jugador.id
                             }
 
-                    /*
-                     * Primera carga:
-                     *
-                     * 1. Si el jugador ya estaba en
-                     *    convocados, conservamos dorsal,
-                     *    posición y titularidad.
-                     *
-                     * 2. Si todavía no existe allí,
-                     *    empieza como suplente.
-                     *
-                     * Después conservamos la edición
-                     * local del entrenador.
-                     */
+                    val usarConvocadosDirectos =
+                        respuestas.isEmpty() &&
+                                convocados.isNotEmpty()
+
                     val jugadoresAlineacion =
-                        confirmados.map {
-                                respuesta ->
+                        if (usarConvocadosDirectos) {
 
-                            val jugadorGuardado =
-                                convocadosPorId[
-                                    respuesta.jugadorId
-                                ]
+                            convocados.map {
+                                    jugadorGuardado ->
 
-                            val jugadorActual =
-                                actualesPorId[
-                                    respuesta.jugadorId
-                                ]
+                                val jugadorActual =
+                                    actualesPorId[
+                                        jugadorGuardado.id
+                                    ]
 
-                            when {
-
-                                alineacionInicializada &&
-                                        jugadorActual != null -> {
-
+                                if (
+                                    alineacionInicializada &&
+                                    jugadorActual != null
+                                ) {
                                     jugadorActual.copy(
                                         nombre =
-                                            respuesta.nombre
+                                            jugadorGuardado.nombre
                                     )
+                                } else {
+                                    jugadorGuardado
                                 }
+                            }
 
-                                jugadorGuardado != null -> {
+                        } else {
 
-                                    jugadorGuardado.copy(
-                                        nombre =
-                                            respuesta.nombre
-                                    )
-                                }
+                            confirmados.map {
+                                    respuesta ->
 
-                                else -> {
+                                val jugadorGuardado =
+                                    convocadosPorId[
+                                        respuesta.jugadorId
+                                    ]
 
-                                    JugadorConvocado(
-                                        id =
-                                            respuesta.jugadorId,
-                                        nombre =
-                                            respuesta.nombre,
-                                        dorsal =
-                                            respuesta.dorsal,
-                                        titular =
-                                            false,
-                                        posicion =
-                                            null,
-                                    )
+                                val jugadorActual =
+                                    actualesPorId[
+                                        respuesta.jugadorId
+                                    ]
+
+                                when {
+
+                                    alineacionInicializada &&
+                                            jugadorActual != null -> {
+
+                                        jugadorActual.copy(
+                                            nombre =
+                                                respuesta.nombre
+                                        )
+                                    }
+
+                                    jugadorGuardado != null -> {
+
+                                        jugadorGuardado.copy(
+                                            nombre =
+                                                respuesta.nombre
+                                        )
+                                    }
+
+                                    else -> {
+
+                                        JugadorConvocado(
+                                            id =
+                                                respuesta.jugadorId,
+                                            nombre =
+                                                respuesta.nombre,
+                                            dorsal =
+                                                respuesta.dorsal,
+                                            titular =
+                                                false,
+                                            posicion =
+                                                null,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -309,6 +405,9 @@ class AlineacionViewModel @Inject constructor(
 
         setState {
 
+            val nuevoEstadoTitular =
+                !jugador.titular
+
             copy(
                 jugadores =
                     jugadores.map {
@@ -321,13 +420,20 @@ class AlineacionViewModel @Inject constructor(
 
                             actual.copy(
                                 titular =
-                                    !actual.titular
+                                    nuevoEstadoTitular
                             )
 
                         } else {
 
                             actual
                         }
+                    },
+
+                posicionesTacticas =
+                    if (nuevoEstadoTitular) {
+                        posicionesTacticas
+                    } else {
+                        posicionesTacticas - jugadorId
                     },
 
                 mensaje = null,
@@ -370,6 +476,90 @@ class AlineacionViewModel @Inject constructor(
 
                             jugador
                         }
+                    }
+            )
+        }
+    }
+
+
+    // =========================================================
+    // PIZARRA TÁCTICA
+    // =========================================================
+
+    /**
+     * Actualiza la posición visual de un titular cuando el entrenador
+     * lo arrastra sobre la cancha.
+     *
+     * X e Y son coordenadas normalizadas entre 0f y 1f.
+     */
+    fun moverJugadorEnCancha(
+        jugadorId: String,
+        x: Float,
+        y: Float,
+    ) {
+
+        val esTitular =
+            currentState.titulares.any {
+                it.id == jugadorId
+            }
+
+        if (!esTitular) {
+            return
+        }
+
+        setState {
+            copy(
+                posicionesTacticas =
+                    posicionesTacticas +
+                            (
+                                    jugadorId to
+                                            PosicionTacticaUi(
+                                                x = x.coerceIn(
+                                                    0.05f,
+                                                    0.95f
+                                                ),
+                                                y = y.coerceIn(
+                                                    0.05f,
+                                                    0.95f
+                                                ),
+                                            )
+                                    )
+            )
+        }
+    }
+
+
+    /**
+     * Restaura la distribución visual 4-3-3 para los titulares actuales.
+     */
+    fun aplicarFormacion433() {
+
+        val base =
+            currentState.titulares.map { jugador ->
+                JugadorCanchaUi(
+                    id = jugador.id,
+                    nombre = jugador.nombre,
+                    dorsal = jugador.dorsal,
+                    posicion = jugador.posicion,
+                    titular = true,
+                    x = 0.5f,
+                    y = 0.5f,
+                )
+            }
+
+        val distribuidos =
+            posiciones433(base)
+
+        setState {
+            copy(
+                posicionesTacticas =
+                    distribuidos.associate {
+                            jugador ->
+                        jugador.id to
+                                PosicionTacticaUi(
+                                    x = jugador.x,
+                                    y = jugador.y,
+                                )
                     }
             )
         }
@@ -578,3 +768,4 @@ class AlineacionViewModel @Inject constructor(
         }
     }
 }
+

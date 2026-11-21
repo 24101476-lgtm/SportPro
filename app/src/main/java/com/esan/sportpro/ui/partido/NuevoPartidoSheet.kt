@@ -172,7 +172,7 @@ fun NuevoPartidoSheet(state: PartidosUiState, form: FormularioPartido, viewModel
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ColoresPartido.Verde),
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-                    ) { Text("Crear partido") }
+                    ) { Text("Armar equipo") }
                 }
             }
         }

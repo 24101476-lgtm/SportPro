@@ -13,6 +13,9 @@ sealed interface ResultadoSesion {
     data object CredencialesIncorrectas : ResultadoSesion
     data object CorreoSinVerificar : ResultadoSesion
     data object CuentaDesactivada : ResultadoSesion
+
+    /** Cuenta de entrenador que un administrador todavía no aprueba. */
+    data object CuentaPendiente : ResultadoSesion
     data object SinConexion : ResultadoSesion
     data class Error(val mensaje: String) : ResultadoSesion
 }

@@ -235,7 +235,7 @@ object ReglasHistorial {
      * Criterio 5: el jugador ve solo su historial; el padre, el de sus hijos con vínculo aprobado;
      * el entrenador, el de los equipos que dirige; el administrador, el de toda la academia.
      *
-     * Un equipo sin entrenador asignado ([Equipo.entrenadorNombre] vacío) queda visible para todos
+     * Un equipo sin entrenador asignado (sin cuenta ni nombre) queda visible para todos
      * los entrenadores de la academia, para no dejar a sus jugadores sin seguimiento.
      */
     fun puedeVer(
@@ -246,15 +246,10 @@ object ReglasHistorial {
     ): Boolean = when (perfil.rol) {
         UserRole.ADMINISTRADOR -> jugador.academiaId.isBlank() || jugador.academiaId == perfil.academiaId
         UserRole.ENTRENADOR -> equipo != null && equipo.id == jugador.equipoId &&
-            (equipo.entrenadorNombre.isBlank() || normalizar(equipo.entrenadorNombre) == normalizar(perfil.nombre))
+            (equipo.sinEntrenador() || equipo.dirigidoPor(perfil.uid, perfil.nombre))
         UserRole.PADRE_DE_FAMILIA -> vinculaciones.any {
             it.jugadorId == jugador.id && it.padreUid == perfil.uid && it.aprobada
         }
         UserRole.JUGADOR -> jugador.usuarioUid.isNotBlank() && jugador.usuarioUid == perfil.uid
     }
-
-    private fun normalizar(texto: String): String =
-        Normalizer.normalize(texto.trim().lowercase(), Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-            .replace(Regex("\\s+"), " ")
 }

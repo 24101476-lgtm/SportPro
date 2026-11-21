@@ -42,7 +42,8 @@ data class RegistroUiState(
 /** Eventos de un solo disparo: navegación al login y mensajes para el Snackbar. */
 sealed interface RegistroEvent {
     /** La cuenta se creó y el correo de verificación se envió: se vuelve al login (US-001). */
-    data object CuentaCreada : RegistroEvent
+    /** [pendienteAprobacion]: cuenta de entrenador que debe aprobar un administrador. */
+    data class CuentaCreada(val pendienteAprobacion: Boolean = false) : RegistroEvent
 
     data class Snackbar(val mensaje: String) : RegistroEvent
 }
@@ -215,7 +216,8 @@ class RegistroUsuarioViewModel @Inject constructor(
                         rol = requireNotNull(rol),
                         // Solo los jugadores pueden quedar marcados como menores de edad.
                         esMenor = rol == UserRole.JUGADOR && ValidacionRegistro.esMenor(fecha),
-                        estado = EstadoUsuario.ACTIVO,
+                        // El entrenador queda pendiente hasta que un administrador lo apruebe.
+                        estado = if (rol == UserRole.ENTRENADOR) EstadoUsuario.PENDIENTE else EstadoUsuario.ACTIVO,
                         clubId = null,
                     )
 
@@ -240,7 +242,7 @@ class RegistroUsuarioViewModel @Inject constructor(
                     runCatching { usuarioRepository.enviarCorreoVerificacion() }
 
                     setState { copy(isLoading = false) }
-                    sendEvent(RegistroEvent.CuentaCreada)
+                    sendEvent(RegistroEvent.CuentaCreada(pendienteAprobacion = rol == UserRole.ENTRENADOR))
                 }
             }
         }

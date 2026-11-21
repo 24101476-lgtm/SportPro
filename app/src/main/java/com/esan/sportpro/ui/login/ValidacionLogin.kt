@@ -6,6 +6,7 @@ object MensajesLogin {
     const val CREDENCIALES_INCORRECTAS = "Correo o contraseña incorrectos"
     const val CORREO_SIN_VERIFICAR = "Debes verificar tu correo"
     const val CUENTA_DESACTIVADA = "Cuenta desactivada. Contacta al administrador de tu academia"
+    const val CUENTA_PENDIENTE = "Tu cuenta de entrenador está pendiente de aprobación del administrador de tu academia"
     const val SIN_CONEXION = "Sin conexión. Verifica tu red e inténtalo nuevamente"
 
     /**

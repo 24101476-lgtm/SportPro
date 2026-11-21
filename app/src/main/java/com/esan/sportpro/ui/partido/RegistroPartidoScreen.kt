@@ -179,10 +179,14 @@ fun RegistroPartidoScreen(
                         item { ControlTiempo(controles, state, partido) { viewModel.abrirHoja(it) } }
                     }
                     item { TituloSeccion("Registrar evento", "Toca un evento: minuto y equipo ya vienen cargados") }
+                    val conteo = state.eventos
+                        .filter { it.estado == com.esan.sportpro.domain.partido.EstadoEvento.VIGENTE }
+                        .groupingBy { it.tipoId }
+                        .eachCount()
                     items(eventos.chunked(3)) { fila ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             fila.forEach { tipo ->
-                                BotonPaleta(tipo, Modifier.weight(1f)) { viewModel.abrirHoja(tipo) }
+                                BotonPaleta(tipo, conteo[tipo.id] ?: 0, Modifier.weight(1f)) { viewModel.abrirHoja(tipo) }
                             }
                             repeat(3 - fila.size) { Spacer(Modifier.weight(1f)) }
                         }
@@ -695,42 +699,73 @@ private fun ControlTiempo(controles: List<TipoEvento>, state: RegistroUiState, p
     }
 }
 
+/**
+ * Acción de la paleta: símbolo del evento en un recuadro de su color, nombre y, si ya se registró
+ * en este partido, cuántas veces (p. ej. "×2" en tarjetas amarillas).
+ */
 @Composable
-private fun BotonPaleta(tipo: TipoEvento, modifier: Modifier, onClick: () -> Unit) {
+private fun BotonPaleta(tipo: TipoEvento, cantidad: Int, modifier: Modifier, onClick: () -> Unit) {
     val color = colorTipo(tipo.id)
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
-        modifier = modifier.heightIn(min = 92.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.22f)),
+        shadowElevation = 1.dp,
+        modifier = modifier.heightIn(min = 104.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 92.dp)
-                .background(color.copy(alpha = 0.08f))
-                .padding(horizontal = 6.dp, vertical = 12.dp),
+                .heightIn(min = 104.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(color.copy(alpha = 0.04f), color.copy(alpha = 0.14f))
+                    )
+                ),
         ) {
-            if (tipo.id == TiposEvento.TARJETA_AMARILLA || tipo.id == TiposEvento.TARJETA_ROJA) {
-                // Tarjeta dibujada con su color real.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(width = 26.dp, height = 36.dp)
-                        .background(color, RoundedCornerShape(4.dp)),
+                        .size(44.dp)
+                        .background(color.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SimboloEvento(tipoId = tipo.id, tamano = 24.dp, tinta = color)
+                }
+                Text(
+                    tipo.nombre,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
-            } else {
-                IconoEvento(tipo.id, 40.dp)
             }
-            Text(
-                tipo.nombre,
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                modifier = Modifier.padding(top = 8.dp),
+            if (cantidad > 0) {
+                Text(
+                    "×$cantidad",
+                    color = if (tipo.id == TiposEvento.TARJETA_AMARILLA) Color(0xFF1A1A1A) else Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(color, RoundedCornerShape(50))
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
+            // Franja inferior del color del evento.
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(color)
             )
         }
     }

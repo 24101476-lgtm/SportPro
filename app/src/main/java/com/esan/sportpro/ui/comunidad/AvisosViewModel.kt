@@ -28,7 +28,8 @@ data class AvisosUiState(
     /** Academia del perfil autenticado. La verificación de la academia sigue pendiente (ver Aviso.kt). */
     val academiaId: String = PerfilActual.ACADEMIA_POR_DEFECTO,
     val academiaNombre: String = "Mi academia",
-    val academiaVerificada: Boolean = true,
+    /** Solo el personal de la academia publica avisos (las reglas de Firestore exigen lo mismo). */
+    val academiaVerificada: Boolean = false,
 )
 
 sealed interface AvisosEvent {
@@ -50,7 +51,9 @@ class AvisosViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            sesionRepository.perfilActual()?.let { perfil -> setState { copy(academiaId = perfil.academiaId) } }
+            sesionRepository.perfilActual()?.let { perfil ->
+                setState { copy(academiaId = perfil.academiaId, academiaVerificada = perfil.esStaff) }
+            }
         }
         observar()
     }

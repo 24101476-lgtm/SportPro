@@ -2,6 +2,7 @@ package com.esan.sportpro.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.esan.sportpro.data.notificaciones.SuscripcionPush
 import com.esan.sportpro.domain.cuentas.PerfilActual
 import com.esan.sportpro.domain.cuentas.SesionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +22,7 @@ sealed interface HomeUiState {
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val sesionRepository: SesionRepository,
+    private val suscripcionPush: SuscripcionPush,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Cargando)
@@ -35,6 +37,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val perfil = sesionRepository.perfilActual()
             _uiState.value = if (perfil != null) HomeUiState.Listo(perfil) else HomeUiState.SinPerfil
+            // US-027: el dispositivo recibe los anuncios de su academia, su rol y sus equipos.
+            if (perfil != null) launch { runCatching { suscripcionPush.sincronizar(perfil) } }
         }
     }
 }

@@ -122,8 +122,14 @@ fun RegistroUsuarioScreen(
             when (evento) {
                 is RegistroEvent.Snackbar -> snackbarHostState.showSnackbar(evento.mensaje)
                 // Primero se muestra el mensaje y al terminar se redirige al login.
-                RegistroEvent.CuentaCreada -> {
-                    snackbarHostState.showSnackbar(MensajesRegistro.EXITO)
+                is RegistroEvent.CuentaCreada -> {
+                    snackbarHostState.showSnackbar(
+                        if (evento.pendienteAprobacion) {
+                            MensajesRegistro.EXITO + ". Un administrador debe aprobar tu cuenta de entrenador."
+                        } else {
+                            MensajesRegistro.EXITO
+                        },
+                    )
                     onCuentaCreada()
                 }
             }

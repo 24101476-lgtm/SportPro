@@ -101,6 +101,14 @@ class LoginViewModel @Inject constructor(
                     )
                 }
 
+                is ResultadoSesion.CuentaPendiente -> setState {
+                    copy(
+                        isLoading = false,
+                        correoSinVerificar = false,
+                        errorGeneral = MensajesLogin.CUENTA_PENDIENTE,
+                    )
+                }
+
                 is ResultadoSesion.CuentaDesactivada -> setState {
                     copy(
                         isLoading = false,

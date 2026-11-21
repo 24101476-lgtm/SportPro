@@ -10,6 +10,7 @@ import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.comunidad.ModeracionRepository
 import com.esan.sportpro.data.comunidad.PublicacionRepository
 import com.esan.sportpro.domain.comunidad.Comentario
+import com.esan.sportpro.domain.comunidad.EstadoPublicacion
 import com.esan.sportpro.domain.comunidad.MotivoReporte
 import com.esan.sportpro.domain.comunidad.Publicacion
 import com.esan.sportpro.domain.comunidad.Reporte
@@ -36,9 +37,26 @@ data class PublicacionesUiState(
     val isLoading: Boolean = true,
     val publicacionAbierta: Publicacion? = null,
     val comentarios: List<Comentario> = emptyList(),
+    val uidActual: String? = null,
+    /** Personal de la academia: aprueba o rechaza publicaciones de menores (US-028). */
+    val puedeRevisar: Boolean = false,
+    /** Autores bloqueados por el usuario en esta sesión (se ocultan al instante). */
+    val bloqueados: Set<String> = emptySet(),
 ) {
+    /**
+     * Lo que se ve en el muro. Antes se mostraban a todos también las publicaciones en revisión y
+     * las ocultadas por moderación: ahora solo las ve su autor (y el personal, las que esperan revisión).
+     */
     val publicaciones: List<Publicacion>
         get() = (primeraPagina + paginasAdicionales).distinctBy { it.id }
+            .filter { it.autorUid !in bloqueados }
+            .filter { p ->
+                when (p.estado) {
+                    EstadoPublicacion.PUBLICADA -> true
+                    EstadoPublicacion.EN_REVISION -> p.autorUid == uidActual || (puedeRevisar && p.academiaId == academiaId)
+                    else -> p.autorUid == uidActual
+                }
+            }
 }
 
 sealed interface PublicacionesEvent {
@@ -46,6 +64,8 @@ sealed interface PublicacionesEvent {
     data class Publicada(val imagenesFallidas: Int, val quedoEnRevision: Boolean) : PublicacionesEvent
     data class Error(val mensaje: String) : PublicacionesEvent
     data object Reportada : PublicacionesEvent
+    data object Bloqueado : PublicacionesEvent
+    data class Revisada(val aprobada: Boolean) : PublicacionesEvent
 }
 
 /** US-028 — Frames 131 a 135 (Muro, publicación nueva, detalle/comentarios, en revisión, alerta de contacto). */
@@ -64,10 +84,16 @@ class PublicacionesViewModel @Inject constructor(
         viewModelScope.launch {
             sesionRepository.perfilActual()?.let { perfil ->
                 setState {
-                    copy(academiaId = perfil.academiaId, autorNombre = perfil.nombre, autorEsMenorDeEdad = perfil.esMenor)
+                    copy(
+                        academiaId = perfil.academiaId,
+                        autorNombre = perfil.nombre,
+                        autorEsMenorDeEdad = perfil.esMenor,
+                        puedeRevisar = perfil.esStaff,
+                    )
                 }
             }
             val uid = firebaseAuth.currentUser?.uid
+            setState { copy(uidActual = uid) }
             uidsBloqueados = uid?.let { runCatching { moderacionRepository.obtenerUidsOcultosParaMuro(it) }.getOrNull() }.orEmpty()
             repository.observarPrimeraPagina(currentState.academiaId, uidsBloqueados)
                 .onEach { lista -> setState { copy(primeraPagina = lista, isLoading = false) } }
@@ -172,6 +198,32 @@ class PublicacionesViewModel @Inject constructor(
 
     fun reportarComentario(comentarioId: String, publicacionId: String, autorUid: String, motivo: MotivoReporte, detalle: String?) =
         reportar(TipoContenidoReportado.COMENTARIO, comentarioId, publicacionId, autorUid, esMenor = false, motivo, detalle)
+
+    /** US-030: bloquear al autor. Sus publicaciones dejan de verse de inmediato y en adelante. */
+    fun bloquearAutor(autorUid: String) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (autorUid == uid) return
+        viewModelScope.launch {
+            runCatching { moderacionRepository.bloquear(uid, autorUid) }
+                .onSuccess {
+                    uidsBloqueados = uidsBloqueados + autorUid
+                    setState { copy(bloqueados = bloqueados + autorUid) }
+                    sendEvent(PublicacionesEvent.Bloqueado)
+                }
+                .onFailure { sendEvent(PublicacionesEvent.Error(it.message ?: "No se pudo bloquear")) }
+        }
+    }
+
+    /** US-028: el personal aprueba o rechaza una publicación de un menor que está en revisión. */
+    fun revisarPublicacion(publicacionId: String, aprobar: Boolean) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (!currentState.puedeRevisar) return
+        viewModelScope.launch {
+            runCatching { repository.revisar(publicacionId, aprobar, uid) }
+                .onSuccess { sendEvent(PublicacionesEvent.Revisada(aprobar)) }
+                .onFailure { sendEvent(PublicacionesEvent.Error(it.message ?: "No se pudo revisar la publicación")) }
+        }
+    }
 
     private fun reportar(
         tipo: TipoContenidoReportado,

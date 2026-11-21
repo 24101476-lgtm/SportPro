@@ -117,6 +117,8 @@ fun MuroScreen(
                             onReaccionar = { tipo -> viewModel.reaccionar(publicacion.id, tipo) },
                             onReportar = { onReportar(publicacion.id, publicacion.autorUid, publicacion.autorEsMenorDeEdad) },
                             onEliminar = { viewModel.eliminarPublicacion(publicacion.id) },
+                            onBloquear = { viewModel.bloquearAutor(publicacion.autorUid) },
+                            onRevisar = if (state.puedeRevisar) ({ aprobar -> viewModel.revisarPublicacion(publicacion.id, aprobar) }) else null,
                         )
                     }
                     item {

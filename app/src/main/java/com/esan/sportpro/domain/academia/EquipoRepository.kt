@@ -8,6 +8,9 @@ interface EquipoRepository {
     /** Equipos de la academia (activos e inactivos), ordenados por categoría y nombre. */
     fun observarEquipos(academiaId: String): Flow<List<Equipo>>
 
+    /** Cuentas activas con rol Entrenador de la academia, para asignarlas a un equipo. */
+    fun observarEntrenadores(academiaId: String): Flow<List<EntrenadorCuenta>>
+
     /**
      * Crea el equipo si [esNuevo] (por defecto, cuando [Equipo.id] está vacío); si no, actualiza
      * nombre, categoría y entrenador. Al crear con un id ya reservado ([nuevoId]) se usa ese id.

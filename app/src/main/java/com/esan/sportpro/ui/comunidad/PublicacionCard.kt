@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
@@ -60,8 +61,13 @@ fun PublicacionCard(
     onReportar: () -> Unit,
     onEliminar: () -> Unit,
     modifier: Modifier = Modifier,
+    /** US-030: bloquear al autor (no se ofrece sobre las publicaciones propias). */
+    onBloquear: (() -> Unit)? = null,
+    /** US-028: el personal aprueba (`true`) o rechaza (`false`) una publicación en revisión. */
+    onRevisar: ((Boolean) -> Unit)? = null,
 ) {
     var menuAbierto by remember { mutableStateOf(false) }
+    var confirmarBloqueo by remember { mutableStateOf(false) }
     val esAutor = publicacion.autorUid == uidActual
 
     TarjetaSportPro(modifier = modifier) {
@@ -98,6 +104,13 @@ fun PublicacionCard(
                         leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null) },
                         onClick = { menuAbierto = false; onReportar() },
                     )
+                    if (!esAutor && onBloquear != null) {
+                        DropdownMenuItem(
+                            text = { Text("Bloquear a ${publicacion.autorNombre.substringBefore(" ").ifBlank { "este usuario" }}") },
+                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null) },
+                            onClick = { menuAbierto = false; confirmarBloqueo = true },
+                        )
+                    }
                     if (esAutor) {
                         DropdownMenuItem(
                             text = { Text("Eliminar") },
@@ -114,12 +127,43 @@ fun PublicacionCard(
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.padding(top = 8.dp),
                 ) {
-                    Text(
-                        "En revisión: pendiente de aprobación del entrenador por tratarse de una cuenta de menor de edad",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            "En revisión: pendiente de aprobación del entrenador por tratarse de una cuenta de menor de edad",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (onRevisar != null && !esAutor) {
+                            Row(
+                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 6.dp),
+                            ) {
+                                androidx.compose.material3.Button(onClick = { onRevisar(true) }) { Text("Aprobar") }
+                                androidx.compose.material3.OutlinedButton(onClick = { onRevisar(false) }) { Text("Rechazar") }
+                            }
+                        }
+                    }
                 }
+            }
+
+            if (confirmarBloqueo && onBloquear != null) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmarBloqueo = false },
+                    title = { Text("Bloquear a ${publicacion.autorNombre}") },
+                    text = {
+                        Text(
+                            "Dejarás de ver sus publicaciones y comentarios. Puedes desbloquearlo después en " +
+                                "Comunidad › Usuarios bloqueados.",
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { confirmarBloqueo = false; onBloquear() }) {
+                            Text("Bloquear")
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { confirmarBloqueo = false }) { Text("Cancelar") }
+                    },
+                )
             }
 
             Text(publicacion.texto, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))

@@ -102,6 +102,8 @@ fun PublicacionDetalleScreen(
                     onReaccionar = { tipo -> viewModel.reaccionar(publicacion.id, tipo) },
                     onReportar = { onReportarPublicacion(publicacion.id, publicacion.autorUid, publicacion.autorEsMenorDeEdad) },
                     onEliminar = { viewModel.eliminarPublicacion(publicacion.id); onVolver() },
+                    onBloquear = { viewModel.bloquearAutor(publicacion.autorUid); onVolver() },
+                    onRevisar = if (state.puedeRevisar) ({ aprobar -> viewModel.revisarPublicacion(publicacion.id, aprobar) }) else null,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             }

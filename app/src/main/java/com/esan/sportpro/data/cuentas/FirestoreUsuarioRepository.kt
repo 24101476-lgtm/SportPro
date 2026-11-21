@@ -1,5 +1,6 @@
 package com.esan.sportpro.data.cuentas
 
+import com.esan.sportpro.data.esperarConfirmacion
 import com.esan.sportpro.domain.cuentas.ResultadoAuth
 import com.esan.sportpro.domain.cuentas.Usuario
 import com.esan.sportpro.domain.cuentas.UsuarioRepository
@@ -10,6 +11,7 @@ import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -119,7 +121,13 @@ class FirestoreUsuarioRepository @Inject constructor(
     override suspend fun enviarCorreoVerificacion() {
         withContext(Dispatchers.IO) {
             val usuario = auth.currentUser ?: error("No hay una sesión activa para verificar el correo")
-            usuario.sendEmailVerification().await()
+            try {
+                usuario.sendEmailVerification().await()
+            } finally {
+                // US-002: la cuenta recién creada no debe quedar con la sesión abierta. Antes, al
+                // reabrir la app se entraba a Inicio sin haber verificado el correo.
+                auth.signOut()
+            }
         }
     }
 
@@ -142,6 +150,38 @@ class FirestoreUsuarioRepository @Inject constructor(
             )
             usuarios.document(usuario.uid).set(datos).await()
         }
+    }
+
+    override fun observarEntrenadoresPendientes(
+        academiaId: String,
+    ): kotlinx.coroutines.flow.Flow<List<com.esan.sportpro.domain.academia.EntrenadorCuenta>> =
+        kotlinx.coroutines.flow.callbackFlow {
+            // Las reglas solo dejan listar cuentas del propio club: se filtra por clubId.
+            val registro = usuarios
+                .whereEqualTo("rol", "ENTRENADOR")
+                .whereEqualTo("estado", com.esan.sportpro.domain.cuentas.EstadoUsuario.PENDIENTE.name)
+                .whereEqualTo("clubId", com.esan.sportpro.domain.cuentas.PerfilActual.clubIdDe(academiaId))
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val lista = snapshot?.documents.orEmpty().map { doc ->
+                        val nombre = "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
+                        com.esan.sportpro.domain.academia.EntrenadorCuenta(
+                            uid = doc.id,
+                            nombre = listOf(nombre, doc.getString("correo").orEmpty()).filter { it.isNotBlank() }.joinToString(" · "),
+                        )
+                    }
+                    trySend(lista)
+                }
+            awaitClose { registro.remove() }
+        }
+
+    override suspend fun resolverEntrenador(uid: String, aprobar: Boolean): Boolean {
+        val estado = if (aprobar) com.esan.sportpro.domain.cuentas.EstadoUsuario.ACTIVO
+        else com.esan.sportpro.domain.cuentas.EstadoUsuario.DESACTIVADO
+        return usuarios.document(uid).update("estado", estado.name).esperarConfirmacion()
     }
 
     override suspend fun marcarCodigoInvitacionUsado(codigo: String) {

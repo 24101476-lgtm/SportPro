@@ -67,6 +67,10 @@ class FirestoreSesionRepository @Inject constructor(
                 auth.signOut()
                 return@withContext ResultadoSesion.CuentaDesactivada
             }
+            if (estado == EstadoUsuario.PENDIENTE.name) {
+                auth.signOut()
+                return@withContext ResultadoSesion.CuentaPendiente
+            }
             if (estado != EstadoUsuario.ACTIVO.name) {
                 auth.signOut()
                 return@withContext ResultadoSesion.CuentaDesactivada
@@ -114,7 +118,19 @@ class FirestoreSesionRepository @Inject constructor(
         }
     }
 
-    override fun haySesionActiva(): Boolean = auth.currentUser != null
+    /**
+     * US-002: solo cuenta como sesión abierta una cuenta con el correo verificado. Una sesión que
+     * quedó abierta sin verificar (versiones anteriores no la cerraban tras el registro) se cierra y
+     * se pide iniciar sesión, donde se vuelve a consultar la verificación.
+     */
+    override fun haySesionActiva(): Boolean {
+        val usuario = auth.currentUser ?: return false
+        if (!usuario.isEmailVerified) {
+            auth.signOut()
+            return false
+        }
+        return true
+    }
 
     override suspend fun perfilActual(): PerfilActual? = withContext(Dispatchers.IO) {
         val uid = auth.currentUser?.uid ?: return@withContext null

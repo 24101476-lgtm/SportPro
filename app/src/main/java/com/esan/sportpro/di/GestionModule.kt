@@ -25,6 +25,12 @@ abstract class GestionModule {
 
     @Binds
     @Singleton
+    abstract fun bindAcademiaRepository(
+        impl: com.esan.sportpro.data.academia.FirestoreAcademiaRepository,
+    ): com.esan.sportpro.domain.academia.AcademiaRepository
+
+    @Binds
+    @Singleton
     abstract fun bindJugadorRepository(impl: FirestoreJugadorRepository): JugadorRepository
 
     @Binds

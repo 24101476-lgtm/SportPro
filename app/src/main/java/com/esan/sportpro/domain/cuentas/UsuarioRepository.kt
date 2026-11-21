@@ -41,7 +41,7 @@ interface UsuarioRepository {
      */
     suspend fun recuperarCuentaSinPerfil(correo: String, password: String): String?
 
-    /** Envía el correo de verificación al usuario recién creado. */
+    /** Envía el correo de verificación al usuario recién creado y cierra su sesión. */
     suspend fun enviarCorreoVerificacion()
 
     /** Escribe el perfil en `usuarios/{uid}`. */
@@ -53,4 +53,13 @@ interface UsuarioRepository {
 
     /** Marca el código de invitación como usado para que no se pueda reutilizar. */
     suspend fun marcarCodigoInvitacionUsado(codigo: String)
+
+    /** Cuentas de entrenador de la academia que esperan la aprobación del administrador. */
+    fun observarEntrenadoresPendientes(academiaId: String): kotlinx.coroutines.flow.Flow<List<com.esan.sportpro.domain.academia.EntrenadorCuenta>>
+
+    /**
+     * El administrador aprueba (queda ACTIVO) o rechaza (queda DESACTIVADO) una cuenta de entrenador.
+     * @return `true` si el servidor confirmó, `false` si quedó pendiente por falta de conexión.
+     */
+    suspend fun resolverEntrenador(uid: String, aprobar: Boolean): Boolean
 }

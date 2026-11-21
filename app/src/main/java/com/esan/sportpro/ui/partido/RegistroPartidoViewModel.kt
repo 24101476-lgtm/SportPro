@@ -10,6 +10,7 @@ import com.esan.sportpro.domain.ia.EvaluacionRepository
 import com.esan.sportpro.domain.ia.EvaluacionResumen
 import com.esan.sportpro.domain.ia.ResumenPartido
 import com.esan.sportpro.domain.ia.RevisionResumenRepository
+import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.esan.sportpro.domain.partido.ActaPartido
 import com.esan.sportpro.domain.partido.BorradorEvento
 import com.esan.sportpro.domain.partido.CatalogoBase
@@ -28,7 +29,13 @@ import com.esan.sportpro.domain.partido.TipoEvento
 import com.esan.sportpro.domain.partido.TiposEvento
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -67,6 +74,8 @@ data class RegistroUiState(
     val partido: Partido? = null,
     val eventos: List<EventoPartido> = emptyList(),
     val convocados: List<JugadorConvocado> = emptyList(),
+    /** Foto de cada jugador (id → URL) para el selector de la hoja; vacía si el rol no puede leer fichas. */
+    val fotosJugadores: Map<String, String> = emptyMap(),
     val catalogo: List<TipoEvento> = CatalogoBase.tipos,
     val conectado: Boolean = true,
     val ahoraMs: Long = System.currentTimeMillis(),
@@ -163,6 +172,7 @@ class RegistroPartidoViewModel @Inject constructor(
     private val partidoEnCurso: PartidoEnCursoStore,
     private val revisionResumen: RevisionResumenRepository,
     private val evaluaciones: EvaluacionRepository,
+    private val jugadorRepository: JugadorRepository,
 ) : BaseViewModel<RegistroUiState, RegistroEvento>(RegistroUiState(uid = repo.uidActual)) {
 
     val partidoId: String = checkNotNull(savedStateHandle["partidoId"])
@@ -198,6 +208,7 @@ class RegistroPartidoViewModel @Inject constructor(
                 .catch { e -> setState { copy(error = describirErrorFirestore(e)) } }
                 .collect { setState { copy(convocados = it) } }
         }
+        observarFotos()
         viewModelScope.launch {
             repo.observarCatalogo().collect { setState { copy(catalogo = it) } }
         }
@@ -694,4 +705,26 @@ class RegistroPartidoViewModel @Inject constructor(
 
     private fun requiereEquipo(tipo: TipoEvento) =
         tipo.requiere(Campos.EQUIPO) || tipo.requiere(Campos.JUGADOR) || tipo.requiere(Campos.JUGADOR_SALE)
+
+    /**
+     * Fotos de las fichas de la academia: solo el personal puede leer `jugadores`, así que
+     * para otros roles (o sin red) la hoja muestra iniciales.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observarFotos() {
+        viewModelScope.launch {
+            repo.observarPartido(partidoId)
+                .map { it?.academiaId }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .flatMapLatest { academiaId ->
+                    if (academiaId.isBlank()) flowOf(emptyMap())
+                    else jugadorRepository.observarJugadores(academiaId)
+                        .map { lista -> lista.filter { it.fotoUrl.isNotBlank() }.associate { it.id to it.fotoUrl } }
+                        .catch { emit(emptyMap()) }
+                }
+                .catch { }
+                .collect { fotos -> setState { copy(fotosJugadores = fotos) } }
+        }
+    }
 }

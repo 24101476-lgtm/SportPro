@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,6 +102,11 @@ fun JugadoresScreen(
     // US-007: el padre de familia ve aquí a sus hijos vinculados (con su propio ViewModel).
     if (state.esPadre) {
         MisHijosScreen(modifier = modifier)
+        return
+    }
+    // US-006: el jugador ve aquí su propio perfil (con su ViewModel).
+    if (state.esJugador) {
+        MiPerfilScreen(modifier = modifier)
         return
     }
 
@@ -578,6 +584,15 @@ private fun FormularioJugadorContenido(
             onQuitarFotoNueva = if (formulario.fotoNueva != null) viewModel::quitarFotoNueva else null,
         )
 
+        // US-006: con la cuenta enlazada, el jugador ve su perfil, su historial, sus convocatorias
+        // y el partido en vivo desde su propia cuenta.
+        Seccion("Cuenta del jugador en la app")
+        SelectorCuentaJugador(
+            cuentas = state.cuentasDisponibles,
+            seleccionada = formulario.usuarioUid,
+            onElegir = viewModel::onCuentaElegida,
+        )
+
         Seccion("Datos personales")
         CampoFormulario(
             valor = datos.nombres,
@@ -790,4 +805,56 @@ private fun FormularioJugadorContenido(
 @Composable
 private fun ErrorTexto(texto: String) {
     Text(texto, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+}
+
+/** Lista desplegable con las cuentas de rol Jugador libres (o la ya enlazada a esta ficha). */
+@Composable
+private fun SelectorCuentaJugador(
+    cuentas: List<com.esan.sportpro.domain.jugadores.CuentaJugador>,
+    seleccionada: String,
+    onElegir: (String?) -> Unit,
+) {
+    var abierto by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val actual = cuentas.firstOrNull { it.uid == seleccionada }
+    Column {
+        androidx.compose.material3.OutlinedButton(
+            onClick = { abierto = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    actual != null -> "${actual.nombre.ifBlank { actual.correo }} · ${actual.correo}"
+                    seleccionada.isNotBlank() -> "Cuenta enlazada (no disponible en la lista)"
+                    else -> "Sin cuenta enlazada"
+                },
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Sin cuenta enlazada") },
+                onClick = { abierto = false; onElegir(null) },
+            )
+            cuentas.forEach { cuenta ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(cuenta.nombre.ifBlank { "Sin nombre" })
+                            Text(cuenta.correo, style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    onClick = { abierto = false; onElegir(cuenta.uid) },
+                )
+            }
+        }
+        Text(
+            if (cuentas.isEmpty()) "No hay cuentas de jugador libres en la academia. El jugador debe registrarse con el rol Jugador."
+            else "Elige la cuenta con la que el jugador entra a la app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
 }

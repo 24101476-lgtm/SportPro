@@ -5,6 +5,8 @@ import com.esan.sportpro.domain.estadisticas.EstadisticaEquipo
 import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
 import com.esan.sportpro.domain.estadisticas.FiltroEstadisticas
 import com.esan.sportpro.domain.estadisticas.GolesPorPartidoPunto
+import com.esan.sportpro.domain.estadisticas.PartidoDeJugador
+import com.esan.sportpro.domain.estadisticas.ResumenPartidos
 import com.esan.sportpro.domain.estadisticas.TipoPartido
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -54,6 +56,8 @@ class StatsRepository @Inject constructor(
         val jugadorId: String?,
         val tipo: String,
         val minutosJugados: Int,
+        /** Minuto del partido en que ocurrió (solo se usa en los goles). */
+        val minuto: Int = 0,
     )
 
     suspend fun obtenerTemporadasDisponibles(equipoId: String): List<String> = runCatching {
@@ -141,7 +145,17 @@ class StatsRepository @Inject constructor(
                 eventos = eventosPorJugador[jugadorId].orEmpty(),
                 partidosDelJugador = eventosPorJugador[jugadorId].orEmpty().map { it.partidoId }.distinct().size,
                 porcentajeAsistencia = asistenciaPorJugador[jugadorId] ?: 0.0,
-            ).copy(fotoUrl = fotosPorJugador[jugadorId].orEmpty())
+            ).let { fila ->
+                val ficha = fichasPlantel[jugadorId]
+                fila.copy(
+                    fotoUrl = fotosPorJugador[jugadorId].orEmpty(),
+                    // runCatching: si un campo antiguo tiene otro tipo, se deja vacío en vez de fallar.
+                    posicion = runCatching { ficha?.getString("posicion") }.getOrNull().orEmpty(),
+                    dorsal = runCatching { ficha?.getLong("dorsal")?.toInt() }.getOrNull(),
+                    fechaNacimiento = runCatching { ficha?.getString("fechaNacimiento") }.getOrNull().orEmpty(),
+                    pieHabil = runCatching { ficha?.getString("pieHabil") }.getOrNull().orEmpty(),
+                )
+            }
         }
 
         val sinAsignar = eventosPorJugador[null].orEmpty()
@@ -262,7 +276,9 @@ class StatsRepository @Inject constructor(
                 val principal = jugador(doc.getString("jugadorId"))
                 when (tipo) {
                     "gol" -> {
-                        resultados += EventoPartido(partidoId, principal, "GOL", 0)
+                        resultados += EventoPartido(
+                            partidoId, principal, "GOL", 0, minuto = (doc.getLong("minuto") ?: 0L).toInt(),
+                        )
                         jugador(doc.getString("jugadorSecundarioId"))?.let {
                             resultados += EventoPartido(partidoId, it, "ASISTENCIA", 0)
                         }
@@ -316,7 +332,42 @@ class StatsRepository @Inject constructor(
             doc.id to nombre.ifBlank { "Jugador sin nombre" }
         }
         val fotos = docs.mapNotNull { doc -> doc.getString("fotoUrl")?.takeIf { it.isNotBlank() }?.let { doc.id to it } }.toMap()
+        fichasPlantel = docs.associateBy { it.id }
         return (nombresConvocados + nombres) to fotos
+    }
+
+    /** Fichas del plantel leídas en la última consulta (posición, dorsal, nacimiento, pie). */
+    private var fichasPlantel: Map<String, com.google.firebase.firestore.DocumentSnapshot> = emptyMap()
+
+    /**
+     * Minuto de cada gol del equipo y partidos de cada jugador en el periodo. Usa los mismos
+     * partidos y eventos vigentes que la tabla, así que los números coinciden con ella.
+     */
+    suspend fun obtenerResumenPartidos(equipoId: String, filtro: FiltroEstadisticas): ResumenPartidos {
+        val partidos = partidosFinalizados(equipoId, filtro)
+        if (partidos.isEmpty()) return ResumenPartidos()
+        val eventos = eventosVigentesDe(partidos.map { it.id })
+        val minutosDeGol = eventos.filter { it.tipo == "GOL" }.map { it.minuto }
+        val porJugador = eventos.filter { it.jugadorId != null }.groupBy { it.jugadorId!! }
+            .mapValues { (_, delJugador) ->
+                val porPartido = delJugador.groupBy { it.partidoId }
+                partidos.filter { it.id in porPartido }
+                    .sortedByDescending { it.fecha }
+                    .map { partido ->
+                        val suyos = porPartido[partido.id].orEmpty()
+                        PartidoDeJugador(
+                            partidoId = partido.id,
+                            fecha = partido.fecha,
+                            rivalNombre = partido.rivalNombre,
+                            golesEquipo = partido.golesEquipo,
+                            golesRival = partido.golesRival,
+                            goles = suyos.count { it.tipo == "GOL" },
+                            asistencias = suyos.count { it.tipo == "ASISTENCIA" },
+                            minutos = suyos.sumOf { it.minutosJugados },
+                        )
+                    }
+            }
+        return ResumenPartidos(minutosDeGol, porJugador)
     }
 
     /** Nombres leídos de `partidos/{id}/convocados` en la última consulta de eventos. */

@@ -40,7 +40,16 @@ data class EstadisticasUiState(
     val equipoSeleccionadoId: String? = null,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
+    /** Minuto de cada gol y partidos de cada jugador (vistas gráficas). */
+    val resumenPartidos: com.esan.sportpro.domain.estadisticas.ResumenPartidos =
+        com.esan.sportpro.domain.estadisticas.ResumenPartidos(),
 ) {
+    /** Equipo elegido, para su nombre y escudo en las cabeceras. */
+    val equipoSeleccionado: Equipo? get() = equipos.firstOrNull { it.id == equipoSeleccionadoId }
+
+    /** Jugadores reales (sin la fila "Sin asignar"). */
+    val jugadoresReales: List<EstadisticaJugador> get() = jugadores.filterNot { it.sinAsignar }
+
     val sinPartidosEnPeriodo: Boolean
         get() = !isLoading && resumenEquipo.partidosJugados == 0
 
@@ -146,6 +155,10 @@ class EstadisticasViewModel @Inject constructor(
                     errorMessage = null,
                 )
             }
+            // Vistas gráficas: se cargan después para no retrasar la tabla.
+            val resumen = runCatching { repository.obtenerResumenPartidos(equipoIdActual, filtro) }
+                .getOrDefault(com.esan.sportpro.domain.estadisticas.ResumenPartidos())
+            setState { copy(resumenPartidos = resumen) }
         }
     }
 

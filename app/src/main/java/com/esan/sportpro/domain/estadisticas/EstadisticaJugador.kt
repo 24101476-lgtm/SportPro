@@ -22,4 +22,10 @@ data class EstadisticaJugador(
     val sinAsignar: Boolean = false,
     /** Foto del perfil (Supabase); vacía si no tiene o si el rol no puede leer la ficha. */
     val fotoUrl: String = "",
+    /** Datos de la ficha para la cabecera del detalle (vacíos si el rol no puede leer la ficha). */
+    val posicion: String = "",
+    val dorsal: Int? = null,
+    /** Fecha de nacimiento ISO (yyyy-MM-dd) tal como se guarda en la ficha. */
+    val fechaNacimiento: String = "",
+    val pieHabil: String = "",
 )

@@ -26,6 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -227,7 +230,10 @@ fun EstadisticasJugadorDetalleScreen(
     }
 }
 
-/** Cabecera oscura: foto grande a la izquierda, dorsal gigante y nombre en dos líneas a la derecha. */
+/**
+ * Cabecera tipo cromo de álbum: la foto del jugador dentro de una tarjeta con marco, dorsal,
+ * escudo y una franja con NOMBRE / APELLIDO, sobre el estadio en blanco y negro.
+ */
 @Composable
 private fun CabeceraJugador(
     jugador: EstadisticaJugador,
@@ -235,18 +241,10 @@ private fun CabeceraJugador(
     onVolver: () -> Unit,
 ) {
     val sinColor = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
-    val partes = jugador.jugadorNombre.trim().split(Regex("\\s+"))
-    val nombre = partes.firstOrNull().orEmpty()
-    // Apellido paterno: en "Nombre Segundo Apellido1 Apellido2" es el penúltimo; con 2 palabras, el último.
-    val apellido = when {
-        partes.size >= 4 -> partes[partes.size - 2]
-        partes.size >= 2 -> partes[1]
-        else -> ""
-    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(360.dp)
+            .height(470.dp)
             .background(PaletaSportPro.Carbon),
     ) {
         androidx.compose.foundation.Image(
@@ -254,66 +252,25 @@ private fun CabeceraJugador(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             colorFilter = sinColor,
-            alpha = 0.35f,
+            alpha = 0.30f,
             modifier = Modifier.fillMaxSize(),
         )
-        // Dorsal gigante, detrás del nombre.
-        jugador.dorsal?.let { dorsal ->
-            Text(
-                "$dorsal",
-                style = EstilosSportPro.NumeroGrande.copy(fontSize = 150.sp, lineHeight = 150.sp),
-                color = PaletaSportPro.Lima,
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 52.dp, end = 18.dp),
-            )
-        }
-        // Foto del jugador a la izquierda, fundida con el fondo.
-        Box(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxHeight(0.86f)
-                .fillMaxWidth(0.58f),
-        ) {
-            FotoRectangular(jugador, Modifier.fillMaxSize(), escalaDeGrises = true, conIniciales = true)
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(0.6f to Color.Transparent, 1f to PaletaSportPro.Carbon.copy(alpha = 0.9f)),
-                ),
-            )
-        }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.55f to Color.Transparent, 1f to PaletaSportPro.Carbon),
-            ),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onVolver) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-            }
-            Spacer(Modifier.weight(1f))
-            equipo?.let { EscudoEquipo(nombre = it.nombre, tamano = 38.dp, url = it.escudoUrl.ifBlank { null }) }
-            Spacer(Modifier.width(10.dp))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to PaletaSportPro.Carbon)))
+        IconButton(onClick = onVolver, modifier = Modifier.padding(8.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
         }
         Column(
-            horizontalAlignment = Alignment.End,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.align(Alignment.Center).padding(top = 8.dp),
         ) {
-            if (jugador.posicion.isNotBlank()) {
-                Text(jugador.posicion, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
-            }
-            Text(nombre.uppercase(), style = MaterialTheme.typography.headlineMedium, color = Color.White, maxLines = 1)
-            if (apellido.isNotBlank()) {
-                Text(apellido.uppercase(), style = MaterialTheme.typography.headlineMedium, color = PaletaSportPro.Lima, maxLines = 1)
-            }
+            CromoJugador(jugador, equipo)
             val chips = listOfNotNull(
                 edad(jugador.fechaNacimiento)?.let { "$it años" },
                 jugador.pieHabil.ifBlank { null }?.let { pie -> if (pie.startsWith("pie", ignoreCase = true)) pie else "Pie ${pie.lowercase()}" },
                 equipo?.categoria?.ifBlank { null },
             )
             if (chips.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 14.dp)) {
                     chips.forEach { texto ->
                         Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.16f), contentColor = Color.White) {
                             Text(texto, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
@@ -325,28 +282,162 @@ private fun CabeceraJugador(
     }
 }
 
-/** Foto rectangular: la subida o la de demostración; si no hay, las iniciales sobre musgo. */
+/**
+ * El cromo: marco con degradado del color del uniforme (o lima/musgo), foto arriba, dorsal y
+ * abreviatura de la posición en la esquina, escudo en la otra y franja inferior con el nombre.
+ */
+@Composable
+private fun CromoJugador(jugador: EstadisticaJugador, equipo: com.esan.sportpro.domain.academia.Equipo?) {
+    val colorEquipo = equipo?.colorUniforme
+        ?.let { hex -> runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull() }
+        ?.takeIf { it != Color.White }
+        ?: PaletaSportPro.Musgo
+    val partes = jugador.jugadorNombre.trim().split(Regex("\\s+"))
+    val nombre = partes.firstOrNull().orEmpty()
+    // Apellido paterno: en "Nombre Segundo Apellido1 Apellido2" es el penúltimo; con 2 o 3 palabras, el segundo.
+    val apellido = when {
+        partes.size >= 4 -> partes[partes.size - 2]
+        partes.size >= 2 -> partes[1]
+        else -> ""
+    }
+    val forma = RoundedCornerShape(18.dp)
+    Box(
+        modifier = Modifier
+            .rotate(-2.5f)
+            .width(236.dp)
+            .aspectRatio(0.70f)
+            .shadow(18.dp, forma)
+            .clip(forma)
+            .background(Brush.linearGradient(listOf(PaletaSportPro.Lima, colorEquipo)))
+            .padding(6.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(Brush.verticalGradient(listOf(colorEquipo, PaletaSportPro.Carbon))),
+    ) {
+        // Franjas diagonales suaves, como el fondo de un cromo.
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val paso = 22.dp.toPx()
+            var x = -size.height
+            while (x < size.width) {
+                drawLine(Color.White.copy(alpha = 0.06f), androidx.compose.ui.geometry.Offset(x, size.height), androidx.compose.ui.geometry.Offset(x + size.height, 0f), 8.dp.toPx())
+                x += paso
+            }
+        }
+        FotoRectangular(
+            jugador,
+            Modifier.fillMaxWidth().fillMaxHeight(0.80f),
+            fondo = Color.Transparent,
+        )
+        Column(Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 6.dp)) {
+            Text(
+                jugador.dorsal?.toString() ?: "–",
+                style = EstilosSportPro.NumeroGrande.copy(
+                    fontSize = 46.sp,
+                    lineHeight = 46.sp,
+                    shadow = androidx.compose.ui.graphics.Shadow(PaletaSportPro.Carbon.copy(alpha = 0.7f), blurRadius = 8f),
+                ),
+                color = PaletaSportPro.Lima,
+            )
+            abreviaturaPosicion(jugador.posicion)?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PaletaSportPro.Carbon,
+                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(PaletaSportPro.Lima).padding(horizontal = 6.dp, vertical = 1.dp),
+                )
+            }
+        }
+        equipo?.let {
+            Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+                EscudoEquipo(nombre = it.nombre, tamano = 36.dp, url = it.escudoUrl.ifBlank { null })
+            }
+        }
+        // Franja inferior con el nombre.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(PaletaSportPro.Carbon)
+                .padding(top = 0.dp, bottom = 8.dp),
+        ) {
+            Box(Modifier.fillMaxWidth().height(4.dp).background(PaletaSportPro.Lima))
+            Text(
+                nombre.uppercase(),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                maxLines = 1,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(
+                apellido.uppercase().ifBlank { nombre.uppercase() },
+                style = MaterialTheme.typography.headlineSmall,
+                color = PaletaSportPro.Lima,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                listOfNotNull(jugador.posicion.ifBlank { null }, equipo?.nombre).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        }
+    }
+}
+
+/** Abreviatura de la posición para la esquina del cromo (POR, DFC, LD, LI, MCD, MC, MCO, EXT, DC). */
+private fun abreviaturaPosicion(posicion: String): String? {
+    val p = posicion.lowercase()
+    return when {
+        p.isBlank() -> null
+        "arquero" in p || "portero" in p -> "POR"
+        "lateral" in p && "izq" in p -> "LI"
+        "lateral" in p -> "LD"
+        "defensa" in p || "central" in p -> "DFC"
+        "volante defensivo" in p -> "MCD"
+        "volante ofensivo" in p -> "MCO"
+        "volante" in p || "medio" in p -> "MC"
+        "extremo" in p -> "EXT"
+        "delantero" in p -> "DC"
+        else -> posicion.take(3).uppercase()
+    }
+}
+
+/** Foto rectangular: la subida o la de demostración; si no hay, una silueta con las iniciales. */
 @Composable
 private fun FotoRectangular(
     jugador: EstadisticaJugador,
     modifier: Modifier,
-    escalaDeGrises: Boolean = false,
-    conIniciales: Boolean = true,
+    fondo: Color = PaletaSportPro.Musgo.copy(alpha = 0.35f),
 ) {
     val modelo = FotosDemoJugadores.modelo(jugador.fotoUrl, jugador.jugadorNombre)
-    Box(modifier.background(PaletaSportPro.Musgo.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+    Box(modifier.background(fondo), contentAlignment = Alignment.BottomCenter) {
         if (modelo != null) {
             AsyncImage(
                 model = modelo,
                 contentDescription = "Foto de ${jugador.jugadorNombre}",
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.TopCenter,
-                colorFilter = if (escalaDeGrises) ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) else null,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (conIniciales) {
+        } else {
+            // Sin foto: silueta de jugador con las iniciales encima.
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = PaletaSportPro.Lima.copy(alpha = 0.28f),
+                modifier = Modifier.fillMaxSize(0.95f),
+            )
             val iniciales = jugador.jugadorNombre.split(" ").mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
-            Text(iniciales.ifBlank { "?" }, style = EstilosSportPro.NumeroMediano, color = PaletaSportPro.Lima)
+            Text(
+                iniciales.ifBlank { "?" },
+                style = EstilosSportPro.NumeroMediano,
+                color = PaletaSportPro.Lima,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
     }
 }

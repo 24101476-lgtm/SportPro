@@ -147,11 +147,14 @@ class StatsRepository @Inject constructor(
                 porcentajeAsistencia = asistenciaPorJugador[jugadorId] ?: 0.0,
             ).let { fila ->
                 val ficha = fichasPlantel[jugadorId]
+                val convocado = convocadosPorJugador[jugadorId]
                 fila.copy(
                     fotoUrl = fotosPorJugador[jugadorId].orEmpty(),
                     // runCatching: si un campo antiguo tiene otro tipo, se deja vacío en vez de fallar.
-                    posicion = runCatching { ficha?.getString("posicion") }.getOrNull().orEmpty(),
-                    dorsal = runCatching { ficha?.getLong("dorsal")?.toInt() }.getOrNull(),
+                    posicion = runCatching { ficha?.getString("posicion") }.getOrNull()?.ifBlank { null }
+                        ?: runCatching { convocado?.getString("posicion") }.getOrNull().orEmpty(),
+                    dorsal = runCatching { ficha?.getLong("dorsal")?.toInt() }.getOrNull()
+                        ?: runCatching { convocado?.getLong("dorsal")?.toInt() }.getOrNull(),
                     fechaNacimiento = runCatching { ficha?.getString("fechaNacimiento") }.getOrNull().orEmpty(),
                     pieHabil = runCatching { ficha?.getString("pieHabil") }.getOrNull().orEmpty(),
                 )
@@ -257,6 +260,7 @@ class StatsRepository @Inject constructor(
     private suspend fun eventosVigentesDe(partidoIds: List<String>): List<EventoPartido> {
         val resultados = mutableListOf<EventoPartido>()
         nombresConvocados = emptyMap()
+        convocadosPorJugador = emptyMap()
         partidoIds.forEach { partidoId ->
             val ref = firestore.collection("partidos").document(partidoId)
             val partido = runCatching { ref.get().await() }.getOrNull() ?: return@forEach
@@ -268,6 +272,8 @@ class StatsRepository @Inject constructor(
             nombresConvocados = nombresConvocados + convocados.associate {
                 it.id to (it.getString("nombre") ?: "Jugador sin nombre")
             }
+            // Respaldo para la cabecera del detalle si no se puede leer la ficha del jugador.
+            convocadosPorJugador = convocadosPorJugador + convocados.associateBy { it.id }
 
             fun jugador(id: String?): String? = id?.takeUnless { it == "NO_IDENTIFICADO" || it == "RIVAL" }
 
@@ -319,13 +325,26 @@ class StatsRepository @Inject constructor(
      * para jugadores y padres se usan los nombres copiados en los convocados de cada partido.
      */
     private suspend fun datosDePlantel(equipoId: String): Pair<Map<String, String>, Map<String, String>> {
-        val docs = runCatching {
+        val delEquipo = runCatching {
             firestore.collection("jugadores")
                 .whereEqualTo("equipoId", equipoId)
                 .get()
                 .await()
                 .documents
         }.getOrDefault(emptyList())
+        // Jugadores que aparecen en los partidos pero hoy están en otro equipo (o se cambiaron):
+        // se leen por id para no perder su foto, dorsal y posición. Firestore admite 10 ids por consulta.
+        val faltantes = (nombresConvocados.keys - delEquipo.map { it.id }.toSet()).toList()
+        val otros = faltantes.chunked(10).flatMap { ids ->
+            runCatching {
+                firestore.collection("jugadores")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), ids)
+                    .get()
+                    .await()
+                    .documents
+            }.getOrDefault(emptyList())
+        }
+        val docs = delEquipo + otros
         val nombres = docs.associate { doc ->
             val nombre = doc.getString("nombre")
                 ?: "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
@@ -335,6 +354,9 @@ class StatsRepository @Inject constructor(
         fichasPlantel = docs.associateBy { it.id }
         return (nombresConvocados + nombres) to fotos
     }
+
+    /** Convocados de los partidos leídos (nombre, dorsal, posición): respaldo de la ficha. */
+    private var convocadosPorJugador: Map<String, com.google.firebase.firestore.DocumentSnapshot> = emptyMap()
 
     /** Fichas del plantel leídas en la última consulta (posición, dorsal, nacimiento, pie). */
     private var fichasPlantel: Map<String, com.google.firebase.firestore.DocumentSnapshot> = emptyMap()

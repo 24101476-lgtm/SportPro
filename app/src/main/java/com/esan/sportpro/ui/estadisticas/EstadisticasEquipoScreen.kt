@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.estadisticas.EstadisticaEquipo
+import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.TarjetaSportPro
@@ -78,11 +78,7 @@ fun EstadisticasEquipoScreen(
                 }
             }
             when {
-                state.isLoading -> Column(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) { CircularProgressIndicator() }
+                state.isLoading -> CargandoSportPro(modifier = Modifier.weight(1f))
 
                 state.sinEquipos -> EstadoVacioModulo(
                     titulo = "Sin equipos",

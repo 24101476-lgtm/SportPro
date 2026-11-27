@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.anuncios.Anuncio
+import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.TarjetaSportPro
@@ -99,11 +99,7 @@ fun AnunciosListaScreen(
                 },
             )
             when {
-                state.isLoading -> Column(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) { CircularProgressIndicator() }
+                state.isLoading -> CargandoSportPro(modifier = Modifier.weight(1f))
 
                 state.anuncios.isEmpty() && state.anunciosUrgentesNoLeidos.isEmpty() -> EstadoVacioModulo(
                     titulo = "Todavía no hay anuncios",

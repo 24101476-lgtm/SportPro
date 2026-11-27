@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -80,6 +79,7 @@ import com.esan.sportpro.ui.common.AvatarIniciales
 import com.esan.sportpro.ui.common.CampoFecha
 import com.esan.sportpro.ui.common.CampoFormulario
 import com.esan.sportpro.ui.common.ChipEstado
+import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.FilaDatoSportPro
 import com.esan.sportpro.ui.common.TarjetaSportPro
@@ -127,11 +127,7 @@ fun JugadoresScreen(
     }
 
     when {
-        state.cargando -> Column(
-            modifier = modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) { CircularProgressIndicator() }
+        state.cargando -> CargandoSportPro(modifier = modifier)
 
         state.error != null -> EmptyStateMessage(mensaje = state.error.orEmpty(), modifier = modifier)
 

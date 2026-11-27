@@ -153,9 +153,9 @@ fun EventoCatalogoFormScreen(
 
             Text(
                 text = if (esEdicion) {
-                    "US-013 · CONFIGURAR EVENTO"
+                    "Configurar evento"
                 } else {
-                    "US-013 · NUEVO EVENTO"
+                    "Nuevo evento"
                 },
                 style =
                     MaterialTheme.typography.labelMedium,

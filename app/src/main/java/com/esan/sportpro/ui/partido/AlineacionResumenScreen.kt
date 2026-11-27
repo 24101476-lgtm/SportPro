@@ -148,7 +148,7 @@ fun AlineacionResumenScreen(
 
                 Text(
                     text =
-                        "US-016 · RESUMEN",
+                        "Resumen",
                     style =
                         MaterialTheme
                             .typography

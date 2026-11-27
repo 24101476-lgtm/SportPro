@@ -146,7 +146,7 @@ fun PartidoProgramarScreen(
 
             item {
                 Text(
-                    text = "US-014 · NUEVO PARTIDO",
+                    text = "Nuevo partido",
                     style =
                         MaterialTheme
                             .typography

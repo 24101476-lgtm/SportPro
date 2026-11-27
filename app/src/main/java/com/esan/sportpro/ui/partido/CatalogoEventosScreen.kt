@@ -137,7 +137,7 @@ fun CatalogoEventosScreen(
 
                     item {
                         Text(
-                            text = "US-013 · LISTA",
+                            text = "Lista",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )

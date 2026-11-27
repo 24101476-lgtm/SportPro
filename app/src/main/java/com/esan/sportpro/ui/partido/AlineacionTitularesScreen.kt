@@ -168,7 +168,7 @@ fun AlineacionTitularesScreen(
 
                         Text(
                             text =
-                                "US-016 · TITULARES",
+                                "Titulares",
                             style =
                                 MaterialTheme
                                     .typography

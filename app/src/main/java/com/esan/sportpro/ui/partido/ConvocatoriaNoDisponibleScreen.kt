@@ -168,7 +168,7 @@ fun ConvocatoriaNoDisponibleScreen(
 
                 Text(
                     text =
-                        "US-015 · RESPUESTA",
+                        "Respuesta",
                     style =
                         MaterialTheme
                             .typography

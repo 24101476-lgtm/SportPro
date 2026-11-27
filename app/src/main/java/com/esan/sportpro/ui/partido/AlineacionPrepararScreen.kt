@@ -202,7 +202,7 @@ fun AlineacionPrepararScreen(
 
                         Text(
                             text =
-                                "US-016 · ALINEACIÓN",
+                                "Alineación",
                             style =
                                 MaterialTheme
                                     .typography

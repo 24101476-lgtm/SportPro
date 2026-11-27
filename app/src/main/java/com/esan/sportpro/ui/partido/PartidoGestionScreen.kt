@@ -243,7 +243,7 @@ fun PartidoGestionScreen(
 
                 Text(
                     text =
-                        "US-014 · REPROGRAMACIÓN",
+                        "Reprogramación",
                     style =
                         MaterialTheme
                             .typography

@@ -164,7 +164,7 @@ fun ConvocatoriaSeguimientoScreen(
 
                             Text(
                                 text =
-                                    "US-014 · SEGUIMIENTO",
+                                    "Seguimiento",
                                 style =
                                     MaterialTheme
                                         .typography

@@ -32,9 +32,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +69,8 @@ import com.esan.sportpro.domain.partido.Partido
 import com.esan.sportpro.domain.partido.ReglasPartido
 import com.esan.sportpro.domain.partido.SituacionJugador
 import com.esan.sportpro.navigation.UserRole
+import com.esan.sportpro.ui.common.CargandoSportPro
+import com.esan.sportpro.ui.common.TarjetaSportPro
 import kotlinx.coroutines.delay
 
 private val TITULOS_PESTANAS = listOf("Cronología", "Alineación", "Estadísticas", "Resumen")
@@ -96,9 +95,7 @@ fun SeguimientoPartidoScreen(
 
         val partido = state.partido
         when (state.acceso) {
-            AccesoSeguimiento.CARGANDO -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            AccesoSeguimiento.CARGANDO -> CargandoSportPro()
 
             AccesoSeguimiento.NO_ENCONTRADO -> MensajeSeguimiento(
                 titulo = "No se encontró el partido",
@@ -384,12 +381,7 @@ private fun FilaEvento(evento: EventoPartido, todos: List<EventoPartido>, partid
         Spacer(Modifier.width(8.dp))
         IconoEvento(evento.tipoId, 36.dp)
         Spacer(Modifier.width(10.dp))
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            modifier = Modifier.weight(1f),
-        ) {
+        TarjetaSportPro(modifier = Modifier.weight(1f)) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(evento.tipoNombre, fontWeight = FontWeight.Bold)
                 val detalle = detalleEvento(evento, partido)
@@ -503,12 +495,7 @@ private fun PestanaEstadisticas(state: SeguimientoUiState, partido: Partido, mod
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            TarjetaSportPro {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -613,7 +600,7 @@ private fun MensajeSeguimiento(titulo: String, detalle: String, onVolver: () -> 
 /** Criterio 5: sin red se sigue mostrando lo último recibido, con la hora de esa actualización. */
 @Composable
 private fun BannerUltimaInformacion(ultimaActualizacionMs: Long?) {
-    Surface(color = Color(0xFFB71C1C), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = com.esan.sportpro.core.theme.PaletaSportPro.Error, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -56,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.core.fecha.FechasSportPro
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
+import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.RegistroSimuladoLegend
@@ -191,9 +190,7 @@ fun MensualidadesGrillaScreen(
 
             when {
                 state.isLoading -> item {
-                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    CargandoSportPro(modifier = Modifier.padding(32.dp))
                 }
                 state.errorMessage != null -> item {
                     Text(state.errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)

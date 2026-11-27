@@ -115,5 +115,5 @@ etiquetadas por rol (Administrador, Entrenador, Jugador, Padre de familia).
 - [`docs/diseno-tecnico-partido-en-vivo.md`](docs/diseno-tecnico-partido-en-vivo.md): registro de eventos en tiempo real, offline y trazabilidad.
 - [`docs/diseno-integracion-ia.md`](docs/diseno-integracion-ia.md): integración segura con el proveedor de IA.
 - [`docs/modelo-datos-gestion.md`](docs/modelo-datos-gestion.md): colecciones de equipos, jugadores y entrenamientos, permisos por rol, criterio de fechas y regla del apoderado.
-- [`docs/guia-estilo-ui.md`](docs/guia-estilo-ui.md): línea gráfica común (tema, componentes, navegación) y lista de revisión para los PR.
+- [`docs/guia-estilo-ui.md`](docs/guia-estilo-ui.md): línea gráfica común (tema, componentes, navegación) y lista de revisión para los PR. **Antes de un PR de UI, revisa la lista de revisión en esa guía.**
 - `firestore.rules`: reglas de seguridad. Copiarlas en Firebase Console → Firestore Database → Reglas → Publicar.

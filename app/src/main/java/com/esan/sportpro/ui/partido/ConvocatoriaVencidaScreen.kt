@@ -11,12 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -27,9 +24,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import java.text.SimpleDateFormat
+import com.esan.sportpro.ui.common.BotonPrincipalSportPro
+import com.esan.sportpro.ui.common.CargandoSportPro
+import com.esan.sportpro.ui.common.TarjetaSportPro
 import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ConvocatoriaVencidaScreen(
@@ -46,18 +44,7 @@ fun ConvocatoriaVencidaScreen(
 
         if (state.cargando) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally,
-                verticalArrangement =
-                    Arrangement.Center
-            ) {
-
-                CircularProgressIndicator()
-            }
+            CargandoSportPro(modifier = Modifier.padding(padding))
 
         } else {
 
@@ -135,15 +122,7 @@ fun ConvocatoriaVencidaScreen(
 
                 state.partido?.let { partido ->
 
-                    Surface(
-                        modifier =
-                            Modifier.fillMaxWidth(),
-                        shape =
-                            MaterialTheme
-                                .shapes
-                                .large,
-                        tonalElevation = 2.dp
-                    ) {
+                    TarjetaSportPro {
 
                         Column(
                             modifier =
@@ -262,17 +241,11 @@ fun ConvocatoriaVencidaScreen(
                         )
                 )
 
-                Button(
-                    onClick =
-                        onFinalizar,
-                    modifier =
-                        Modifier.fillMaxWidth()
-                ) {
-
-                    Text(
-                        "Entendido"
-                    )
-                }
+                BotonPrincipalSportPro(
+                    texto = "Entendido",
+                    onClick = onFinalizar,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

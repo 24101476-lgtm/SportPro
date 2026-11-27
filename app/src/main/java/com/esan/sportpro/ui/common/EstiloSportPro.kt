@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -799,3 +800,31 @@ fun coloresChipSportPro(): androidx.compose.material3.SelectableChipColors =
         selectedContainerColor = MaterialTheme.colorScheme.onBackground,
         selectedLabelColor = MaterialTheme.colorScheme.background,
     )
+
+/** Indicador pequeño para el contenido de un botón mientras guarda o envía. Toma el color del texto del botón. */
+@Composable
+fun IndicadorCargaBoton(modifier: Modifier = Modifier) {
+    CircularProgressIndicator(
+        color = LocalContentColor.current,
+        strokeWidth = 2.dp,
+        strokeCap = StrokeCap.Round,
+        modifier = modifier.size(20.dp),
+    )
+}
+
+/** Aviso de error en línea (formularios, envíos fallidos): caja errorContainer con ícono y mensaje. */
+@Composable
+fun AvisoErrorSportPro(mensaje: String, modifier: Modifier = Modifier) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(mensaje, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,7 +24,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,7 +50,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.jugadores.Jugador
 import com.esan.sportpro.domain.mensualidades.EstadoMensualidad
 import com.esan.sportpro.domain.mensualidades.MedioPago
+import com.esan.sportpro.ui.common.AvisoErrorSportPro
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+import com.esan.sportpro.ui.common.IndicadorCargaBoton
 import com.esan.sportpro.ui.common.RegistroSimuladoLegend
 import com.esan.sportpro.ui.partido.AvatarJugador
 
@@ -162,7 +162,7 @@ fun MensualidadRegistrarScreen(
                             Text(state.montoError ?: "Entre S/ 0.00 y S/ 5000.00")
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.small,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -191,36 +191,27 @@ fun MensualidadRegistrarScreen(
                 isError = state.observacionError != null,
                 supportingText = { Text(state.observacionError ?: "${state.observacion.length}/200") },
                 minLines = 2,
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            state.errorMessage?.let {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer) {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(12.dp),
-                    )
-                }
-            }
+            state.errorMessage?.let { AvisoErrorSportPro(mensaje = it) }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = onCancelar,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                 ) { Text("Cancelar") }
                 Button(
                     onClick = viewModel::guardar,
                     enabled = !state.isSaving,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MaterialTheme.shapes.small,
                     colors = ButtonDefaults.buttonColors(containerColor = colorEstado(state.estadoSeleccionado)),
                     modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                 ) {
                     if (state.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        IndicadorCargaBoton()
                     } else {
                         Text(
                             if (state.registroExistente != null) "Reemplazar" else "Guardar",
@@ -249,7 +240,7 @@ private fun Seccion(titulo: String, contenido: @Composable () -> Unit) {
 @Composable
 private fun SelectorMes(mes: Int, anio: Int, onAnterior: () -> Unit, onSiguiente: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -271,7 +262,7 @@ private fun SelectorMes(mes: Int, anio: Int, onAnterior: () -> Unit, onSiguiente
 @Composable
 private fun AvisoReemplazo(estado: EstadoMensualidad, monto: Double) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.small,
         color = colorEstado(estado).copy(alpha = 0.12f),
         border = BorderStroke(1.dp, colorEstado(estado).copy(alpha = 0.4f)),
     ) {
@@ -300,7 +291,7 @@ private fun OpcionEstado(
     val color = colorEstado(estado)
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.small,
         color = if (seleccionado) color else color.copy(alpha = 0.08f),
         contentColor = if (seleccionado) Color.White else color,
         border = BorderStroke(1.dp, color.copy(alpha = if (seleccionado) 1f else 0.35f)),
@@ -328,7 +319,7 @@ private fun OpcionTexto(texto: String, seleccionado: Boolean, modifier: Modifier
     val color = MaterialTheme.colorScheme.primary
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.small,
         color = if (seleccionado) color.copy(alpha = 0.14f) else Color.Transparent,
         border = BorderStroke(if (seleccionado) 2.dp else 1.dp, if (seleccionado) color else MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.heightIn(min = 48.dp),
@@ -350,7 +341,7 @@ private fun SelectorJugador(
     if (state.jugadorId.isNotBlank()) {
         val foto = state.jugadoresDisponibles.firstOrNull { it.id == state.jugadorId }?.fotoUrl.orEmpty()
         Surface(
-            shape = RoundedCornerShape(18.dp),
+            shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -385,7 +376,7 @@ private fun SelectorJugador(
             )
         },
         singleLine = true,
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth(),
     )
     val consulta = state.busquedaJugador.trim()
@@ -403,7 +394,7 @@ private fun SelectorJugador(
         coincidencias.forEach { jugador ->
             Surface(
                 onClick = { onElegir(jugador) },
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth(),

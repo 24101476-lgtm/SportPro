@@ -1,7 +1,6 @@
 package com.esan.sportpro.ui.mensualidades
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -24,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.EncabezadoModulo
 import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.RegistroSimuladoLegend
@@ -50,9 +49,7 @@ fun PadreMensualidadesScreen(
         modifier = modifier,
     ) { padding ->
         when {
-            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            state.isLoading -> CargandoSportPro(modifier = Modifier.padding(padding))
             state.error != null -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 Encabezado()
                 EstadoVacioModulo(

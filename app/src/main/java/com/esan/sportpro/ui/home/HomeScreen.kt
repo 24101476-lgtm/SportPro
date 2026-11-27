@@ -88,6 +88,8 @@ import com.esan.sportpro.ui.partido.PartidoScreen
 fun HomeScreen(
     onLogout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
+    /** US-003: módulo pedido por deep link (`sportpro://app/{modulo}`), si lo hay. */
+    moduloSolicitado: String? = null,
 ) {
     val estado by viewModel.uiState.collectAsState()
 
@@ -101,13 +103,13 @@ fun HomeScreen(
 
         // Rediseño: los escudos subidos de la academia quedan disponibles para todas las pantallas.
         is HomeUiState.Listo -> com.esan.sportpro.ui.common.ProveedorEscudos(academiaId = actual.perfil.academiaId) {
-            HomeConPerfil(perfil = actual.perfil, onLogout = onLogout)
+            HomeConPerfil(perfil = actual.perfil, onLogout = onLogout, moduloSolicitado = moduloSolicitado)
         }
     }
 }
 
 @Composable
-private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
+private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSolicitado: String? = null) {
     PedirPermisoNotificaciones()
     val pestanas = MenuPrincipal.para(perfil.rol)
     var pestanaId by rememberSaveable { mutableStateOf(pestanas.first().id) }
@@ -116,11 +118,19 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
     // Módulo abierto desde "Más" (null = se ve la lista de accesos).
     var moduloEnMas by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // US-003: ruta no permitida para el rol (p. ej. un deep link a Mensualidades siendo jugador).
+    var sinPermiso by rememberSaveable { mutableStateOf(false) }
+
     // Si cambió el rol (otra cuenta en el mismo dispositivo) y la pestaña guardada ya no existe.
     val pestana = pestanas.firstOrNull { it.id == pestanaId } ?: pestanas.first()
 
     fun abrirModulo(modulo: HomeModule) {
-        val destino = MenuPrincipal.pestanaDe(perfil.rol, modulo) ?: return
+        val destino = MenuPrincipal.pestanaDe(perfil.rol, modulo)
+        if (destino == null) {
+            sinPermiso = true
+            return
+        }
+        sinPermiso = false
         pestanaId = destino.id
         when (destino.tipo) {
             TipoPestana.SECCION -> moduloPorSeccion = moduloPorSeccion + (destino.id to modulo.name)
@@ -129,8 +139,20 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
         }
     }
 
+    // US-003: un deep link abre el módulo pedido, o la pantalla "No tienes permiso…".
+    androidx.compose.runtime.LaunchedEffect(moduloSolicitado) {
+        val pedido = moduloSolicitado?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val modulo = HomeModule.entries.firstOrNull { it.name.equals(pedido, ignoreCase = true) }
+        if (modulo == null) sinPermiso = true else abrirModulo(modulo)
+    }
+
     // Atrás desde cualquier pestaña vuelve a Inicio antes de salir de la app.
     BackHandler(enabled = pestana.tipo != TipoPestana.INICIO && !(pestana.tipo == TipoPestana.MAS && moduloEnMas != null)) {
+        pestanaId = pestanas.first().id
+    }
+    // Declarado después para que tenga prioridad: Atrás desde "sin permiso" vuelve a Inicio.
+    BackHandler(enabled = sinPermiso) {
+        sinPermiso = false
         pestanaId = pestanas.first().id
     }
 
@@ -143,6 +165,7 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
                         onClick = {
                             // Tocar "Más" estando en "Más" vuelve a la lista de accesos.
                             if (item.id == pestana.id && item.tipo == TipoPestana.MAS) moduloEnMas = null
+                            sinPermiso = false
                             pestanaId = item.id
                         },
                         icon = { Icon(iconoPestana(item, perfil.rol), contentDescription = null) },
@@ -161,6 +184,16 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit) {
         },
     ) { padding ->
         val contenido = Modifier.padding(padding)
+        if (sinPermiso) {
+            com.esan.sportpro.ui.common.SinPermisoScreen(
+                onVolverAlInicio = {
+                    sinPermiso = false
+                    pestanaId = pestanas.first().id
+                },
+                modifier = contenido,
+            )
+            return@Scaffold
+        }
         when (pestana.tipo) {
             TipoPestana.INICIO -> InicioScreen(
                 perfil = perfil,

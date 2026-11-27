@@ -7,6 +7,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navDeepLink
 import com.esan.sportpro.ui.home.HomeScreen
 import com.esan.sportpro.ui.login.LoginUsuarioScreen
 import com.esan.sportpro.ui.login.RecuperarContrasenaScreen
@@ -51,8 +52,14 @@ fun SportProNavHost(navController: NavHostController = rememberNavController()) 
                 },
             )
         }
-        composable(NavRoutes.Home.route) {
+        // US-003: deep link sportpro://app/{modulo} (p. ej. sportpro://app/MENSUALIDADES). Si el rol
+        // no tiene ese módulo, HomeScreen muestra "No tienes permiso para ver esta sección".
+        composable(
+            NavRoutes.Home.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "sportpro://app/{modulo}" }),
+        ) { entrada ->
             HomeScreen(
+                moduloSolicitado = entrada.arguments?.getString("modulo"),
                 onLogout = {
                     // US-002: cerrar la sesión de Firebase Auth, no solo navegar.
                     sesionGate.cerrarSesion {

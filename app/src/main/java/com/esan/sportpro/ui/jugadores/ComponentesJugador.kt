@@ -61,7 +61,7 @@ fun InsigniaPosicion(etiqueta: String?, modifier: Modifier = Modifier) {
 
 /** Foto del jugador con un anillo del color de su posición. */
 @Composable
-internal fun FotoConAnillo(url: String?, iniciales: String, posicion: String, tamano: Dp) {
+internal fun FotoConAnillo(url: String?, iniciales: String, posicion: String, tamano: Dp, nombre: String? = null) {
     val anillo = if (posicion.isBlank()) MaterialTheme.colorScheme.outlineVariant else colorPosicion(posicion)
     Box(
         modifier = Modifier
@@ -70,7 +70,7 @@ internal fun FotoConAnillo(url: String?, iniciales: String, posicion: String, ta
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        FotoJugador(url, iniciales, tamano = tamano)
+        FotoJugador(url, iniciales, tamano = tamano, nombre = nombre)
     }
 }
 

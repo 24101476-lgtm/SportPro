@@ -398,7 +398,7 @@ private fun JugadorCard(jugador: Jugador, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            FotoConAnillo(jugador.fotoUrl, jugador.iniciales, jugador.posicion, tamano = 52.dp)
+            FotoConAnillo(jugador.fotoUrl, jugador.iniciales, jugador.posicion, tamano = 52.dp, nombre = jugador.nombreCompleto)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     jugador.nombreCompleto,
@@ -574,7 +574,7 @@ private fun EncabezadoFicha(jugador: Jugador) {
                 .padding(horizontal = 16.dp, vertical = 20.dp),
         ) {
             androidx.compose.foundation.layout.Box {
-                FotoConAnillo(jugador.fotoUrl, jugador.iniciales, jugador.posicion, tamano = 96.dp)
+                FotoConAnillo(jugador.fotoUrl, jugador.iniciales, jugador.posicion, tamano = 96.dp, nombre = jugador.nombreCompleto)
                 jugador.dorsal?.let {
                     androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomEnd)) { DorsalJugador(it, tamano = 40.dp) }
                 }

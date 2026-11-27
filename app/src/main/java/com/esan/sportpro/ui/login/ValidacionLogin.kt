@@ -14,7 +14,7 @@ object MensajesLogin {
      * registrados.
      */
     const val RECUPERACION_ENVIADA =
-        "Si el correo está registrado, te enviaremos un enlace para restablecer tu contraseña"
+        "Si el correo está registrado recibirás un enlace de recuperación"
 
     const val INTENTOS_AGOTADOS = "Demasiados intentos fallidos"
 

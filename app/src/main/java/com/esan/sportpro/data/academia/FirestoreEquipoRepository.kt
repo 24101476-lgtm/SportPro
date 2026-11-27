@@ -49,6 +49,10 @@ class FirestoreEquipoRepository @Inject constructor(
             "categoria" to equipo.categoria,
             "entrenadorNombre" to equipo.entrenadorNombre.trim(),
             "entrenadorUid" to equipo.entrenadorUid,
+            // US-005: rango de años de nacimiento y color de uniforme.
+            "anioMinimo" to equipo.anioMinimo,
+            "anioMaximo" to equipo.anioMaximo,
+            "colorUniforme" to equipo.colorUniforme,
         )
         return if (esNuevo) {
             val documento = if (equipo.id.isBlank()) coleccion.document() else coleccion.document(equipo.id)
@@ -66,6 +70,10 @@ class FirestoreEquipoRepository @Inject constructor(
 
     override suspend fun cambiarEstado(equipoId: String, activo: Boolean): Boolean =
         coleccion.document(equipoId).update("activo", activo).esperarConfirmacion()
+
+    // US-005: solo se llama cuando el equipo no tiene jugadores (lo comprueba el ViewModel).
+    override suspend fun eliminar(equipoId: String): Boolean =
+        coleccion.document(equipoId).delete().esperarConfirmacion()
 
     override fun nuevoId(): String = coleccion.document().id
 

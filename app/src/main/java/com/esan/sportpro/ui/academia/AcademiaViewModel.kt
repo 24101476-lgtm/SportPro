@@ -4,6 +4,9 @@ import androidx.lifecycle.viewModelScope
 import com.esan.sportpro.core.viewmodel.BaseViewModel
 import com.esan.sportpro.data.partido.describirErrorFirestore
 import com.esan.sportpro.domain.academia.CampoEquipo
+import com.esan.sportpro.domain.academia.CategoriasEquipo
+import com.esan.sportpro.domain.academia.MensajesEquipo
+import com.esan.sportpro.domain.jugadores.JugadorRepository
 import com.esan.sportpro.domain.academia.EntrenadorCuenta
 import com.esan.sportpro.domain.academia.Equipo
 import com.esan.sportpro.domain.academia.EquipoRepository
@@ -30,6 +33,15 @@ data class FormularioEquipo(
     val escudoActual: String = "",
     /** URI local de un escudo nuevo (galería), todavía sin subir. */
     val escudoNuevo: String? = null,
+    /** US-005: texto de la categoría cuando se elige "Otra" (máx. 30 caracteres). */
+    val categoriaOtra: String = "",
+    /** US-005: años de nacimiento como texto, para validar lo que escribe el usuario. */
+    val anioMinimoTexto: String = "",
+    val anioMaximoTexto: String = "",
+    /** US-005: color de uniforme en hexadecimal. */
+    val colorUniforme: String = "",
+    /** El entrenador edita sus equipos, pero no cambia quién los dirige (solo el administrador). */
+    val puedeCambiarEntrenador: Boolean = true,
 ) {
     val escudoVisible: String? get() = escudoNuevo ?: escudoActual.takeIf { it.isNotBlank() }
 }
@@ -51,12 +63,36 @@ data class AcademiaUiState(
     /** US-004: códigos de invitación para cuentas de administrador. */
     val codigos: List<com.esan.sportpro.domain.academia.CodigoInvitacion> = emptyList(),
     val editandoConfiguracion: FormularioConfiguracion? = null,
+    /** US-005: jugadores activos por equipo (id del equipo → cantidad). */
+    val jugadoresPorEquipo: Map<String, Int> = emptyMap(),
+    /** US-005: filtro por categoría de la lista; `null` = todas. */
+    val filtroCategoria: String? = null,
+    /** US-005: equipo que se quiere eliminar, con la cantidad de jugadores que tiene. */
+    val eliminando: Pair<Equipo, Int>? = null,
 ) {
-    /** Solo el administrador crea y edita equipos; el entrenador los consulta. */
+    /** Solo el administrador crea equipos y gestiona la academia. */
     val puedeEditar: Boolean get() = perfil?.rol == UserRole.ADMINISTRADOR
 
+    /** US-005: el administrador edita cualquier equipo; el entrenador, solo los que dirige. */
+    fun puedeEditarEquipo(equipo: Equipo): Boolean {
+        val p = perfil ?: return false
+        return when (p.rol) {
+            UserRole.ADMINISTRADOR -> true
+            UserRole.ENTRENADOR -> equipo.dirigidoPor(p.uid, p.nombre)
+            else -> false
+        }
+    }
+
+    /** Categorías que tienen al menos un equipo, para los chips del filtro. */
+    val categoriasConEquipos: List<String>
+        get() = equipos.filter { mostrarInactivos || it.activo }.map { it.categoria }.distinct().sorted()
+
     val equiposVisibles: List<Equipo>
-        get() = if (mostrarInactivos) equipos else equipos.filter { it.activo }
+        get() = equipos
+            .filter { mostrarInactivos || it.activo }
+            .filter { filtroCategoria == null || it.categoria == filtroCategoria }
+
+    fun jugadoresDe(equipo: Equipo): Int = jugadoresPorEquipo[equipo.id] ?: 0
 }
 
 /** Edición del nombre y el día de corte de la academia. */
@@ -78,6 +114,7 @@ class AcademiaViewModel @Inject constructor(
     private val equipoRepository: EquipoRepository,
     private val usuarioRepository: com.esan.sportpro.domain.cuentas.UsuarioRepository,
     private val academiaRepository: com.esan.sportpro.domain.academia.AcademiaRepository,
+    private val jugadorRepository: JugadorRepository,
 ) : BaseViewModel<AcademiaUiState, AcademiaEvent>(AcademiaUiState()) {
 
     init {
@@ -109,6 +146,18 @@ class AcademiaViewModel @Inject constructor(
                         .collect { setState { copy(entrenadoresPendientes = it) } }
                 }
             }
+            if (perfil.esStaff) {
+                // US-005: la lista muestra cuántos jugadores activos tiene cada equipo.
+                launch {
+                    jugadorRepository.observarJugadores(perfil.academiaId)
+                        .catch { }
+                        .collect { jugadores ->
+                            val conteo = jugadores.filter { it.activo && it.equipoId.isNotBlank() }
+                                .groupingBy { it.equipoId }.eachCount()
+                            setState { copy(jugadoresPorEquipo = conteo) }
+                        }
+                }
+            }
             equipoRepository.observarEquipos(perfil.academiaId)
                 .catch { setState { copy(cargando = false, error = describirErrorFirestore(it)) } }
                 .collect { lista -> setState { copy(equipos = lista, cargando = false, error = null) } }
@@ -117,19 +166,28 @@ class AcademiaViewModel @Inject constructor(
 
     fun onMostrarInactivos(valor: Boolean) = setState { copy(mostrarInactivos = valor) }
 
+    /** US-005: filtra la lista por categoría (`null` = todas). */
+    fun onFiltroCategoria(categoria: String?) = setState { copy(filtroCategoria = categoria) }
+
     fun nuevoEquipo() {
         if (!currentState.puedeEditar) return
         setState { copy(formulario = FormularioEquipo()) }
     }
 
     fun editarEquipo(equipo: Equipo) {
-        if (!currentState.puedeEditar) return
+        if (!currentState.puedeEditarEquipo(equipo)) return
+        val opcion = CategoriasEquipo.opcionDe(equipo.categoria).orEmpty()
         setState {
             copy(
                 formulario = FormularioEquipo(
                     id = equipo.id,
                     nombre = equipo.nombre,
-                    categoria = equipo.categoria,
+                    categoria = opcion,
+                    categoriaOtra = if (opcion == CategoriasEquipo.OTRA) equipo.categoria else "",
+                    anioMinimoTexto = equipo.anioMinimo?.toString().orEmpty(),
+                    anioMaximoTexto = equipo.anioMaximo?.toString().orEmpty(),
+                    colorUniforme = equipo.colorUniforme,
+                    puedeCambiarEntrenador = currentState.puedeEditar,
                     entrenador = equipo.entrenadorNombre,
                     // Equipos antiguos: si el nombre coincide con una cuenta, se propone esa cuenta.
                     entrenadorUid = equipo.entrenadorUid.ifBlank {
@@ -150,8 +208,31 @@ class AcademiaViewModel @Inject constructor(
     fun onNombreChanged(valor: String) =
         editarFormulario { copy(nombre = valor, errores = errores - CampoEquipo.NOMBRE) }
 
-    fun onCategoriaChanged(valor: String) =
-        editarFormulario { copy(categoria = valor, errores = errores - CampoEquipo.CATEGORIA) }
+    /** Al elegir "Sub-N" se propone el rango de años si todavía está vacío (se puede cambiar). */
+    fun onCategoriaChanged(valor: String) = editarFormulario {
+        val sugerido = ValidacionEquipo.rangoSugerido(valor)
+        val vacio = anioMinimoTexto.isBlank() && anioMaximoTexto.isBlank()
+        copy(
+            categoria = valor,
+            anioMinimoTexto = if (vacio && sugerido != null) sugerido.first.toString() else anioMinimoTexto,
+            anioMaximoTexto = if (vacio && sugerido != null) sugerido.second.toString() else anioMaximoTexto,
+            errores = errores - CampoEquipo.CATEGORIA,
+        )
+    }
+
+    fun onCategoriaOtraChanged(valor: String) = editarFormulario {
+        copy(categoriaOtra = valor.take(CategoriasEquipo.OTRA_MAX + 5), errores = errores - CampoEquipo.CATEGORIA)
+    }
+
+    fun onAnioMinimoChanged(valor: String) = editarFormulario {
+        copy(anioMinimoTexto = valor.filter(Char::isDigit).take(4), errores = errores - CampoEquipo.ANIOS)
+    }
+
+    fun onAnioMaximoChanged(valor: String) = editarFormulario {
+        copy(anioMaximoTexto = valor.filter(Char::isDigit).take(4), errores = errores - CampoEquipo.ANIOS)
+    }
+
+    fun onColorUniforme(hex: String) = editarFormulario { copy(colorUniforme = hex) }
 
     fun onEntrenadorChanged(valor: String) =
         editarFormulario { copy(entrenador = valor, errores = errores - CampoEquipo.ENTRENADOR) }
@@ -169,14 +250,22 @@ class AcademiaViewModel @Inject constructor(
         val estado = currentState
         val formulario = estado.formulario ?: return
         val perfil = estado.perfil ?: return
-        if (!estado.puedeEditar || formulario.guardando) return
+        val original = formulario.id?.let { id -> estado.equipos.firstOrNull { it.id == id } }
+        val autorizado = if (original == null) estado.puedeEditar else estado.puedeEditarEquipo(original)
+        if (!autorizado || formulario.guardando) return
 
+        val anioMinimo = formulario.anioMinimoTexto.toIntOrNull()
+        val anioMaximo = formulario.anioMaximoTexto.toIntOrNull()
         val errores = ValidacionEquipo.validar(
             nombre = formulario.nombre,
             categoria = formulario.categoria,
             entrenadorNombre = formulario.entrenador,
             existentes = estado.equipos,
             idEditando = formulario.id,
+            categoriaOtra = formulario.categoriaOtra,
+            entrenadorUid = formulario.entrenadorUid,
+            anioMinimo = anioMinimo,
+            anioMaximo = anioMaximo,
         )
         if (errores.isNotEmpty()) {
             editarFormulario { copy(errores = errores) }
@@ -194,10 +283,13 @@ class AcademiaViewModel @Inject constructor(
                         id = id,
                         academiaId = perfil.academiaId,
                         nombre = formulario.nombre,
-                        categoria = formulario.categoria,
+                        categoria = CategoriasEquipo.categoriaFinal(formulario.categoria, formulario.categoriaOtra),
                         entrenadorNombre = formulario.entrenador,
                         entrenadorUid = formulario.entrenadorUid,
                         creadoPor = perfil.uid,
+                        anioMinimo = anioMinimo,
+                        anioMaximo = anioMaximo,
+                        colorUniforme = formulario.colorUniforme,
                     ),
                     esNuevo = esNuevo,
                 )
@@ -298,6 +390,41 @@ class AcademiaViewModel @Inject constructor(
                 sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
             }
         }
+    }
+
+    /**
+     * US-005: un equipo con jugadores asignados no se elimina; el diálogo ofrece Desactivar equipo,
+     * que lo oculta de los listados sin borrar su historial.
+     */
+    fun pedirEliminar(equipo: Equipo) {
+        if (!currentState.puedeEditar) return
+        setState { copy(eliminando = equipo to currentState.jugadoresDe(equipo)) }
+    }
+
+    fun cerrarEliminar() = setState { copy(eliminando = null) }
+
+    fun confirmarEliminar() {
+        val (equipo, jugadores) = currentState.eliminando ?: return
+        setState { copy(eliminando = null) }
+        if (!ValidacionEquipo.puedeEliminar(jugadores)) {
+            sendEvent(AcademiaEvent.Mensaje(MensajesEquipo.NO_SE_PUEDE_ELIMINAR))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val confirmado = equipoRepository.eliminar(equipo.id)
+                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Equipo eliminado")))
+            } catch (e: Exception) {
+                sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
+            }
+        }
+    }
+
+    /** Desde el diálogo de eliminar: el equipo con jugadores se desactiva en su lugar. */
+    fun desactivarEnVezDeEliminar() {
+        val (equipo, _) = currentState.eliminando ?: return
+        setState { copy(eliminando = null) }
+        if (equipo.activo) cambiarEstado(equipo)
     }
 
     fun cambiarEstado(equipo: Equipo) {

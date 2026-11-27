@@ -158,10 +158,20 @@ service cloud.firestore {
       allow create: if esAdmin()
         && request.resource.data.academiaId == academiaPropia()
         && request.resource.data.creadoPor == request.auth.uid;
-      allow update: if esAdmin()
-        && resource.data.academiaId == academiaPropia()
-        && request.resource.data.academiaId == resource.data.academiaId;
-      allow delete: if false;
+      // US-005: el entrenador edita solo los equipos que dirige, sin cambiar de academia, de
+      // entrenador ni de estado (eso lo decide el administrador).
+      allow update: if (esAdmin()
+          && resource.data.academiaId == academiaPropia()
+          && request.resource.data.academiaId == resource.data.academiaId)
+        || (esStaff() && rol() == 'ENTRENADOR'
+          && resource.data.academiaId == academiaPropia()
+          && resource.data.get('entrenadorUid', '') == request.auth.uid
+          && request.resource.data.academiaId == resource.data.academiaId
+          && request.resource.data.get('entrenadorUid', '') == resource.data.get('entrenadorUid', '')
+          && request.resource.data.get('activo', true) == resource.data.get('activo', true));
+      // US-005: solo se elimina un equipo sin jugadores (la app lo comprueba antes); con
+      // jugadores se desactiva para conservar su historial.
+      allow delete: if esAdmin() && resource.data.academiaId == academiaPropia();
     }
 
     // US-007: el padre tiene un vínculo aprobado con el jugador. El id del vínculo es

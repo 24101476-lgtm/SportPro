@@ -26,40 +26,55 @@ class ValidacionEquipoTest {
 
     private val existentes = listOf(Equipo(id = "e1", nombre = "Tigres", categoria = "Sub-15"))
 
+    /** Un formulario completo y válido; cada prueba cambia solo el dato que quiere romper. */
+    private fun validar(
+        nombre: String = "Leones",
+        categoria: String = "Sub-12",
+        entrenador: String = "Carlos Ruiz",
+        idEditando: String? = null,
+        categoriaOtra: String = "",
+        anioMinimo: Int? = 2014,
+        anioMaximo: Int? = 2015,
+    ) = ValidacionEquipo.validar(
+        nombre = nombre,
+        categoria = categoria,
+        entrenadorNombre = entrenador,
+        existentes = existentes,
+        idEditando = idEditando,
+        categoriaOtra = categoriaOtra,
+        anioMinimo = anioMinimo,
+        anioMaximo = anioMaximo,
+        anioActual = 2026,
+    )
+
     @Test
     fun equipoValido_noTieneErrores() {
-        val errores = ValidacionEquipo.validar("Leones", "Sub-12", "", existentes)
-        assertTrue(errores.isEmpty())
+        assertTrue(validar().isEmpty())
     }
 
     @Test
     fun nombreCorto_esRechazado() {
-        val errores = ValidacionEquipo.validar("Ab", "Sub-12", "", existentes)
-        assertTrue(CampoEquipo.NOMBRE in errores)
+        assertTrue(CampoEquipo.NOMBRE in validar(nombre = "Ab"))
     }
 
     @Test
     fun categoriaInexistente_esRechazada() {
-        val errores = ValidacionEquipo.validar("Leones", "Sub-99", "", existentes)
-        assertTrue(CampoEquipo.CATEGORIA in errores)
+        assertTrue(CampoEquipo.CATEGORIA in validar(categoria = "Sub-99"))
     }
 
     @Test
     fun mismoNombreYCategoria_esDuplicado_sinImportarMayusculas() {
-        val errores = ValidacionEquipo.validar("  tigres ", "Sub-15", "", existentes)
-        assertTrue(CampoEquipo.NOMBRE in errores)
+        assertTrue(CampoEquipo.NOMBRE in validar(nombre = "  tigres ", categoria = "Sub-15"))
     }
 
     @Test
     fun mismoNombreEnOtraCategoria_esValido() {
-        val errores = ValidacionEquipo.validar("Tigres", "Sub-17", "", existentes)
-        assertTrue(errores.isEmpty())
+        assertTrue(validar(nombre = "Tigres", categoria = "Sub-17").isEmpty())
     }
 
     @Test
     fun editarElMismoEquipo_noCuentaComoDuplicado() {
-        val errores = ValidacionEquipo.validar("Tigres", "Sub-15", "", existentes, idEditando = "e1")
-        assertTrue(errores.isEmpty())
+        assertTrue(validar(nombre = "Tigres", categoria = "Sub-15", idEditando = "e1").isEmpty())
     }
 }
 

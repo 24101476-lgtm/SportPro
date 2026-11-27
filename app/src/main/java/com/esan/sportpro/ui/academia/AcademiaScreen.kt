@@ -1,5 +1,9 @@
 package com.esan.sportpro.ui.academia
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -14,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups2
 import androidx.compose.material.icons.filled.School
@@ -40,11 +45,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.academia.CampoEquipo
 import com.esan.sportpro.domain.academia.CategoriasEquipo
+import com.esan.sportpro.domain.academia.ColoresUniforme
 import com.esan.sportpro.domain.academia.Equipo
+import com.esan.sportpro.domain.academia.MensajesEquipo
 import com.esan.sportpro.ui.common.CargandoSportPro
 import com.esan.sportpro.ui.common.ChipEstado
 import com.esan.sportpro.ui.common.EmptyStateMessage
@@ -140,9 +150,37 @@ fun AcademiaScreen(
                         }
                     }
                 }
+                // US-005: filtro por categoría.
+                if (state.categoriasConEquipos.size > 1) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = state.filtroCategoria == null,
+                                onClick = { viewModel.onFiltroCategoria(null) },
+                                label = { Text("Todas") },
+                                colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                            )
+                        }
+                        items(state.categoriasConEquipos) { categoria ->
+                            FilterChip(
+                                selected = state.filtroCategoria == categoria,
+                                onClick = {
+                                    viewModel.onFiltroCategoria(if (state.filtroCategoria == categoria) null else categoria)
+                                },
+                                label = { Text(categoria) },
+                                colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                            )
+                        }
+                    }
+                }
                 if (state.equiposVisibles.isEmpty()) {
                     EmptyStateMessage(
-                        mensaje = if (state.puedeEditar) {
+                        mensaje = if (state.filtroCategoria != null) {
+                            "No hay equipos en la categoría ${state.filtroCategoria}."
+                        } else if (state.puedeEditar) {
                             "Aún no hay equipos. Crea el primero con el botón +."
                         } else {
                             "Tu academia todavía no tiene equipos registrados."
@@ -157,9 +195,12 @@ fun AcademiaScreen(
                         items(state.equiposVisibles, key = { it.id }) { equipo ->
                             EquipoCard(
                                 equipo = equipo,
-                                puedeEditar = state.puedeEditar,
+                                jugadores = state.jugadoresDe(equipo),
+                                puedeEditar = state.puedeEditarEquipo(equipo),
+                                esAdmin = state.puedeEditar,
                                 onEditar = { viewModel.editarEquipo(equipo) },
                                 onCambiarEstado = { viewModel.cambiarEstado(equipo) },
+                                onEliminar = { viewModel.pedirEliminar(equipo) },
                             )
                         }
                     }
@@ -176,53 +217,169 @@ fun AcademiaScreen(
             onEntrenador = viewModel::onEntrenadorChanged,
             entrenadores = state.entrenadores,
             onEntrenadorElegido = viewModel::onEntrenadorElegido,
+            onCategoriaOtra = viewModel::onCategoriaOtraChanged,
+            onAnioMinimo = viewModel::onAnioMinimoChanged,
+            onAnioMaximo = viewModel::onAnioMaximoChanged,
+            onColor = viewModel::onColorUniforme,
             onElegirEscudo = viewModel::onEscudoElegido,
             onQuitarEscudo = viewModel::quitarEscudoNuevo,
             onGuardar = viewModel::guardar,
             onCancelar = viewModel::cerrarFormulario,
         )
     }
+
+    state.eliminando?.let { (equipo, jugadores) ->
+        DialogoEliminarEquipo(
+            equipo = equipo,
+            jugadores = jugadores,
+            onEliminar = viewModel::confirmarEliminar,
+            onDesactivar = viewModel::desactivarEnVezDeEliminar,
+            onCancelar = viewModel::cerrarEliminar,
+        )
+    }
 }
 
+/**
+ * US-005: con jugadores asignados no se puede eliminar; se ofrece Desactivar equipo, que lo oculta
+ * de los listados sin borrar su historial.
+ */
+@Composable
+private fun DialogoEliminarEquipo(
+    equipo: Equipo,
+    jugadores: Int,
+    onEliminar: () -> Unit,
+    onDesactivar: () -> Unit,
+    onCancelar: () -> Unit,
+) {
+    val conJugadores = jugadores > 0
+    AlertDialog(
+        onDismissRequest = onCancelar,
+        title = { Text(if (conJugadores) "No se puede eliminar" else "¿Eliminar ${equipo.nombre}?") },
+        text = {
+            Text(
+                if (conJugadores) {
+                    MensajesEquipo.NO_SE_PUEDE_ELIMINAR + ". ${equipo.nombre} tiene $jugadores " +
+                        (if (jugadores == 1) "jugador activo" else "jugadores activos") +
+                        ". Puedes desactivarlo: deja de aparecer en los listados y conserva su historial."
+                } else {
+                    "El equipo no tiene jugadores asignados. Esta acción no se puede deshacer."
+                },
+            )
+        },
+        confirmButton = {
+            if (conJugadores) {
+                if (equipo.activo) TextButton(onClick = onDesactivar) { Text("Desactivar equipo") }
+            } else {
+                TextButton(onClick = onEliminar) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancelar) { Text("Cancelar") } },
+    )
+}
+
+/** US-005: nombre, categoría con su rango de años, jugadores activos, DT y color de uniforme. */
 @Composable
 private fun EquipoCard(
     equipo: Equipo,
+    jugadores: Int,
     puedeEditar: Boolean,
+    esAdmin: Boolean,
     onEditar: () -> Unit,
     onCambiarEstado: () -> Unit,
+    onEliminar: () -> Unit,
 ) {
     TarjetaSportPro {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // Rediseño: el escudo del equipo (subido o generado) en lugar del ícono genérico.
-            EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(equipo.nombre, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Categoría ${equipo.categoria}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (equipo.entrenadorNombre.isNotBlank()) {
-                    Text("DT: ${equipo.entrenadorNombre}", style = MaterialTheme.typography.bodySmall)
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Rediseño: el escudo del equipo (subido o generado) en lugar del ícono genérico.
+                EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(equipo.nombre, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        buildString {
+                            append("Categoría ${equipo.categoria}")
+                            if (equipo.rangoAnios.isNotBlank()) append(" (${equipo.rangoAnios})")
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        if (equipo.entrenadorNombre.isNotBlank()) "DT: ${equipo.entrenadorNombre}" else "Sin entrenador asignado",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (equipo.sinEntrenador()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
                 }
-                if (!equipo.activo) {
-                    ChipEstado("Inactivo", TonoEstado.ERROR, modifier = Modifier.padding(top = 4.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("$jugadores", style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano)
+                    Text(
+                        if (jugadores == 1) "jugador" else "jugadores",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            if (puedeEditar) {
-                IconButton(onClick = onEditar) {
-                    Icon(Icons.Default.Edit, contentDescription = "Editar equipo")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
+                if (equipo.colorUniforme.isNotBlank()) {
+                    PuntoColor(equipo.colorUniforme, tamano = 14)
+                    Text(
+                        "Uniforme ${ColoresUniforme.nombreDe(equipo.colorUniforme).lowercase()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
                 }
-                TextButton(onClick = onCambiarEstado) {
-                    Text(if (equipo.activo) "Desactivar" else "Activar")
+                if (!equipo.activo) {
+                    ChipEstado("Inactivo", TonoEstado.ERROR, modifier = Modifier.padding(start = 8.dp))
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                if (puedeEditar) {
+                    IconButton(onClick = onEditar) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar equipo")
+                    }
+                }
+                if (esAdmin) {
+                    TextButton(onClick = onCambiarEstado) {
+                        Text(if (equipo.activo) "Desactivar" else "Activar")
+                    }
+                    IconButton(onClick = onEliminar) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar equipo",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** Círculo del color de uniforme, con borde para que el blanco se vea sobre fondo claro. */
+@Composable
+private fun PuntoColor(hex: String, tamano: Int = 28, elegido: Boolean = false) {
+    val color = runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex)) }
+        .getOrDefault(MaterialTheme.colorScheme.outline)
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .size(tamano.dp)
+            .then(
+                if (elegido) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.CircleShape)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(if (elegido) 4.dp else 0.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(color)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape),
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -234,6 +391,10 @@ private fun FormularioEquipoDialog(
     onEntrenador: (String) -> Unit,
     entrenadores: List<com.esan.sportpro.domain.academia.EntrenadorCuenta>,
     onEntrenadorElegido: (com.esan.sportpro.domain.academia.EntrenadorCuenta?) -> Unit,
+    onCategoriaOtra: (String) -> Unit,
+    onAnioMinimo: (String) -> Unit,
+    onAnioMaximo: (String) -> Unit,
+    onColor: (String) -> Unit,
     onElegirEscudo: (String) -> Unit,
     onQuitarEscudo: () -> Unit,
     onGuardar: () -> Unit,
@@ -247,7 +408,11 @@ private fun FormularioEquipoDialog(
         onDismissRequest = { if (!formulario.guardando) onCancelar() },
         title = { Text(if (formulario.id == null) "Nuevo equipo" else "Editar equipo") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // US-005 agrega campos (años, color): el diálogo ahora se desplaza.
+                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     val visible = formulario.escudoVisible
                     if (visible != null) {
@@ -310,17 +475,96 @@ private fun FormularioEquipoDialog(
                     placeholder = "Elige la categoría",
                     error = CampoEquipo.CATEGORIA in formulario.errores,
                 )
-                formulario.errores[CampoEquipo.CATEGORIA]?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (formulario.categoria == com.esan.sportpro.domain.academia.CategoriasEquipo.OTRA) {
+                    OutlinedTextField(
+                        value = formulario.categoriaOtra,
+                        onValueChange = onCategoriaOtra,
+                        label = { Text("Nombre de la categoría") },
+                        singleLine = true,
+                        isError = CampoEquipo.CATEGORIA in formulario.errores,
+                        supportingText = {
+                            Text(
+                                formulario.errores[CampoEquipo.CATEGORIA]
+                                    ?: "${formulario.categoriaOtra.trim().length}/${com.esan.sportpro.domain.academia.CategoriasEquipo.OTRA_MAX}",
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    formulario.errores[CampoEquipo.CATEGORIA]?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
-                Text("Entrenador (DT)", style = MaterialTheme.typography.labelLarge)
-                if (entrenadores.isEmpty()) {
+                Text("Años de nacimiento", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = formulario.anioMinimoTexto,
+                        onValueChange = onAnioMinimo,
+                        label = { Text("Desde") },
+                        placeholder = { Text("2012") },
+                        singleLine = true,
+                        isError = CampoEquipo.ANIOS in formulario.errores,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = formulario.anioMaximoTexto,
+                        onValueChange = onAnioMaximo,
+                        label = { Text("Hasta") },
+                        placeholder = { Text("2013") },
+                        singleLine = true,
+                        isError = CampoEquipo.ANIOS in formulario.errores,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    formulario.errores[CampoEquipo.ANIOS] ?: "Se propone según la categoría; puedes cambiarlo.",
+                    color = if (CampoEquipo.ANIOS in formulario.errores) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text("Color de uniforme", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ColoresUniforme.opciones.forEach { (nombre, hex) ->
+                        val elegido = formulario.colorUniforme.equals(hex, ignoreCase = true)
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .selectable(
+                                    selected = elegido,
+                                    role = androidx.compose.ui.semantics.Role.RadioButton,
+                                    onClick = { onColor(hex) },
+                                )
+                                .semantics { contentDescription = "Uniforme $nombre" },
+                        ) {
+                            PuntoColor(hex, tamano = 34, elegido = elegido)
+                        }
+                    }
+                }
+                Text("Entrenador responsable", style = MaterialTheme.typography.labelLarge)
+                if (!formulario.puedeCambiarEntrenador) {
+                    Text(
+                        "${formulario.entrenador.ifBlank { "Sin asignar" }}. Solo el administrador cambia el entrenador del equipo.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else if (entrenadores.isEmpty()) {
                     // Sin cuentas de entrenador todavía: se puede anotar el nombre, pero esa persona
                     // no verá las mensualidades del equipo hasta tener cuenta y quedar asignada.
                     OutlinedTextField(
                         value = formulario.entrenador,
                         onValueChange = onEntrenador,
-                        label = { Text("Nombre del entrenador (opcional)") },
+                        label = { Text("Nombre del entrenador") },
                         singleLine = true,
                         isError = CampoEquipo.ENTRENADOR in formulario.errores,
                         supportingText = {
@@ -333,11 +577,6 @@ private fun FormularioEquipoDialog(
                     )
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = formulario.entrenadorUid.isBlank() && formulario.entrenador.isBlank(),
-                            onClick = { onEntrenadorElegido(null) },
-                            label = { Text("Sin asignar") },
-                        )
                         entrenadores.forEach { cuenta ->
                             FilterChip(
                                 selected = formulario.entrenadorUid == cuenta.uid,
@@ -353,6 +592,9 @@ private fun FormularioEquipoDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
+                    }
+                    formulario.errores[CampoEquipo.ENTRENADOR]?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

@@ -54,6 +54,11 @@ data class Jugador(
     val usuarioUid: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
+    /**
+     * US-005: el jugador se asignó a un equipo aunque su año de nacimiento está fuera del rango de
+     * la categoría (el administrador eligió "Asignar de todas formas").
+     */
+    val excepcionCategoria: Boolean = false,
 ) {
     @get:Exclude
     val nombreCompleto: String get() = "$nombres $apellidos".trim()

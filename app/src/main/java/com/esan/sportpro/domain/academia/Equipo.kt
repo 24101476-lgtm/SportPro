@@ -24,7 +24,23 @@ data class Equipo(
     val escudoUrl: String = "",
     val activo: Boolean = true,
     val creadoPor: String = "",
+    /** US-005: rango de años de nacimiento de la categoría. `null` en equipos antiguos. */
+    val anioMinimo: Int? = null,
+    val anioMaximo: Int? = null,
+    /** US-005: color de uniforme en hexadecimal ("#1565C0"). Vacío = sin definir. */
+    val colorUniforme: String = "",
 ) {
+    /** true si el año de nacimiento está dentro del rango del equipo (o el equipo no tiene rango). */
+    fun admiteAnio(anioNacimiento: Int): Boolean {
+        val minimo = anioMinimo ?: return true
+        val maximo = anioMaximo ?: return true
+        return anioNacimiento in minimo..maximo
+    }
+
+    /** Texto del rango para la lista: "2011 – 2012". Vacío si el equipo no lo tiene. */
+    val rangoAnios: String
+        get() = if (anioMinimo != null && anioMaximo != null) "$anioMinimo – $anioMaximo" else ""
+
     /** Texto que se muestra en listas y selectores, p. ej. "Tigres · Sub-15". */
     val etiqueta: String get() = "$nombre · $categoria"
 
@@ -48,9 +64,44 @@ private fun normalizarNombre(texto: String): String =
         .replace(Regex("\\p{M}+"), "")
         .replace(Regex("\\s+"), " ")
 
-/** Categorías disponibles al crear un equipo. */
+/** US-005: categorías del criterio de aceptación. "Otra" habilita un texto libre de hasta 30 caracteres. */
 object CategoriasEquipo {
+    const val OTRA = "Otra"
+    const val OTRA_MAX = 30
+
     val todas: List<String> = listOf(
-        "Sub-8", "Sub-10", "Sub-12", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Primera",
+        "Sub-8", "Sub-10", "Sub-12", "Sub-15", "Sub-17", "Sub-20", "Primera", OTRA,
     )
+
+    /** Categorías fijas (sin "Otra"). Un equipo con otra categoría guarda su propio texto. */
+    val fijas: List<String> = todas - OTRA
+
+    /** Para el selector: "Sub-15" se elige tal cual; "Sub-13" o cualquier texto propio cae en "Otra". */
+    fun opcionDe(categoria: String): String? = when {
+        categoria.isBlank() -> null
+        categoria in fijas -> categoria
+        else -> OTRA
+    }
+
+    /** Lo que se guarda en Firestore: la categoría fija o el texto de "Otra". */
+    fun categoriaFinal(opcion: String, textoOtra: String): String =
+        if (opcion == OTRA) textoOtra.trim() else opcion
+}
+
+/** US-005: colores de uniforme que se ofrecen al crear un equipo. */
+object ColoresUniforme {
+    val opciones: List<Pair<String, String>> = listOf(
+        "Blanco" to "#FFFFFF",
+        "Negro" to "#212121",
+        "Rojo" to "#C62828",
+        "Azul" to "#1565C0",
+        "Celeste" to "#4FC3F7",
+        "Verde" to "#2E7D32",
+        "Amarillo" to "#FBC02D",
+        "Naranja" to "#EF6C00",
+        "Morado" to "#6A1B9A",
+        "Granate" to "#7B1F2E",
+    )
+
+    fun nombreDe(hex: String): String = opciones.firstOrNull { it.second.equals(hex, ignoreCase = true) }?.first ?: hex
 }

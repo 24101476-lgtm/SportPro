@@ -58,6 +58,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -257,6 +259,31 @@ fun JugadoresScreen(
     }
 
     DialogosVinculacion(state = state, viewModel = viewModel)
+
+    // US-005: asignar un jugador fuera del rango de años de la categoría del equipo.
+    if (state.formulario.avisoFueraDeRango) {
+        val equipo = state.equipos.firstOrNull { it.id == state.formulario.datos.equipoId }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::cancelarFueraDeRango,
+            title = { Text(com.esan.sportpro.domain.academia.MensajesEquipo.FUERA_DE_RANGO) },
+            text = {
+                Text(
+                    buildString {
+                        append("${equipo?.nombre ?: "El equipo"} admite nacidos entre ${equipo?.rangoAnios.orEmpty()}.")
+                        append(" Si lo asignas igual, quedará registrado como excepción de categoría.")
+                    },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::asignarFueraDeRango) {
+                    Text("Asignar de todas formas")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::cancelarFueraDeRango) { Text("Cancelar") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -419,6 +446,8 @@ private fun DetalleJugador(
     onVerHistorial: () -> Unit = {},
     apoderados: @Composable () -> Unit = {},
 ) {
+    // Antes la ficha mostraba 7 bloques seguidos; ahora se reparte en 3 pestañas (FichaJugador.kt).
+    var pestana by rememberSaveable(jugador.id) { mutableStateOf(PestanaFicha.RESUMEN) }
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -427,142 +456,102 @@ private fun DetalleJugador(
             AvisoRegistroPendiente(jugador)
         }
         EncabezadoFicha(jugador)
+        SelectorPestanasFicha(actual = pestana, onElegir = { pestana = it })
 
-        // US-006, criterio 10: resumen calculado a partir de los eventos registrados.
-        BloqueJugador(
-            titulo = "Resumen deportivo",
-            icono = Icons.Default.EmojiEvents,
-            color = com.esan.sportpro.ui.partido.ColoresPartido.Verde,
-            subtitulo = "Partidos finalizados en los que participó",
-        ) {
-            if (resumenDeportivo == null) {
-                Text("Calculando…", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CuadroEstadistica("${resumenDeportivo.partidos}", "Partidos", com.esan.sportpro.ui.partido.ColoresPartido.Azul, Modifier.weight(1f))
-                    CuadroEstadistica("${resumenDeportivo.minutos}", "Minutos", com.esan.sportpro.ui.partido.ColoresPartido.Morado, Modifier.weight(1f))
-                    CuadroEstadistica("${resumenDeportivo.goles}", "Goles", com.esan.sportpro.ui.partido.ColoresPartido.Verde, Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CuadroEstadistica("${resumenDeportivo.asistencias}", "Asistencias", com.esan.sportpro.ui.partido.ColoresPartido.Naranja, Modifier.weight(1f))
-                    CuadroEstadistica("${resumenDeportivo.amarillas}", "Amarillas", com.esan.sportpro.ui.partido.ColoresPartido.Amarillo, Modifier.weight(1f))
-                    CuadroEstadistica("${resumenDeportivo.rojas}", "Rojas", com.esan.sportpro.ui.partido.ColoresPartido.Rojo, Modifier.weight(1f))
-                }
-            }
-        }
-
-        BloqueJugador(
-            titulo = "Datos deportivos",
-            icono = Icons.Default.SportsSoccer,
-            color = colorPosicionOVerde(jugador.posicion),
-        ) {
-            DatoJugador("Equipo", jugador.equipoNombre)
-            DatoJugador("Posición principal", jugador.posicion)
-            if (PosicionJugador.entries.none { it.etiqueta == jugador.posicion } && jugador.posicion.isNotBlank()) {
-                Text(
-                    "Posición del catálogo anterior: edita la ficha para elegir una de las 9 posiciones actuales.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-            DatoJugador("Posición secundaria", jugador.posicionSecundaria)
-            DatoJugador("Pie hábil", jugador.pieHabil)
-            DatoJugador("Dorsal", jugador.dorsal?.toString())
-        }
-
-        BloqueJugador(
-            titulo = "Asistencia a entrenamientos",
-            icono = Icons.Default.EventAvailable,
-            color = com.esan.sportpro.ui.partido.ColoresPartido.Azul,
-        ) {
-            if (resumen.registrados == 0) {
-                Text(
-                    "Todavía no hay entrenamientos con asistencia registrada.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                val porcentaje = ReglasHistorial.porcentaje(resumen.participaciones, resumen.registrados)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        ReglasAsistencia.formatearPorcentaje(porcentaje),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        color = com.esan.sportpro.ui.partido.ColoresPartido.Azul,
-                    )
-                    Text(
-                        "  ${resumen.participaciones} de ${resumen.registrados} sesiones",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                androidx.compose.material3.LinearProgressIndicator(
-                    progress = { (porcentaje / 100.0).toFloat().coerceIn(0f, 1f) },
-                    color = com.esan.sportpro.ui.partido.ColoresPartido.Azul,
-                    trackColor = com.esan.sportpro.ui.partido.ColoresPartido.Azul.copy(alpha = 0.15f),
-                    drawStopIndicator = {},
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                )
-                DatoJugador("Presente / Tarde", "${resumen.presentes} / ${resumen.tardes}")
-                DatoJugador("Justificado / Ausente", "${resumen.justificados} / ${resumen.ausentes}")
-            }
-            // US-012: historial completo con filtros y gráfico mensual.
-            OutlinedButton(onClick = onVerHistorial, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp))
-                androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
-                Text("Ver historial de participación")
-            }
-        }
-
-        BloqueJugador(
-            titulo = "Datos personales y físicos",
-            icono = Icons.Default.Badge,
-            color = com.esan.sportpro.ui.partido.ColoresPartido.Morado,
-        ) {
-            DatoJugador("Documento de identidad", jugador.documentoIdentidad)
-            DatoJugador("Fecha de nacimiento", FechasSportPro.fechaIso(jugador.fechaNacimiento))
-            DatoJugador("Edad", jugador.edad()?.let { "$it años" })
-            DatoJugador("Estatura", jugador.estaturaCm?.let { "${ValidacionJugador.centimetrosAMetros(it)} m" })
-            DatoJugador("Peso", jugador.pesoKg?.let { "$it kg" })
-        }
-
-        BloqueJugador(
-            titulo = "Contacto",
-            icono = Icons.Default.Phone,
-            color = com.esan.sportpro.ui.partido.ColoresPartido.Verde,
-        ) {
-            DatoJugador("Teléfono", jugador.telefono)
-            DatoJugador("Correo", jugador.correo)
-        }
-
-        BloqueJugador(
-            titulo = if (jugador.esMenor()) "Apoderado y emergencia" else "Contacto de emergencia",
-            icono = Icons.Default.FamilyRestroom,
-            color = com.esan.sportpro.ui.partido.ColoresPartido.Naranja,
-        ) {
-            DatoJugador("Nombre", jugador.contactoEmergenciaNombre)
-            DatoJugador("Parentesco", jugador.contactoEmergenciaParentesco)
-            DatoJugador("Teléfono", jugador.contactoEmergenciaTelefono)
-            if (jugador.esMenor() || jugador.apoderadoCorreo.isNotBlank()) {
-                DatoJugador("Correo del apoderado", jugador.apoderadoCorreo)
-            }
-        }
-
-        apoderados()
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(onClick = onCambiarEstado, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                Text(if (jugador.activo) "Desactivar" else "Activar")
-            }
-            com.esan.sportpro.ui.common.BotonPrincipalSportPro(
-                texto = "Editar ficha",
-                onClick = onEditar,
-                icono = Icons.Default.Edit,
-                modifier = Modifier.weight(1f),
+        when (pestana) {
+            PestanaFicha.RESUMEN -> ContenidoResumen(
+                resumenDeportivo = resumenDeportivo,
+                asistencia = resumen,
+                onVerAsistencia = { pestana = PestanaFicha.ASISTENCIA },
             )
+
+            PestanaFicha.ASISTENCIA -> ContenidoAsistencia(resumen = resumen, onVerHistorial = onVerHistorial)
+
+            PestanaFicha.FICHA -> {
+                SeccionPlegable(
+                    titulo = "Datos deportivos",
+                    icono = Icons.Default.SportsSoccer,
+                    vistaPrevia = listOf(jugador.equipoNombre, jugador.posicion).filter { it.isNotBlank() }.joinToString(", "),
+                    abiertaAlInicio = true,
+                ) {
+                    DatoSiExiste("Equipo", jugador.equipoNombre)
+                    DatoJugador("Posición principal", jugador.posicion)
+                    if (PosicionJugador.entries.none { it.etiqueta == jugador.posicion } && jugador.posicion.isNotBlank()) {
+                        Text(
+                            "Posición del catálogo anterior: edita la ficha para elegir una de las 9 posiciones actuales.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    DatoSiExiste("Posición secundaria", jugador.posicionSecundaria)
+                    DatoSiExiste("Pie hábil", jugador.pieHabil)
+                    DatoSiExiste("Dorsal", jugador.dorsal?.toString())
+                    if (jugador.excepcionCategoria) {
+                        DatoJugador("Categoría", "Excepción: fuera del rango de años")
+                    }
+                }
+
+                SeccionPlegable(
+                    titulo = "Datos personales",
+                    icono = Icons.Default.Badge,
+                    vistaPrevia = jugador.edad()?.let { "$it años" },
+                ) {
+                    DatoSiExiste("Documento", jugador.documentoIdentidad)
+                    DatoSiExiste("Nacimiento", FechasSportPro.fechaIso(jugador.fechaNacimiento))
+                    DatoSiExiste("Edad", jugador.edad()?.let { "$it años" })
+                    DatoSiExiste("Estatura", jugador.estaturaCm?.let { "${ValidacionJugador.centimetrosAMetros(it)} m" })
+                    DatoSiExiste("Peso", jugador.pesoKg?.let { "$it kg" })
+                }
+
+                if (jugador.telefono.isNotBlank() || jugador.correo.isNotBlank()) {
+                    SeccionPlegable(
+                        titulo = "Contacto",
+                        icono = Icons.Default.Phone,
+                        vistaPrevia = jugador.telefono.ifBlank { jugador.correo },
+                    ) {
+                        DatoSiExiste("Teléfono", jugador.telefono)
+                        DatoSiExiste("Correo", jugador.correo)
+                        AccionesContacto(telefono = jugador.telefono, correo = jugador.correo)
+                    }
+                }
+
+                SeccionPlegable(
+                    titulo = if (jugador.esMenor()) "Apoderado y emergencia" else "Contacto de emergencia",
+                    icono = Icons.Default.FamilyRestroom,
+                    vistaPrevia = listOf(jugador.contactoEmergenciaNombre, jugador.contactoEmergenciaParentesco)
+                        .filter { it.isNotBlank() }.joinToString(", ").ifBlank { "Sin registrar" },
+                ) {
+                    val sinDatos = jugador.contactoEmergenciaNombre.isBlank() && jugador.contactoEmergenciaTelefono.isBlank()
+                    if (sinDatos) {
+                        Text(
+                            "No tiene contacto de emergencia. Agrégalo con Editar ficha.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DatoSiExiste("Nombre", jugador.contactoEmergenciaNombre)
+                    DatoSiExiste("Parentesco", jugador.contactoEmergenciaParentesco)
+                    DatoSiExiste("Teléfono", jugador.contactoEmergenciaTelefono)
+                    DatoSiExiste("Correo del apoderado", jugador.apoderadoCorreo)
+                    AccionesContacto(telefono = jugador.contactoEmergenciaTelefono, correo = jugador.apoderadoCorreo)
+                    apoderados()
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(onClick = onCambiarEstado, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                        Text(if (jugador.activo) "Desactivar" else "Activar")
+                    }
+                    com.esan.sportpro.ui.common.BotonPrincipalSportPro(
+                        texto = "Editar ficha",
+                        onClick = onEditar,
+                        icono = Icons.Default.Edit,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
     }
 }
@@ -613,7 +602,7 @@ private fun EncabezadoFicha(jugador: Jugador) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ChipEstado(if (jugador.activo) "Activo" else "Inactivo", if (jugador.activo) TonoEstado.EXITO else TonoEstado.ERROR)
+                if (!jugador.activo) ChipEstado("Inactivo", TonoEstado.ERROR)
                 jugador.edad()?.let { ChipEstado("$it años", TonoEstado.NEUTRO) }
                 if (jugador.pieHabil.isNotBlank()) ChipEstado("Pie ${jugador.pieHabil.lowercase()}", TonoEstado.NEUTRO)
                 if (jugador.esMenor()) ChipEstado("Menor", TonoEstado.INFORMACION)

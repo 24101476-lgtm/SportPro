@@ -60,6 +60,9 @@ class FirestoreUsuarioRepository @Inject constructor(
         if (!doc.exists()) return@withContext false
         if (doc.getBoolean(CAMPO_USADO) == true) return@withContext false
         if (doc.getBoolean(CAMPO_REVOCADO) == true) return@withContext false
+        // US-004: los códigos tienen un rol; para crear una cuenta de Administrador debe ser de ese rol.
+        val rolCodigo = doc.getString("rol")
+        if (rolCodigo != null && rolCodigo != "ADMINISTRADOR") return@withContext false
 
         val expiraEn = doc.getTimestamp(CAMPO_EXPIRA_EN)?.toDate()?.toInstant()
             ?.atZone(ZoneId.systemDefault())?.toLocalDate()

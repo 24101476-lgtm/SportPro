@@ -27,6 +27,12 @@ interface EquipoRepository {
      */
     suspend fun subirEscudo(equipoId: String, uriLocal: String): String?
 
-    /** Activa o desactiva un equipo (nunca se borra). */
+    /**
+     * Elimina un equipo sin jugadores asignados. Uno con jugadores no se borra: se desactiva
+     * ([cambiarEstado]) para conservar su historial (US-005).
+     */
+    suspend fun eliminar(equipoId: String): Boolean
+
+    /** Activa o desactiva un equipo. */
     suspend fun cambiarEstado(equipoId: String, activo: Boolean): Boolean
 }

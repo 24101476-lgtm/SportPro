@@ -70,7 +70,8 @@ object ValidacionRegistro {
     /** 2 a 50 letras. Devuelve el mensaje exacto o `null` si está bien. */
     fun validarNombre(valor: String): String? {
         val texto = valor.trim()
-        if (texto.isEmpty()) return MensajesRegistro.MINIMO_CARACTERES
+        // Antes solo se rechazaba el campo vacío y un nombre de una letra ("A") pasaba.
+        if (texto.length < MIN_LETRAS) return MensajesRegistro.MINIMO_CARACTERES
         if (texto.length > MAX_LETRAS) return MensajesRegistro.MAXIMO_CARACTERES
         // Se admiten espacios, apóstrofos y guiones para nombres compuestos ("Ana María", "D'Angelo").
         val soloLetras = texto.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' }

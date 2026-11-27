@@ -198,29 +198,17 @@ fun PartidoProgramarScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    else -> Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                    ) {
-                        ui.equipos.forEach { e ->
-                            FilterChip(
-                                selected = equipoId == e.id,
-                                onClick = {
-                                    equipoId = e.id
-                                    errorFormulario = null
-                                },
-                                label = { Text(e.etiqueta) },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = ColoresPartido.Verde,
-                                    selectedLabelColor = Color.White,
-                                ),
-                                modifier = Modifier.heightIn(min = 48.dp),
-                            )
-                        }
-                    }
+                    else -> com.esan.sportpro.ui.common.SelectorEquipo(
+                        equipos = ui.equipos,
+                        seleccionadoId = equipoId,
+                        onSeleccionar = { id ->
+                            if (id != null) {
+                                equipoId = id
+                                errorFormulario = null
+                            }
+                        },
+                        permitirTodos = false,
+                    )
                 }
             }
 

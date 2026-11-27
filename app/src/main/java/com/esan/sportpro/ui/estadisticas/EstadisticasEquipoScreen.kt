@@ -66,18 +66,12 @@ fun EstadisticasEquipoScreen(
             )
             // Selector de equipo: las estadísticas son siempre de un equipo real de la academia.
             if (state.equipos.size > 1) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    state.equipos.forEach { equipo ->
-                        FilterChip(
-                            selected = equipo.id == state.equipoSeleccionadoId,
-                            onClick = { viewModel.seleccionarEquipo(equipo.id) },
-                            label = { Text(equipo.etiqueta) },
-                        )
-                    }
-                }
+                com.esan.sportpro.ui.common.SelectorEquipo(
+                    equipos = state.equipos,
+                    seleccionadoId = state.equipoSeleccionadoId,
+                    onSeleccionar = { id -> id?.let(viewModel::seleccionarEquipo) },
+                    permitirTodos = false,
+                )
             } else {
                 state.equipos.firstOrNull()?.let { equipo ->
                     Text(equipo.etiqueta, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)

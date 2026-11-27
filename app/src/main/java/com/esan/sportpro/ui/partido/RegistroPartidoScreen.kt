@@ -3,6 +3,7 @@ package com.esan.sportpro.ui.partido
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SportsScore
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MoreVert
@@ -139,7 +148,7 @@ fun RegistroPartidoScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item { Marcador(state, partido, onVolver) }
+                item { Marcador(state, partido, onVolver, onVerAlineacion = viewModel::abrirAlineacion) }
 
                 state.error?.let { error ->
                     item { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
@@ -229,6 +238,10 @@ fun RegistroPartidoScreen(
         }
     }
 
+    // Once en vivo (se abre tocando el escudo propio del marcador).
+    if (state.viendoAlineacion) {
+        state.partido?.let { partido -> AlineacionEnVivoDialog(state = state, partido = partido, viewModel = viewModel) }
+    }
     state.hoja?.let { hoja ->
         EventoBottomSheet(hoja = hoja, state = state, viewModel = viewModel)
     }
@@ -294,7 +307,12 @@ fun TituloSeccion(titulo: String, subtitulo: String? = null) {
 // ---------------------------------------------------------------- Marcador
 
 @Composable
-private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> Unit) {
+private fun Marcador(
+    state: RegistroUiState,
+    partido: Partido,
+    onVolver: () -> Unit,
+    onVerAlineacion: () -> Unit = {},
+) {
     val reloj = state.reloj
     // Rediseño: foto del estadio en B/N con velo; el texto sigue siendo blanco.
     com.esan.sportpro.ui.common.FondoFotoSportPro(
@@ -328,7 +346,13 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
                     .fillMaxWidth()
                     .padding(top = 8.dp, bottom = 4.dp),
             ) {
-                EquipoMarcador(partido.nombreEquipo, ColoresPartido.Azul, Modifier.weight(1f))
+                // Tocar el escudo propio abre el once en vivo (solo hay plantel del equipo propio).
+                EquipoMarcador(
+                    partido.nombreEquipo,
+                    ColoresPartido.Azul,
+                    Modifier.weight(1f),
+                    onClick = if (state.convocados.isNotEmpty()) onVerAlineacion else null,
+                )
                 Text(
                     "${state.marcador.propio}  –  ${state.marcador.rival}",
                     color = Color.White,
@@ -403,8 +427,14 @@ private fun Marcador(state: RegistroUiState, partido: Partido, onVolver: () -> U
 }
 
 @Composable
-private fun EquipoMarcador(nombre: String, color: Color, modifier: Modifier) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+private fun EquipoMarcador(nombre: String, color: Color, modifier: Modifier, onClick: (() -> Unit)? = null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 4.dp),
+    ) {
         Escudo(nombre, color, 64.dp)
         Text(
             nombre,
@@ -416,6 +446,21 @@ private fun EquipoMarcador(nombre: String, color: Color, modifier: Modifier) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 6.dp),
         )
+        if (onClick != null) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.White.copy(alpha = 0.16f),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text(
+                    "Ver once",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
     }
 }
 
@@ -783,86 +828,266 @@ private fun Finalizado(
     onResumenIa: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    val cerrado = partido.estado == EstadoPartido.ACTA_CERRADA
+    val acento = if (cerrado) ColoresPartido.Verde else ColoresPartido.Naranja
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, acento.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val cerrado = partido.estado == EstadoPartido.ACTA_CERRADA
-            Text(if (cerrado) "Acta cerrada" else "Partido finalizado", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Resultado final: ${partido.nombreEquipo} ${state.marcador.propio} - ${state.marcador.rival} ${partido.nombreRival}",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (cerrado) {
-                val conIncompletos = partido.actaCerradaConIncompletos ?: 0
-                Text(
-                    if (conIncompletos > 0) {
-                        "Se cerró con ${cantidad(conIncompletos, "evento incompleto", "eventos incompletos")}. Ya no se pueden corregir eventos."
-                    } else {
-                        "Ya no se pueden corregir eventos."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                state.acta?.let { acta ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = onVerActa, modifier = Modifier.weight(1f)) { Text("Ver acta") }
-                        OutlinedButton(
-                            onClick = { compartirActa(context, acta) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Compartir") }
-                    }
-                }
-                if (state.puedeResumir) {
-                    Button(
-                        onClick = onResumenIa,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp),
-                    ) { Text("Resumen con IA") }
-                }
-                if (state.evaluacionPendiente) {
-                    Text(
-                        "Evaluación del resumen pendiente",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Text(
-                        "Ya aprobaste el resumen. Registra su evaluación: utilidad, omisiones, errores y datos inventados.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedButton(onClick = onResumenIa, modifier = Modifier.fillMaxWidth()) { Text("Evaluar el resumen") }
-                }
-                if (state.puedeReabrirActa) {
-                    TextButton(onClick = onReabrirActa) { Text("Reabrir acta (administrador)") }
-                    ReglasActa.limiteReaperturaMs(partido)?.let { limite ->
-                        Text(
-                            "Puede reabrirse hasta el ${formatearFechaHora(limite)}.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Encabezado: estado del acta.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = acento.copy(alpha = 0.14f), modifier = Modifier.size(40.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (cerrado) Icons.Default.Lock else Icons.Default.SportsScore,
+                            contentDescription = null,
+                            tint = acento,
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(
+                        if (cerrado) "Acta cerrada" else "Partido finalizado",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (cerrado) "Ya no se pueden corregir eventos" else "Revisa y cierra el acta",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Etiqueta(if (cerrado) "Cerrada" else "Por cerrar", acento)
+            }
+
+            // Resultado final con los escudos.
+            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                ) {
+                    EquipoResultado(partido.nombreEquipo, ColoresPartido.Azul, Modifier.weight(1f))
+                    Text(
+                        "${state.marcador.propio} – ${state.marcador.rival}",
+                        style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroGrande.copy(fontSize = 36.sp, lineHeight = 36.sp),
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                    )
+                    EquipoResultado(partido.nombreRival, ColoresPartido.Rojo, Modifier.weight(1f))
+                }
+            }
+
+            state.acta?.let { acta ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DatoActa("Eventos", acta.eventosVigentes.toString(), ColoresPartido.Verde, Modifier.weight(1f))
+                    DatoActa("Anulados", acta.eventosAnulados.toString(), ColoresPartido.Gris, Modifier.weight(1f))
+                    DatoActa(
+                        "Incompletos",
+                        acta.eventosIncompletos.toString(),
+                        if (acta.eventosIncompletos > 0) ColoresPartido.Naranja else ColoresPartido.Gris,
+                        Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (cerrado) {
+                val conIncompletos = partido.actaCerradaConIncompletos ?: 0
+                if (conIncompletos > 0) {
+                    Aviso(
+                        "Se cerró con ${cantidad(conIncompletos, "evento incompleto", "eventos incompletos")}.",
+                        ColoresPartido.Naranja,
+                    )
+                }
+                state.acta?.let { acta ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = onVerActa,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        ) {
+                            Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Ver acta")
+                        }
+                        OutlinedButton(
+                            onClick = { compartirActa(context, acta) },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Compartir")
+                        }
+                    }
+                }
+                if (state.puedeResumir) {
+                    AccesoResumenIa(publicado = state.resumenPublicado != null, onClick = onResumenIa)
+                }
+                if (state.evaluacionPendiente) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Evaluación del resumen pendiente",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                "Ya aprobaste el resumen. Registra su utilidad, omisiones, errores y datos inventados.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            OutlinedButton(onClick = onResumenIa, modifier = Modifier.fillMaxWidth()) { Text("Evaluar el resumen") }
+                        }
+                    }
+                }
+                if (state.puedeReabrirActa) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            ReglasActa.limiteReaperturaMs(partido)?.let { limite ->
+                                Text(
+                                    "Administrador: puedes reabrirla hasta el ${formatearFechaHora(limite)}.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        TextButton(onClick = onReabrirActa) {
+                            Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Reabrir")
+                        }
+                    }
+                }
             } else {
-                Text(
-                    "Revisa la cronología, completa los pendientes y cierra el acta.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Lo que conviene revisar antes de cerrar.
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PasoCierre(
+                        hecho = state.incompletos.isEmpty(),
+                        texto = if (state.incompletos.isEmpty()) "Sin eventos incompletos"
+                        else "${cantidad(state.incompletos.size, "evento incompleto", "eventos incompletos")} por completar",
+                    )
+                    PasoCierre(
+                        hecho = state.pendientesSync == 0,
+                        texto = if (state.pendientesSync == 0) "Todo sincronizado"
+                        else "${cantidad(state.pendientesSync, "evento", "eventos")} por sincronizar",
+                    )
+                    PasoCierre(hecho = false, texto = "Revisa la cronología antes de cerrar", neutro = true)
+                }
                 if (state.puedeCorregir) {
                     Button(
                         onClick = onCerrarActa,
                         shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ColoresPartido.VerdeOscuro),
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 52.dp),
-                    ) { Text("Cerrar acta del partido") }
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Cerrar acta del partido", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EquipoResultado(nombre: String, color: Color, modifier: Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        Escudo(nombre, color, 40.dp)
+        Text(
+            nombre,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun DatoActa(etiqueta: String, valor: String, color: Color, modifier: Modifier) {
+    Surface(shape = RoundedCornerShape(14.dp), color = color.copy(alpha = 0.10f), modifier = modifier) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(valor, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = color)
+            Text(etiqueta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun Aviso(texto: String, color: Color) {
+    Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.12f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+            Icon(Icons.Default.Warning, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(texto, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun PasoCierre(hecho: Boolean, texto: String, neutro: Boolean = false) {
+    val color = when {
+        neutro -> MaterialTheme.colorScheme.onSurfaceVariant
+        hecho -> ColoresPartido.Verde
+        else -> ColoresPartido.Naranja
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            when {
+                neutro -> Icons.Default.Checklist
+                hecho -> Icons.Default.CheckCircle
+                else -> Icons.Default.Warning
+            },
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(texto, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** Acceso destacado al resumen con IA, con su estado (publicado o por generar/revisar). */
+@Composable
+private fun AccesoResumenIa(publicado: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = ColoresPartido.VerdeOscuro,
+        contentColor = Color.White,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Surface(shape = CircleShape, color = com.esan.sportpro.core.theme.PaletaSportPro.Lima, modifier = Modifier.size(38.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Resumen con IA", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    if (publicado) "Publicado · lo ven los jugadores y apoderados del equipo"
+                    else "Genera un borrador, revísalo y publícalo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                )
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
         }
     }
 }

@@ -269,15 +269,12 @@ private fun FormularioSolicitudContenido(state: MisHijosUiState, viewModel: MisH
                 if (state.equiposConJugadores.isEmpty()) {
                     Text("La academia todavía no tiene jugadores registrados.", style = MaterialTheme.typography.bodySmall)
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.equiposConJugadores.forEach { equipo ->
-                        FilterChip(
-                            selected = formulario.equipoId == equipo.id,
-                            onClick = { viewModel.onEquipo(equipo.id) },
-                            label = { Text(equipo.etiqueta) },
-                        )
-                    }
-                }
+                com.esan.sportpro.ui.common.SelectorEquipo(
+                    equipos = state.equiposConJugadores,
+                    seleccionadoId = formulario.equipoId,
+                    onSeleccionar = { id -> id?.let(viewModel::onEquipo) },
+                    permitirTodos = false,
+                )
                 state.jugadoresDelEquipo.forEach { jugador ->
                     val elegido = formulario.seleccionado?.jugadorId == jugador.jugadorId
                     Card(

@@ -4,7 +4,6 @@ import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -22,11 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -58,7 +54,13 @@ import com.esan.sportpro.domain.jugadores.ValidacionJugador
 import com.esan.sportpro.domain.jugadores.VisibilidadJugador
 import com.esan.sportpro.domain.jugadores.Vinculacion
 import com.esan.sportpro.ui.common.CampoFormulario
+import com.esan.sportpro.ui.common.CargandoSportPro
+import com.esan.sportpro.ui.common.ChipEstado
 import com.esan.sportpro.ui.common.EmptyStateMessage
+import com.esan.sportpro.ui.common.ErrorSportPro
+import com.esan.sportpro.ui.common.IndicadorCargaBoton
+import com.esan.sportpro.ui.common.TarjetaSportPro
+import com.esan.sportpro.ui.common.TonoEstado
 
 /**
  * US-007 — vista del padre de familia en el módulo Jugadores (Figma node 9-466): sus hijos
@@ -123,17 +125,15 @@ fun MisHijosScreen(
     ) { padding ->
         val contenido = Modifier.padding(padding)
         when {
-            state.cargando -> Box(contenido.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            state.error != null -> EmptyStateMessage(state.error.orEmpty(), contenido)
+            state.cargando -> CargandoSportPro(contenido)
+            state.error != null -> ErrorSportPro(mensaje = state.error.orEmpty(), modifier = contenido)
             else -> when (pantalla) {
                 PantallaMisHijos.Lista -> ListaMisHijos(state, viewModel, contenido)
                 PantallaMisHijos.Solicitar -> FormularioSolicitudContenido(state, viewModel, contenido)
                 is PantallaMisHijos.Detalle -> {
                     val jugador = state.jugadorDetalle
                     when {
-                        state.cargandoDetalle -> Box(contenido.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+                        state.cargandoDetalle -> CargandoSportPro(contenido)
                         jugador == null -> EmptyStateMessage("No tienes acceso al perfil de este jugador.", contenido)
                         else -> PerfilHijo(jugador, state, viewModel::abrirHistorial, contenido)
                     }
@@ -183,7 +183,7 @@ private fun ListaMisHijos(state: MisHijosUiState, viewModel: MisHijosViewModel, 
 /** Mientras no está aprobada, la tarjeta muestra solo nombre y categoría (criterio 5). */
 @Composable
 private fun TarjetaVinculacion(vinculacion: Vinculacion, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    TarjetaSportPro(onClick = onClick) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(vinculacion.jugadorNombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -217,12 +217,12 @@ private fun TarjetaVinculacion(vinculacion: Vinculacion, onClick: () -> Unit) {
 
 @Composable
 internal fun EstadoVinculacionChip(estado: EstadoVinculacion) {
-    val color = when (estado) {
-        EstadoVinculacion.APROBADA -> MaterialTheme.colorScheme.primary
-        EstadoVinculacion.PENDIENTE -> MaterialTheme.colorScheme.tertiary
-        EstadoVinculacion.RECHAZADA, EstadoVinculacion.REVOCADA -> MaterialTheme.colorScheme.error
+    val tono = when (estado) {
+        EstadoVinculacion.APROBADA -> TonoEstado.EXITO
+        EstadoVinculacion.PENDIENTE -> TonoEstado.ADVERTENCIA
+        EstadoVinculacion.RECHAZADA, EstadoVinculacion.REVOCADA -> TonoEstado.ERROR
     }
-    AssistChip(onClick = {}, label = { Text(estado.etiqueta, color = color) })
+    ChipEstado(texto = estado.etiqueta, tono = tono)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -257,7 +257,7 @@ private fun FormularioSolicitudContenido(state: MisHijosUiState, viewModel: MisH
                 )
                 Button(onClick = viewModel::buscarCodigo, enabled = !formulario.buscando, modifier = Modifier.fillMaxWidth()) {
                     if (formulario.buscando) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        IndicadorCargaBoton()
                     } else {
                         Text("Buscar")
                     }
@@ -302,7 +302,7 @@ private fun FormularioSolicitudContenido(state: MisHijosUiState, viewModel: MisH
             )
             Button(onClick = viewModel::enviarSolicitud, enabled = !formulario.enviando, modifier = Modifier.fillMaxWidth()) {
                 if (formulario.enviando) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    IndicadorCargaBoton()
                 } else {
                     Text("Enviar solicitud")
                 }

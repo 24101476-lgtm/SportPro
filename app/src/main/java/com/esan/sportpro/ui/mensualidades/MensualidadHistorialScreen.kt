@@ -2,18 +2,15 @@ package com.esan.sportpro.ui.mensualidades
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,12 +24,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.core.fecha.FechasSportPro
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
+import com.esan.sportpro.ui.common.CargandoSportPro
+import com.esan.sportpro.ui.common.ErrorSportPro
+import com.esan.sportpro.ui.common.EstadoVacioModulo
 import com.esan.sportpro.ui.common.RegistroSimuladoLegend
+import com.esan.sportpro.ui.common.TarjetaSportPro
 import java.time.Month
 import java.time.format.TextStyle
 import java.util.Locale
@@ -73,20 +73,20 @@ fun MensualidadHistorialScreen(
         },
     ) { padding ->
         when {
-            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            state.errorMessage != null -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
-                Text(state.errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)
-            }
+            state.isLoading -> CargandoSportPro(modifier = Modifier.padding(padding))
+            state.errorMessage != null -> ErrorSportPro(
+                mensaje = state.errorMessage.orEmpty(),
+                modifier = Modifier.padding(padding),
+                onReintentar = { viewModel.cargar(jugadorId, jugadorNombre) },
+            )
             else -> LazyColumn(
                 modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item { RegistroSimuladoLegend(modifier = Modifier.padding(bottom = 4.dp)) }
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        androidx.compose.foundation.layout.Row(
+                    TarjetaSportPro {
+                        Row(
                             Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -118,16 +118,16 @@ fun MensualidadHistorialScreen(
                 }
                 if (state.registros.isEmpty()) {
                     item {
-                        Text(
-                            "Este jugador aún no tiene pagos registrados.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 16.dp),
+                        EstadoVacioModulo(
+                            titulo = "Este jugador aún no tiene pagos registrados.",
+                            mensaje = "",
+                            icono = Icons.Default.EventBusy,
                         )
                     }
                 }
                 items(state.registros, key = { it.id }) { registro ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    TarjetaSportPro {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -156,7 +156,7 @@ fun MensualidadHistorialScreen(
                                 Text(
                                     text = "Anulado — corregido por un registro posterior",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFD62828),
+                                    color = MaterialTheme.colorScheme.error,
                                 )
                             } else if (registro.anulaRegistroId != null) {
                                 Text(

@@ -95,13 +95,19 @@ data class AcademiaUiState(
     fun jugadoresDe(equipo: Equipo): Int = jugadoresPorEquipo[equipo.id] ?: 0
 }
 
-/** Edición del nombre y el día de corte de la academia. */
+/** US-004: formulario con todos los datos de la academia. */
 data class FormularioConfiguracion(
-    val nombre: String,
+    val datos: com.esan.sportpro.domain.academia.ConfiguracionAcademia,
+    val anioFundacionTexto: String,
     val diaCorteTexto: String,
-    val error: String? = null,
+    val errores: Map<com.esan.sportpro.domain.academia.CampoAcademia, String> = emptyMap(),
+    /** URI local del escudo elegido, todavía sin subir. */
+    val escudoNuevo: String? = null,
     val guardando: Boolean = false,
-)
+) {
+    val escudoVisible: String? get() = escudoNuevo ?: datos.escudoUrl.takeIf { it.isNotBlank() }
+    val esRegistro: Boolean get() = datos.nombre.isBlank()
+}
 
 sealed interface AcademiaEvent {
     data class Mensaje(val texto: String) : AcademiaEvent
@@ -315,37 +321,92 @@ class AcademiaViewModel @Inject constructor(
     fun editarConfiguracion() {
         if (!currentState.puedeEditar) return
         val c = currentState.configuracion
-        setState { copy(editandoConfiguracion = FormularioConfiguracion(c.nombre, c.diaCorte.toString())) }
+        setState {
+            copy(
+                editandoConfiguracion = FormularioConfiguracion(
+                    datos = c,
+                    anioFundacionTexto = c.anioFundacion?.toString().orEmpty(),
+                    diaCorteTexto = c.diaCorte.toString(),
+                ),
+            )
+        }
     }
 
     fun cerrarConfiguracion() = setState { copy(editandoConfiguracion = null) }
 
-    fun onConfiguracion(nombre: String, diaCorteTexto: String) = setState {
+    /** Cambia un campo de texto del formulario de la academia y limpia su error. */
+    fun onCampoAcademia(campo: com.esan.sportpro.domain.academia.CampoAcademia, valor: String) = setState {
+        val f = editandoConfiguracion ?: return@setState this
+        val d = f.datos
+        val actualizado = when (campo) {
+            com.esan.sportpro.domain.academia.CampoAcademia.NOMBRE -> f.copy(datos = d.copy(nombre = valor.take(90)))
+            com.esan.sportpro.domain.academia.CampoAcademia.CIUDAD -> f.copy(datos = d.copy(ciudad = valor.take(90)))
+            com.esan.sportpro.domain.academia.CampoAcademia.DISTRITO -> f.copy(datos = d.copy(distrito = valor.take(90)))
+            com.esan.sportpro.domain.academia.CampoAcademia.DIRECCION -> f.copy(datos = d.copy(direccion = valor.take(130)))
+            com.esan.sportpro.domain.academia.CampoAcademia.TELEFONO ->
+                f.copy(datos = d.copy(telefono = valor.filter { it.isDigit() || it == '+' || it == ' ' }.take(18)))
+            com.esan.sportpro.domain.academia.CampoAcademia.CORREO -> f.copy(datos = d.copy(correo = valor.trim().take(110)))
+            com.esan.sportpro.domain.academia.CampoAcademia.ANIO_FUNDACION ->
+                f.copy(anioFundacionTexto = valor.filter(Char::isDigit).take(4))
+            com.esan.sportpro.domain.academia.CampoAcademia.DIA_CORTE ->
+                f.copy(diaCorteTexto = valor.filter(Char::isDigit).take(2))
+            com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO -> f
+        }
+        copy(editandoConfiguracion = actualizado.copy(errores = actualizado.errores - campo))
+    }
+
+    fun onEscudoAcademia(uri: String?) = setState {
+        val f = editandoConfiguracion ?: return@setState this
         copy(
-            editandoConfiguracion = editandoConfiguracion?.copy(
-                nombre = nombre,
-                diaCorteTexto = diaCorteTexto.filter(Char::isDigit).take(2),
-                error = null,
+            editandoConfiguracion = f.copy(
+                escudoNuevo = uri,
+                errores = f.errores - com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO,
             ),
         )
     }
 
+    /**
+     * US-004: valida con los mensajes del criterio, sube el escudo (máx. 2 MB, 1:1), comprueba que
+     * el nombre sea único y guarda; cada campo que cambió queda en la subcolección `auditoria`.
+     */
     fun guardarConfiguracion() {
         val formulario = currentState.editandoConfiguracion ?: return
         val perfil = currentState.perfil ?: return
-        val dia = formulario.diaCorteTexto.toIntOrNull()
-        com.esan.sportpro.domain.academia.ConfiguracionAcademia.validar(formulario.nombre, dia)?.let { error ->
-            setState { copy(editandoConfiguracion = formulario.copy(error = error)) }
+        if (formulario.guardando) return
+        val errores = com.esan.sportpro.domain.academia.ValidacionAcademia.validar(
+            datos = formulario.datos,
+            anioFundacionTexto = formulario.anioFundacionTexto,
+            diaCorteTexto = formulario.diaCorteTexto,
+        )
+        if (errores.isNotEmpty()) {
+            setState { copy(editandoConfiguracion = formulario.copy(errores = errores)) }
             return
         }
         setState { copy(editandoConfiguracion = formulario.copy(guardando = true)) }
         viewModelScope.launch {
             try {
-                val confirmado = academiaRepository.guardarConfiguracion(
-                    com.esan.sportpro.domain.academia.ConfiguracionAcademia(perfil.academiaId, formulario.nombre.trim(), dia!!),
+                var escudoUrl = formulario.datos.escudoUrl
+                formulario.escudoNuevo?.let { uri ->
+                    escudoUrl = academiaRepository.subirEscudo(perfil.academiaId, uri)
+                        ?: throw IllegalStateException("No se pudo subir el escudo. Revisa tu conexión e inténtalo de nuevo")
+                }
+                val anterior = currentState.configuracion.copy(id = perfil.academiaId)
+                val nueva = formulario.datos.copy(
+                    id = perfil.academiaId,
+                    nombre = formulario.datos.nombre.trim(),
+                    escudoUrl = escudoUrl,
+                    anioFundacion = formulario.anioFundacionTexto.toIntOrNull(),
+                    diaCorte = formulario.diaCorteTexto.toInt(),
                 )
+                val confirmado = academiaRepository.guardarDatos(anterior, nueva, perfil.uid)
                 setState { copy(editandoConfiguracion = null) }
-                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Configuración guardada")))
+                sendEvent(AcademiaEvent.Mensaje(mensajeGuardado(confirmado, "Datos de la academia guardados")))
+            } catch (e: com.esan.sportpro.domain.academia.NombreAcademiaDuplicadoException) {
+                errorEnCampo(formulario, com.esan.sportpro.domain.academia.CampoAcademia.NOMBRE, e.message.orEmpty())
+            } catch (e: com.esan.sportpro.domain.academia.EscudoMuyGrandeException) {
+                errorEnCampo(formulario, com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO, e.message.orEmpty())
+            } catch (e: IllegalStateException) {
+                errorEnCampo(formulario, com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO, e.message.orEmpty())
             } catch (e: Exception) {
                 setState { copy(editandoConfiguracion = formulario.copy(guardando = false)) }
                 sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))
@@ -353,12 +414,21 @@ class AcademiaViewModel @Inject constructor(
         }
     }
 
-    fun generarCodigo() {
+    private fun errorEnCampo(
+        formulario: FormularioConfiguracion,
+        campo: com.esan.sportpro.domain.academia.CampoAcademia,
+        mensaje: String,
+    ) = setState {
+        copy(editandoConfiguracion = formulario.copy(guardando = false, errores = formulario.errores + (campo to mensaje)))
+    }
+
+    /** US-004: genera un código de 8 caracteres para [rol], válido por 7 días. */
+    fun generarCodigo(rol: UserRole = UserRole.ADMINISTRADOR) {
         val perfil = currentState.perfil ?: return
         if (!currentState.puedeEditar) return
         viewModelScope.launch {
             try {
-                val codigo = academiaRepository.generarCodigo(perfil.academiaId, perfil.uid)
+                val codigo = academiaRepository.generarCodigo(perfil.academiaId, perfil.uid, rol)
                 sendEvent(AcademiaEvent.Mensaje("Código $codigo generado: vale 7 días y un solo uso"))
             } catch (e: Exception) {
                 sendEvent(AcademiaEvent.Mensaje(describirErrorFirestore(e)))

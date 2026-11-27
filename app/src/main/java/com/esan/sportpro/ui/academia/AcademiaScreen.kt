@@ -121,7 +121,8 @@ fun AcademiaScreen(
                 state.editandoConfiguracion?.let { formulario ->
                     DialogoConfiguracion(
                         formulario = formulario,
-                        onCambio = viewModel::onConfiguracion,
+                        onCampo = viewModel::onCampoAcademia,
+                        onEscudo = viewModel::onEscudoAcademia,
                         onGuardar = viewModel::guardarConfiguracion,
                         onCancelar = viewModel::cerrarConfiguracion,
                     )
@@ -638,67 +639,103 @@ private fun EntrenadoresPendientes(
     }
 }
 
-/** US-004: nombre y día de corte de la academia, y códigos para registrar administradores. */
+/**
+ * US-004: datos de la academia (escudo, nombre, ubicación, contacto, fundación) y los códigos de
+ * invitación con su rol, estado (vigente, usado, expirado o revocado) y fecha de expiración.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConfiguracionYCodigos(
     state: AcademiaUiState,
     onEditar: () -> Unit,
-    onGenerar: () -> Unit,
+    onGenerar: (com.esan.sportpro.navigation.UserRole) -> Unit,
     onRevocar: (String) -> Unit,
 ) {
     val portapapeles = androidx.compose.ui.platform.LocalClipboardManager.current
     var verCodigos by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-    val vigentes = state.codigos.filter { it.vigente() }
+    var rolCodigo by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(com.esan.sportpro.navigation.UserRole.ADMINISTRADOR)
+    }
+    val c = state.configuracion
+    val vigentes = state.codigos.count { it.vigente() }
     val formato = remember { com.esan.sportpro.core.fecha.FechasSportPro.formatoFecha() }
     androidx.compose.material3.Surface(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EscudoEquipo(nombre = c.nombre.ifBlank { "Academia" }, tamano = 48.dp, url = c.escudoUrl.ifBlank { null })
                 Column(Modifier.weight(1f)) {
+                    Text(c.nombre.ifBlank { "Academia sin registrar" }, style = MaterialTheme.typography.titleSmall)
+                    val ubicacion = listOf(c.distrito, c.ciudad).filter { it.isNotBlank() }.joinToString(", ")
+                    if (ubicacion.isNotBlank()) {
+                        Text(ubicacion, style = MaterialTheme.typography.bodySmall)
+                    }
                     Text(
-                        state.configuracion.nombre.ifBlank { "Academia sin nombre" },
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        "Las mensualidades vencen el día ${state.configuracion.diaCorte} de cada mes",
+                        buildString {
+                            c.anioFundacion?.let { append("Fundada en $it. ") }
+                            append("Las mensualidades vencen el día ${c.diaCorte}.")
+                        },
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onEditar) { Text("Editar") }
+                TextButton(onClick = onEditar) { Text(if (c.nombre.isBlank()) "Registrar" else "Editar") }
             }
+            androidx.compose.material3.HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Códigos de administrador: ${vigentes.size} " + if (vigentes.size == 1) "vigente" else "vigentes",
+                    "Códigos de invitación: $vigentes " + if (vigentes == 1) "vigente" else "vigentes",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = { verCodigos = !verCodigos }) { Text(if (verCodigos) "Ocultar" else "Ver") }
-                TextButton(onClick = onGenerar) { Text("Generar") }
             }
             if (verCodigos) {
-                if (vigentes.isEmpty()) {
-                    Text("No hay códigos vigentes.", style = MaterialTheme.typography.bodySmall)
+                Text("Rol del nuevo código", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.esan.sportpro.navigation.UserRole.entries.forEach { rol ->
+                        FilterChip(
+                            selected = rolCodigo == rol,
+                            onClick = { rolCodigo = rol },
+                            label = { Text(etiquetaRol(rol)) },
+                            colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                        )
+                    }
                 }
-                vigentes.forEach { c ->
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onGenerar(rolCodigo) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Generar código de ${etiquetaRol(rolCodigo).lowercase()}") }
+                if (state.codigos.isEmpty()) {
+                    Text("Todavía no generaste códigos.", style = MaterialTheme.typography.bodySmall)
+                }
+                state.codigos.forEach { codigo ->
+                    val estado = codigo.estado()
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                c.codigo,
+                                codigo.codigo,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
                             )
-                            Text(
-                                "Vence el " + (c.expiraEn?.let { formato.format(it) } ?: "—") + " · un solo uso",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ChipEstado(estado.etiqueta, tonoDe(estado))
+                                Text(
+                                    "  ${etiquetaRol(codigo.rol)} · vence el " +
+                                        (codigo.expiraEn?.let { formato.format(it) } ?: "—"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
-                        TextButton(onClick = { portapapeles.setText(androidx.compose.ui.text.AnnotatedString(c.codigo)) }) {
-                            Text("Copiar")
+                        if (estado == com.esan.sportpro.domain.academia.EstadoCodigo.VIGENTE) {
+                            TextButton(onClick = { portapapeles.setText(androidx.compose.ui.text.AnnotatedString(codigo.codigo)) }) {
+                                Text("Copiar")
+                            }
+                            TextButton(onClick = { onRevocar(codigo.codigo) }) { Text("Revocar") }
                         }
-                        TextButton(onClick = { onRevocar(c.codigo) }) { Text("Revocar") }
                     }
                 }
             }
@@ -706,42 +743,140 @@ private fun ConfiguracionYCodigos(
     }
 }
 
+private fun etiquetaRol(rol: com.esan.sportpro.navigation.UserRole): String = when (rol) {
+    com.esan.sportpro.navigation.UserRole.ADMINISTRADOR -> "Administrador"
+    com.esan.sportpro.navigation.UserRole.ENTRENADOR -> "Entrenador"
+    com.esan.sportpro.navigation.UserRole.JUGADOR -> "Jugador"
+    com.esan.sportpro.navigation.UserRole.PADRE_DE_FAMILIA -> "Padre"
+}
+
+private fun tonoDe(estado: com.esan.sportpro.domain.academia.EstadoCodigo): TonoEstado = when (estado) {
+    com.esan.sportpro.domain.academia.EstadoCodigo.VIGENTE -> TonoEstado.EXITO
+    com.esan.sportpro.domain.academia.EstadoCodigo.USADO -> TonoEstado.NEUTRO
+    com.esan.sportpro.domain.academia.EstadoCodigo.EXPIRADO -> TonoEstado.ADVERTENCIA
+    com.esan.sportpro.domain.academia.EstadoCodigo.REVOCADO -> TonoEstado.ERROR
+}
+
+/** US-004: registro y edición de los datos de la academia, con el escudo recortado 1:1. */
 @Composable
 private fun DialogoConfiguracion(
     formulario: FormularioConfiguracion,
-    onCambio: (String, String) -> Unit,
+    onCampo: (com.esan.sportpro.domain.academia.CampoAcademia, String) -> Unit,
+    onEscudo: (String?) -> Unit,
     onGuardar: () -> Unit,
     onCancelar: () -> Unit,
 ) {
+    val selector = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let { onEscudo(it.toString()) } }
+    val d = formulario.datos
     AlertDialog(
         onDismissRequest = { if (!formulario.guardando) onCancelar() },
-        title = { Text("Configuración de la academia") },
+        title = { Text(if (formulario.esRegistro) "Registrar academia" else "Datos de la academia") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = formulario.nombre,
-                    onValueChange = { onCambio(it, formulario.diaCorteTexto) },
-                    label = { Text("Nombre de la academia") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = formulario.diaCorteTexto,
-                    onValueChange = { onCambio(formulario.nombre, it) },
-                    label = { Text("Día de corte de las mensualidades") },
-                    supportingText = { Text("Entre 1 y 28. Después de ese día, lo no pagado figura como vencido.") },
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                formulario.error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    val visible = formulario.escudoVisible
+                    if (visible != null) {
+                        androidx.compose.material3.Surface(
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(64.dp),
+                        ) {
+                            coil.compose.AsyncImage(
+                                model = visible,
+                                contentDescription = "Escudo de la academia",
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            )
+                        }
+                    } else {
+                        EscudoEquipo(nombre = d.nombre.ifBlank { "Academia" }, tamano = 64.dp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Escudo o logotipo", style = MaterialTheme.typography.labelLarge)
+                        TextButton(
+                            onClick = {
+                                selector.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                    ),
+                                )
+                            },
+                            enabled = !formulario.guardando,
+                        ) { Text(if (visible == null) "Elegir imagen" else "Cambiar imagen") }
+                        Text(
+                            formulario.errores[com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO]
+                                ?: "Máximo 2 MB. Se recorta en cuadrado (1:1).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO in formulario.errores) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
+                CampoTextoAcademia("Nombre de la academia", d.nombre, com.esan.sportpro.domain.academia.CampoAcademia.NOMBRE, formulario, onCampo)
+                CampoTextoAcademia("Ciudad", d.ciudad, com.esan.sportpro.domain.academia.CampoAcademia.CIUDAD, formulario, onCampo)
+                CampoTextoAcademia("Distrito", d.distrito, com.esan.sportpro.domain.academia.CampoAcademia.DISTRITO, formulario, onCampo)
+                CampoTextoAcademia("Dirección", d.direccion, com.esan.sportpro.domain.academia.CampoAcademia.DIRECCION, formulario, onCampo)
+                CampoTextoAcademia(
+                    "Teléfono de contacto", d.telefono, com.esan.sportpro.domain.academia.CampoAcademia.TELEFONO, formulario, onCampo,
+                    teclado = androidx.compose.ui.text.input.KeyboardType.Phone,
+                )
+                CampoTextoAcademia(
+                    "Correo de contacto", d.correo, com.esan.sportpro.domain.academia.CampoAcademia.CORREO, formulario, onCampo,
+                    teclado = androidx.compose.ui.text.input.KeyboardType.Email,
+                )
+                CampoTextoAcademia(
+                    "Año de fundación", formulario.anioFundacionTexto,
+                    com.esan.sportpro.domain.academia.CampoAcademia.ANIO_FUNDACION, formulario, onCampo,
+                    teclado = androidx.compose.ui.text.input.KeyboardType.Number,
+                )
+                CampoTextoAcademia(
+                    "Día de corte de las mensualidades", formulario.diaCorteTexto,
+                    com.esan.sportpro.domain.academia.CampoAcademia.DIA_CORTE, formulario, onCampo,
+                    teclado = androidx.compose.ui.text.input.KeyboardType.Number,
+                    ayuda = "Entre 1 y 28. Después de ese día, lo no pagado figura como vencido.",
+                )
             }
         },
-        confirmButton = { TextButton(onClick = onGuardar, enabled = !formulario.guardando) { Text("Guardar") } },
+        confirmButton = {
+            TextButton(onClick = onGuardar, enabled = !formulario.guardando) {
+                Text(if (formulario.guardando) "Guardando…" else "Guardar")
+            }
+        },
         dismissButton = { TextButton(onClick = onCancelar, enabled = !formulario.guardando) { Text("Cancelar") } },
+    )
+}
+
+@Composable
+private fun CampoTextoAcademia(
+    etiqueta: String,
+    valor: String,
+    campo: com.esan.sportpro.domain.academia.CampoAcademia,
+    formulario: FormularioConfiguracion,
+    onCampo: (com.esan.sportpro.domain.academia.CampoAcademia, String) -> Unit,
+    teclado: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
+    ayuda: String? = null,
+) {
+    val error = formulario.errores[campo]
+    OutlinedTextField(
+        value = valor,
+        onValueChange = { onCampo(campo, it) },
+        label = { Text(etiqueta) },
+        singleLine = true,
+        enabled = !formulario.guardando,
+        isError = error != null,
+        supportingText = if (error != null || ayuda != null) {
+            { Text(error ?: ayuda.orEmpty()) }
+        } else {
+            null
+        },
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = teclado),
+        modifier = Modifier.fillMaxWidth(),
     )
 }

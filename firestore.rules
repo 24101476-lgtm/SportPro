@@ -55,7 +55,9 @@ service cloud.firestore {
         && codigo.size() == 8
         && exists(/databases/$(database)/documents/codigosInvitacion/$(codigo))
         && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('usado', false) == false
-        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('revocado', false) == false;
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('revocado', false) == false
+        // US-004: el código tiene un rol asociado; solo uno de Administrador crea esa cuenta.
+        && get(/databases/$(database)/documents/codigosInvitacion/$(codigo)).data.get('rol', 'ADMINISTRADOR') == 'ADMINISTRADOR';
     }
 
     // Perfil de cada usuario.
@@ -143,12 +145,38 @@ service cloud.firestore {
     // los usuarios de esa academia; solo su administrador la cambia.
     match /academias/{academiaId} {
       allow read: if autenticado() && academiaId == academiaPropia();
+      // US-004: solo el administrador de la academia (clubId coincidente) escribe sus datos.
       allow write: if esAdmin()
         && academiaId == academiaPropia()
         && request.resource.data.nombre is string
-        && request.resource.data.nombre.size() >= 3 && request.resource.data.nombre.size() <= 60
+        && request.resource.data.nombre.size() >= 3 && request.resource.data.nombre.size() <= 80
         && request.resource.data.diaCorte is int
-        && request.resource.data.diaCorte >= 1 && request.resource.data.diaCorte <= 28;
+        && request.resource.data.diaCorte >= 1 && request.resource.data.diaCorte <= 28
+        && (!('anioFundacion' in request.resource.data) || request.resource.data.anioFundacion == null
+          || (request.resource.data.anioFundacion is int
+            && request.resource.data.anioFundacion >= 1900
+            && request.resource.data.anioFundacion <= request.time.year()));
+
+      // US-004: registro de cambios (uid, campo, valor anterior, valor nuevo, fecha). Nadie lo
+      // edita ni lo borra.
+      match /auditoria/{cambioId} {
+        allow read: if esAdmin() && academiaId == academiaPropia();
+        allow create: if esAdmin()
+          && academiaId == academiaPropia()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.campo is string;
+        allow update, delete: if false;
+      }
+    }
+
+    // US-004: nombres reservados para que no haya dos academias con el mismo nombre. Cualquiera
+    // autenticado puede comprobar si un nombre está libre; solo el administrador reserva el suyo.
+    match /nombresAcademia/{clave} {
+      allow read: if autenticado();
+      allow create, update: if esAdmin()
+        && request.resource.data.academiaId == academiaPropia()
+        && (resource == null || resource.data.academiaId == academiaPropia());
+      allow delete: if esAdmin() && resource.data.academiaId == academiaPropia();
     }
 
     // US-004/US-005: equipos por categoría. Los lee cualquier usuario autenticado; solo el

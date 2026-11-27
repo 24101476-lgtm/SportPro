@@ -72,11 +72,12 @@ fun NuevoPartidoSheet(state: PartidosUiState, form: FormularioPartido, viewModel
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else {
-                    FilaChips {
-                        state.equiposActivos.forEach { e ->
-                            Chip(e.etiqueta, form.equipoId == e.id) { viewModel.onEquipo(e.id) }
-                        }
-                    }
+                    com.esan.sportpro.ui.common.SelectorEquipo(
+                        equipos = state.equiposActivos,
+                        seleccionadoId = form.equipoId,
+                        onSeleccionar = { id -> id?.let(viewModel::onEquipo) },
+                        permitirTodos = false,
+                    )
                 }
             }
 

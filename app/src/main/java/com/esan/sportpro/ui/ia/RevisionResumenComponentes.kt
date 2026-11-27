@@ -1,6 +1,24 @@
 package com.esan.sportpro.ui.ia
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Publish
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -83,25 +101,11 @@ internal fun RevisionBorrador(state: ResumenIaUiState, resumen: ResumenPartido, 
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Versión ${resumen.version}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Etiqueta("Borrador", ColoresPartido.Naranja)
-            }
-            Text(
-                "Modelo ${resumen.modelo} · " + (resumen.creadoEnMs?.let { formatearFechaHora(it) } ?: "guardando…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Borrador: no es visible para jugadores, padres ni la comunidad hasta que lo apruebes. " +
-                    "Corrige el texto con la cronología a la vista.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            EncabezadoVersion(resumen, "Borrador", ColoresPartido.Naranja)
+            Banda(
+                icono = Icons.Default.VisibilityOff,
+                color = ColoresPartido.Naranja,
+                texto = "Solo lo ves tú. Jugadores, padres y comunidad lo verán cuando lo apruebes.",
             )
 
             PanelMenciones(state.mencionesEdicion)
@@ -139,15 +143,112 @@ internal fun RevisionBorrador(state: ResumenIaUiState, resumen: ResumenPartido, 
                     enabled = edicion.modificado && !state.guardando,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                ) { Text("Guardar borrador") }
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Guardar")
+                }
                 Button(
                     onClick = viewModel::pedirAprobacion,
                     enabled = !state.guardando,
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                ) { Text("Aprobar y publicar", fontWeight = FontWeight.Bold) }
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = ColoresPartido.VerdeOscuro),
+                    modifier = Modifier.weight(1.4f).heightIn(min = 48.dp),
+                ) {
+                    Icon(Icons.Default.Publish, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Aprobar y publicar", fontWeight = FontWeight.Bold)
+                }
             }
         }
+    }
+}
+
+/** Versión, estado, modelo y fecha de generación. */
+@Composable
+private fun EncabezadoVersion(resumen: ResumenPartido, estado: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.14f), modifier = Modifier.size(42.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("v${resumen.version}", color = color, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text("Versión ${resumen.version}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                resumen.modelo + " · " + (resumen.creadoEnMs?.let { formatearFechaHora(it) } ?: "guardando…"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        Etiqueta(estado, color)
+    }
+}
+
+/** Aviso de una línea con ícono y color. */
+@Composable
+private fun Banda(icono: androidx.compose.ui.graphics.vector.ImageVector, color: Color, texto: String) {
+    Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.12f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+            Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(texto, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * Dónde queda el resumen al aprobarlo: siempre en el detalle del partido (jugadores y apoderados
+ * del equipo) y, si se elige, como publicación abierta en el muro de la comunidad.
+ */
+@Composable
+private fun DondeSePublica(enComunidad: Boolean, activo: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            if (activo) "Publicado en" else "Al aprobarlo se publica en",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        LugarPublicacion(
+            icono = Icons.Default.SportsSoccer,
+            titulo = "Detalle del partido",
+            detalle = "Lo ven los jugadores del equipo y sus apoderados",
+            incluido = true,
+        )
+        LugarPublicacion(
+            icono = Icons.Default.Public,
+            titulo = "Muro de la comunidad",
+            detalle = if (enComunidad) "Publicación abierta con el marcador y los hechos" else "No se publica",
+            incluido = enComunidad,
+        )
+    }
+}
+
+@Composable
+private fun LugarPublicacion(
+    icono: androidx.compose.ui.graphics.vector.ImageVector,
+    titulo: String,
+    detalle: String,
+    incluido: Boolean,
+) {
+    val color = if (incluido) ColoresPartido.Verde else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = CircleShape, color = color.copy(alpha = 0.12f), modifier = Modifier.size(32.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(17.dp))
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(titulo, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(
+            if (incluido) Icons.Default.CheckCircle else Icons.Default.RemoveCircleOutline,
+            contentDescription = if (incluido) "Incluido" else "No incluido",
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -155,11 +256,10 @@ internal fun RevisionBorrador(state: ResumenIaUiState, resumen: ResumenPartido, 
 @Composable
 private fun PanelMenciones(menciones: List<MencionNoVerificada>) {
     if (menciones.isEmpty()) {
-        Text(
-            "Sin datos por verificar: todo lo que mencionas coincide con los eventos registrados.",
-            style = MaterialTheme.typography.bodySmall,
+        Banda(
+            icono = Icons.Default.Verified,
             color = ColoresPartido.Verde,
-            fontWeight = FontWeight.SemiBold,
+            texto = "Todo lo que menciona el texto coincide con los eventos registrados.",
         )
         return
     }
@@ -224,15 +324,36 @@ private fun CampoBloqueTexto(
     minLineas: Int,
     onCambio: (String) -> Unit,
 ) {
-    OutlinedTextField(
-        value = valor,
-        onValueChange = onCambio,
-        label = { Text(etiqueta) },
-        isError = error != null,
-        supportingText = { (error ?: ayuda)?.let { texto -> Text(texto) } },
-        minLines = minLineas,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                when (etiqueta) {
+                    "Hechos registrados" -> Icons.Default.FactCheck
+                    "Desarrollo del partido" -> Icons.Default.Article
+                    else -> Icons.Default.RecordVoiceOver
+                },
+                contentDescription = null,
+                tint = ColoresPartido.VerdeOscuro,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(etiqueta, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(
+                "${valor.trim().length} car.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        OutlinedTextField(
+            value = valor,
+            onValueChange = onCambio,
+            isError = error != null,
+            supportingText = { (error ?: ayuda)?.let { texto -> Text(texto) } },
+            minLines = minLineas,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 /** Eventos vigentes en orden, para contrastar cada afirmación del texto (criterio 3). */
@@ -240,35 +361,58 @@ private fun CampoBloqueTexto(
 private fun CronologiaVerificacion(state: ResumenIaUiState, partido: Partido?, modifier: Modifier) {
     val vigentes = ReglasPartido.vigentes(state.eventos)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Cronología de eventos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Timeline, contentDescription = null, tint = ColoresPartido.VerdeOscuro, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Cronología para verificar", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(ALTO_CRONOLOGIA)
+                    .heightIn(max = ALTO_CRONOLOGIA)
                     .verticalScroll(rememberScrollState())
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 if (vigentes.isEmpty()) {
                     Text("No hay eventos vigentes.", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
                 }
-                vigentes.forEach { evento ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                vigentes.forEachIndexed { i, evento ->
+                    val rival = evento.equipo == com.esan.sportpro.domain.partido.EquipoEvento.RIVAL
+                    Row(modifier = Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
                         Text(
                             minutoEvento(evento, state.eventos, partido),
                             style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Black,
                             maxLines = 1,
-                            modifier = Modifier.width(52.dp),
+                            modifier = Modifier.width(46.dp).padding(top = 6.dp),
                         )
-                        IconoEvento(evento.tipoId, 28.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        // Ícono con la línea que une los eventos.
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight()) {
+                            IconoEvento(evento.tipoId, 28.dp)
+                            if (i < vigentes.lastIndex) {
+                                Box(
+                                    Modifier
+                                        .width(2.dp)
+                                        .weight(1f)
+                                        .background(MaterialTheme.colorScheme.outlineVariant),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f).padding(top = 2.dp, bottom = 12.dp)) {
                             Text(evento.tipoNombre, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             val detalle = detalleEvento(evento, partido)
                             if (detalle.isNotBlank()) {
-                                Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    detalle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (rival) ColoresPartido.Rojo else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -397,28 +541,14 @@ internal fun TarjetaResumenGuardado(state: ResumenIaUiState, resumen: ResumenPar
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val aprobado = resumen.estado == EstadoResumen.APROBADO
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Versión ${resumen.version}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                if (aprobado) Etiqueta("Aprobado", ColoresPartido.Verde) else Etiqueta("Borrador", ColoresPartido.Naranja)
+            if (aprobado) {
+                EncabezadoVersion(resumen, "Publicado", ColoresPartido.Verde)
+            } else {
+                EncabezadoVersion(resumen, "Borrador", ColoresPartido.Naranja)
             }
-            Text(
-                "Modelo ${resumen.modelo} · " + (resumen.creadoEnMs?.let { formatearFechaHora(it) } ?: "guardando…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             if (aprobado) {
-                Text(
-                    "Visible en el detalle del partido para los jugadores del equipo y sus apoderados" +
-                        if (resumen.visibleEnComunidad) " y publicado en la comunidad." else ".",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                DondeSePublica(enComunidad = resumen.visibleEnComunidad || resumen.publicacionComunidadId != null, activo = true)
                 LeyendaResumenIa()
             } else {
                 Text(
@@ -653,6 +783,7 @@ internal fun DialogosResumen(state: ResumenIaUiState, viewModel: ResumenIaViewMo
                         Checkbox(checked = state.confirmacionMarcada, onCheckedChange = viewModel::onConfirmacionMarcada)
                         Text(ReglasRevision.TEXTO_CONFIRMACION, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
                     }
+                    DondeSePublica(enComunidad = state.publicarEnComunidad, activo = false)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Publicar también en la comunidad", fontWeight = FontWeight.SemiBold)

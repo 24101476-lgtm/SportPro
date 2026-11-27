@@ -302,15 +302,14 @@ private fun FormularioEquipoDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text("Categoría", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CategoriasEquipo.todas.forEach { categoria ->
-                        FilterChip(
-                            selected = formulario.categoria == categoria,
-                            onClick = { onCategoria(categoria) },
-                            label = { Text(categoria) },
-                        )
-                    }
-                }
+                com.esan.sportpro.ui.common.SelectorOpciones(
+                    opciones = CategoriasEquipo.todas,
+                    seleccionada = formulario.categoria.takeIf { it in CategoriasEquipo.todas },
+                    texto = { it },
+                    onSeleccionar = { it?.let(onCategoria) },
+                    placeholder = "Elige la categoría",
+                    error = CampoEquipo.CATEGORIA in formulario.errores,
+                )
                 formulario.errores[CampoEquipo.CATEGORIA]?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }

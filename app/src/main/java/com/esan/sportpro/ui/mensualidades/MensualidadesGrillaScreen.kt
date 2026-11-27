@@ -153,17 +153,11 @@ fun MensualidadesGrillaScreen(
 
             if (state.equiposDisponibles.size > 1) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ChipEquipo("Todos", state.equipoFiltro == null) { viewModel.onFiltroEquipoChanged(null) }
-                        state.equiposDisponibles.forEach { equipo ->
-                            ChipEquipo(equipo.nombre, state.equipoFiltro == equipo.id) {
-                                viewModel.onFiltroEquipoChanged(if (state.equipoFiltro == equipo.id) null else equipo.id)
-                            }
-                        }
-                    }
+                    com.esan.sportpro.ui.common.SelectorEquipo(
+                        equipos = state.equiposDisponibles.map { com.esan.sportpro.domain.academia.Equipo(id = it.id, nombre = it.nombre) },
+                        seleccionadoId = state.equipoFiltro,
+                        onSeleccionar = viewModel::onFiltroEquipoChanged,
+                    )
                 }
             }
 
@@ -344,20 +338,6 @@ private fun ContadorEstado(
             )
         }
     }
-}
-
-@Composable
-private fun ChipEquipo(texto: String, seleccionado: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = seleccionado,
-        onClick = onClick,
-        label = { Text(texto, fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal) },
-        shape = RoundedCornerShape(12.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = ColoresPartido.Verde,
-            selectedLabelColor = Color.White,
-        ),
-    )
 }
 
 // ============================================================

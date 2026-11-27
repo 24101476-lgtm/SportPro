@@ -174,15 +174,7 @@ fun MiPerfilScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text("Pie hábil", style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PieHabil.entries.forEach { pie ->
-                            FilterChip(
-                                selected = state.pieHabil == pie.etiqueta,
-                                onClick = { viewModel.onPieHabil(pie.etiqueta) },
-                                label = { Text(pie.etiqueta) },
-                            )
-                        }
-                    }
+                    SelectorPieHabil(seleccionado = state.pieHabil, onElegir = viewModel::onPieHabil)
                     Button(
                         onClick = viewModel::guardar,
                         enabled = state.hayCambios && !state.guardando,

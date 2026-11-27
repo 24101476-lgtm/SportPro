@@ -209,23 +209,12 @@ private fun ListaEntrenamientos(
                 Text("  Biblioteca de ejercicios")
             }
         }
-        FlowRow(
+        com.esan.sportpro.ui.common.SelectorEquipo(
+            equipos = state.equiposActivos,
+            seleccionadoId = state.filtroEquipoId,
+            onSeleccionar = viewModel::onFiltroEquipo,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = state.filtroEquipoId == null,
-                onClick = { viewModel.onFiltroEquipo(null) },
-                label = { Text("Todos") },
-            )
-            state.equiposActivos.forEach { equipo ->
-                FilterChip(
-                    selected = state.filtroEquipoId == equipo.id,
-                    onClick = { viewModel.onFiltroEquipo(equipo.id) },
-                    label = { Text(equipo.etiqueta) },
-                )
-            }
-        }
+        )
 
         if (state.entrenamientosVisibles.isEmpty()) {
             EmptyStateMessage(
@@ -404,15 +393,13 @@ private fun FormularioEntrenamientoContenido(
         if (state.equiposActivos.isEmpty()) {
             Text("No hay equipos activos. Crea uno en Academia.", style = MaterialTheme.typography.bodySmall)
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.equiposActivos.forEach { equipo ->
-                FilterChip(
-                    selected = datos.equipoId == equipo.id,
-                    onClick = { viewModel.onCampoChanged(CampoEntrenamiento.EQUIPO) { copy(equipoId = equipo.id) } },
-                    label = { Text(equipo.etiqueta) },
-                )
-            }
-        }
+        com.esan.sportpro.ui.common.SelectorEquipo(
+            equipos = state.equiposActivos,
+            seleccionadoId = datos.equipoId.ifBlank { null },
+            onSeleccionar = { id -> id?.let { viewModel.onCampoChanged(CampoEntrenamiento.EQUIPO) { copy(equipoId = it) } } },
+            permitirTodos = false,
+            error = errores[CampoEntrenamiento.EQUIPO] != null,
+        )
         errores[CampoEntrenamiento.EQUIPO]?.let { ErrorTexto(it) }
 
         // Una sesión nueva no puede quedar en el pasado; al editar se respeta la fecha original.

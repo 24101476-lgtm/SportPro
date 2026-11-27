@@ -56,15 +56,14 @@ fun AvisosFiltrosScreen(filtroActual: FiltroAvisos, onAplicar: (FiltroAvisos) ->
             )
 
             Text("Posición", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PosicionJugador.entries.forEach { opcion ->
-                    FilterChip(
-                        selected = posicion == opcion,
-                        onClick = { posicion = if (posicion == opcion) null else opcion },
-                        label = { Text(opcion.etiqueta) },
-                    )
-                }
-            }
+            com.esan.sportpro.ui.common.SelectorOpciones(
+                opciones = PosicionJugador.entries,
+                seleccionada = posicion,
+                texto = { it.etiqueta },
+                onSeleccionar = { posicion = it },
+                opcionVacia = "Todas las posiciones",
+                icono = { com.esan.sportpro.ui.jugadores.InsigniaPosicion(it?.etiqueta) },
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { categoria = ""; posicion = null; distrito = "" }) { Text("Limpiar") }

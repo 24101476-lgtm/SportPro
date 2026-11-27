@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -78,6 +79,8 @@ data class JugadorCanchaUi(
     val y: Float,
     /** Foto de la ficha del jugador (Supabase); vacía si no tiene o no se pudo leer. */
     val fotoUrl: String = "",
+    /** Partido en vivo: goles, tarjetas y cambios del jugador; se dibujan al costado de la carta. */
+    val marcas: MarcasEnVivo? = null,
 )
 
 private val ANCHO_FICHA = 64.dp
@@ -98,6 +101,10 @@ fun CanchaTactica(
     onPosicionJugadorChange: (jugadorId: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
     /** Se suelta una carta sobre otra: ambas cambian de lugar. Recibe (arrastrado, destino). */
     onIntercambiarJugadores: (arrastrado: JugadorCanchaUi, destino: JugadorCanchaUi) -> Unit = { _, _ -> },
+    /** Partido en vivo: jugadores sustituidos o expulsados (se muestran atenuados bajo el banco). */
+    fuera: List<JugadorCanchaUi> = emptyList(),
+    /** Texto de ayuda bajo la cancha; `null` usa el de la pizarra. */
+    ayuda: String? = null,
 ) {
     val posiciones = remember(titulares) {
         mutableStateMapOf<String, Offset>().apply {
@@ -284,9 +291,12 @@ fun CanchaTactica(
         if (suplentes.isNotEmpty()) {
             Banco(suplentes = suplentes, onJugadorClick = onJugadorClick)
         }
+        if (fuera.isNotEmpty()) {
+            Banco(suplentes = fuera, onJugadorClick = onJugadorClick, titulo = "SALIERON", atenuadas = true)
+        }
 
         Text(
-            text = if (editable) {
+            text = ayuda ?: if (editable) {
                 "Arrastra una carta para moverla. Suéltala sobre otra para intercambiarlas."
             } else {
                 "Toca una carta para ver los datos del jugador."
@@ -466,6 +476,8 @@ private fun FichaJugador(
     ancho: Dp = ANCHO_FICHA,
     alto: Dp = ALTO_FICHA,
     suplente: Boolean = false,
+    /** Jugador que ya salió: la carta se atenúa, pero sus marcas se ven completas. */
+    atenuada: Boolean = false,
 ) {
     val forma = RoundedCornerShape(12.dp)
     val marco = if (suplente) {
@@ -479,6 +491,7 @@ private fun FichaJugador(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = if (atenuada) 0.55f else 1f }
                 .shadow(if (resaltada) 18.dp else 7.dp, forma)
                 .clip(forma)
                 .background(marco)
@@ -569,6 +582,16 @@ private fun FichaJugador(
             }
         }
 
+        // Partido en vivo: goles, tarjetas y cambios, pegados al borde derecho de la carta.
+        jugador.marcas?.let { marcas ->
+            MarcasCarta(
+                marcas = marcas,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 9.dp, y = 4.dp),
+            )
+        }
+
         // Aviso de intercambio sobre la carta destino.
         if (objetivo) {
             Box(
@@ -589,6 +612,72 @@ private fun FichaJugador(
             }
         }
     }
+}
+
+/** Marcas pequeñas al costado de la carta: lo justo para leerlas sin tapar la cancha. */
+@Composable
+private fun MarcasCarta(marcas: MarcasEnVivo, modifier: Modifier = Modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp), horizontalAlignment = Alignment.End, modifier = modifier) {
+        if (marcas.goles > 0) {
+            Insignia(fondo = Color.White, borde = TintaFicha.copy(alpha = 0.2f)) {
+                Icon(Icons.Filled.SportsSoccer, contentDescription = "Goles", tint = TintaFicha, modifier = Modifier.size(11.dp))
+                if (marcas.goles > 1) TextoInsignia("${marcas.goles}", TintaFicha)
+            }
+        }
+        if (marcas.asistencias > 0) {
+            Insignia(fondo = Color(0xFF2F7DE1)) {
+                TextoInsignia(if (marcas.asistencias > 1) "A${marcas.asistencias}" else "A", Color.White)
+            }
+        }
+        if (marcas.roja) {
+            TarjetaInsignia(Color(0xFFE5484D))
+        } else if (marcas.amarillas > 0) {
+            Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
+                repeat(marcas.amarillas.coerceAtMost(2)) { TarjetaInsignia(Color(0xFFF5C518)) }
+            }
+        }
+        marcas.entroMinuto?.let { minuto ->
+            Insignia(fondo = Color(0xFF22A060)) { TextoInsignia("▲$minuto'", Color.White) }
+        }
+        marcas.salioMinuto?.let { minuto ->
+            Insignia(fondo = Color(0xFFE5484D)) { TextoInsignia("▼$minuto'", Color.White) }
+        }
+    }
+}
+
+@Composable
+private fun Insignia(
+    fondo: Color,
+    borde: Color = Color.White.copy(alpha = 0.8f),
+    contenido: @Composable () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .height(16.dp)
+            .shadow(2.dp, RoundedCornerShape(50))
+            .clip(RoundedCornerShape(50))
+            .background(fondo)
+            .border(1.dp, borde, RoundedCornerShape(50))
+            .padding(horizontal = 4.dp),
+    ) { contenido() }
+}
+
+@Composable
+private fun TextoInsignia(texto: String, color: Color) {
+    Text(texto, color = color, fontSize = 9.sp, lineHeight = 10.sp, fontWeight = FontWeight.Black, maxLines = 1)
+}
+
+@Composable
+private fun TarjetaInsignia(color: Color) {
+    Box(
+        modifier = Modifier
+            .size(width = 10.dp, height = 14.dp)
+            .shadow(2.dp, RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(2.dp))
+            .background(color)
+            .border(1.dp, Color.White, RoundedCornerShape(2.dp)),
+    )
 }
 
 @Composable
@@ -630,6 +719,8 @@ private fun FotoFicha(jugador: JugadorCanchaUi, modifier: Modifier) {
 private fun Banco(
     suplentes: List<JugadorCanchaUi>,
     onJugadorClick: (JugadorCanchaUi) -> Unit,
+    titulo: String = "BANCO",
+    atenuadas: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -645,13 +736,13 @@ private fun Banco(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "BANCO",
+                text = titulo,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp,
             )
             Text(
-                text = "${suplentes.size} suplente${if (suplentes.size == 1) "" else "s"}",
+                text = if (atenuadas) "${suplentes.size}" else "${suplentes.size} suplente${if (suplentes.size == 1) "" else "s"}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -662,12 +753,14 @@ private fun Banco(
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            // Espacio extra entre cartas para las marcas que van al costado.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             suplentes.forEach { jugador ->
                 FichaJugador(
                     jugador = jugador,
                     onClick = { onJugadorClick(jugador) },
+                    atenuada = atenuadas,
                     suplente = true,
                     ancho = 56.dp,
                     alto = 76.dp,

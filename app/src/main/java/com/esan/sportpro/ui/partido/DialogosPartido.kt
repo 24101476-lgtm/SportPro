@@ -146,7 +146,12 @@ fun DialogosPartido(state: RegistroUiState, viewModel: RegistroPartidoViewModel)
                     Text("Esta decisión quedará registrada y ya no se podrán corregir eventos.")
                 }
             },
-            confirmButton = { TextButton(onClick = viewModel::confirmarCierreActa) { Text("Confirmar cierre") } },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = viewModel::confirmarCierreActa,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = ColoresPartido.VerdeOscuro),
+                ) { Text("Cerrar acta") }
+            },
             dismissButton = { TextButton(onClick = viewModel::cerrarDialogo) { Text("Volver") } },
         )
 

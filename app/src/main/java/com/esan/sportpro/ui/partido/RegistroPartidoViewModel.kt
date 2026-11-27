@@ -89,7 +89,16 @@ data class RegistroUiState(
     val dialogo: DialogoPartido? = null,
     /** Error de lectura de Firestore (permisos, base inexistente, etc.). */
     val error: String? = null,
+    // ---- Alineación en vivo (se abre tocando el escudo propio) ----
+    val viendoAlineacion: Boolean = false,
+    val formacionVivo: String = "4-3-3",
+    /** Lugares movidos a mano en la pizarra en vivo (id -> x, y); solo en este dispositivo. */
+    val posicionesVivo: Map<String, Pair<Float, Float>> = emptyMap(),
 ) {
+    /** Once actual con sus marcas, banco disponible y jugadores que ya salieron. */
+    val alineacionEnVivo: AlineacionEnVivo
+        get() = ReglasAlineacionEnVivo.calcular(convocados, eventos, formacionVivo, posicionesVivo, fotosJugadores)
+
     val cronologia: List<EventoPartido> get() = ReglasPartido.cronologia(eventos)
     val marcador: ReglasPartido.Marcador get() = ReglasPartido.marcador(eventos, catalogo)
     val incompletos: List<EventoPartido> get() = ReglasPartido.incompletos(eventos)
@@ -379,6 +388,47 @@ class RegistroPartidoViewModel @Inject constructor(
     }
 
     fun cerrarHoja() = setState { copy(hoja = null) }
+
+    // ---- Alineación en vivo ---------------------------------------------------------------
+
+    fun abrirAlineacion() = setState { copy(viendoAlineacion = true) }
+
+    fun cerrarAlineacion() = setState { copy(viendoAlineacion = false) }
+
+    /** Reubica el once actual en la formación elegida ("Personalizada" deja los lugares como están). */
+    fun cambiarFormacionVivo(formacion: String) {
+        if (formacion == FORMACION_PERSONALIZADA) {
+            setState { copy(formacionVivo = formacion) }
+            return
+        }
+        val enCancha = currentState.alineacionEnVivo.enCancha
+        val lugares = distribuirEnFormacion(formacion, enCancha).associate { it.id to (it.x to it.y) }
+        setState { copy(formacionVivo = formacion, posicionesVivo = lugares) }
+    }
+
+    fun moverJugadorVivo(jugadorId: String, x: Float, y: Float) = setState {
+        copy(formacionVivo = FORMACION_PERSONALIZADA, posicionesVivo = posicionesVivo + (jugadorId to (x to y)))
+    }
+
+    /** Intercambio en la pizarra en vivo: cada uno toma el lugar del otro (la formación no cambia). */
+    fun intercambiarVivo(a: JugadorCanchaUi, b: JugadorCanchaUi) = setState {
+        copy(posicionesVivo = posicionesVivo + (a.id to (a.x to a.y)) + (b.id to (b.x to b.y)))
+    }
+
+    /**
+     * Desde la pizarra en vivo: abre la hoja del evento con el jugador ya elegido. En un cambio, un
+     * jugador del banco va como el que entra y uno en cancha como el que sale.
+     */
+    fun registrarPara(tipoId: String, jugador: JugadorCanchaUi) {
+        val tipo = currentState.paleta.firstOrNull { it.id == tipoId } ?: return
+        setState { copy(viendoAlineacion = false) }
+        abrirHoja(tipo)
+        if (tipoId == TiposEvento.CAMBIO && !jugador.titular) {
+            onSecundario(jugador.id, jugador.nombre)
+        } else {
+            onJugador(jugador.id, jugador.nombre)
+        }
+    }
 
     private fun actualizarHoja(cambio: HojaEvento.() -> HojaEvento) =
         setState { copy(hoja = hoja?.cambio()?.copy(error = null)) }

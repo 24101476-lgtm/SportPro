@@ -48,7 +48,6 @@ fun AnuncioNuevoScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val formulario = state.formulario
-    var menuDestinatarioAbierto by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.limpiarFormulario() }
 
@@ -100,20 +99,13 @@ fun AnuncioNuevoScreen(
             item {
                 Column {
                     Text("Destinatarios", style = MaterialTheme.typography.labelLarge)
-                    OutlinedButton(onClick = { menuDestinatarioAbierto = true }, modifier = Modifier.padding(top = 4.dp)) {
-                        Text(formulario.destinatarios.etiqueta)
-                    }
-                    DropdownMenu(expanded = menuDestinatarioAbierto, onDismissRequest = { menuDestinatarioAbierto = false }) {
-                        TipoDestinatario.entries.forEach { tipo ->
-                            DropdownMenuItem(
-                                text = { Text(tipo.etiqueta) },
-                                onClick = {
-                                    viewModel.onFormularioChanged(formulario.copy(destinatarios = tipo))
-                                    menuDestinatarioAbierto = false
-                                },
-                            )
-                        }
-                    }
+                    com.esan.sportpro.ui.common.SelectorOpciones(
+                        opciones = TipoDestinatario.entries,
+                        seleccionada = formulario.destinatarios,
+                        texto = { it.etiqueta },
+                        onSeleccionar = { tipo -> tipo?.let { viewModel.onFormularioChanged(formulario.copy(destinatarios = it)) } },
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
 

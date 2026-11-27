@@ -84,6 +84,8 @@ class FirestoreJugadorRepository @Inject constructor(
             "estadoRegistro" to jugador.estadoRegistro,
             // US-006: cuenta del propio jugador. Antes no se escribía y el enlace nunca se guardaba.
             "usuarioUid" to jugador.usuarioUid,
+            // US-005: asignado fuera del rango de años de la categoría.
+            "excepcionCategoria" to jugador.excepcionCategoria,
         )
         val documento = if (jugador.id.isBlank()) coleccion.document() else coleccion.document(jugador.id)
         val lote = firestore.batch()

@@ -259,6 +259,31 @@ fun JugadoresScreen(
     }
 
     DialogosVinculacion(state = state, viewModel = viewModel)
+
+    // US-005: asignar un jugador fuera del rango de años de la categoría del equipo.
+    if (state.formulario.avisoFueraDeRango) {
+        val equipo = state.equipos.firstOrNull { it.id == state.formulario.datos.equipoId }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::cancelarFueraDeRango,
+            title = { Text(com.esan.sportpro.domain.academia.MensajesEquipo.FUERA_DE_RANGO) },
+            text = {
+                Text(
+                    buildString {
+                        append("${equipo?.nombre ?: "El equipo"} admite nacidos entre ${equipo?.rangoAnios.orEmpty()}.")
+                        append(" Si lo asignas igual, quedará registrado como excepción de categoría.")
+                    },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::asignarFueraDeRango) {
+                    Text("Asignar de todas formas")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::cancelarFueraDeRango) { Text("Cancelar") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -461,6 +486,9 @@ private fun DetalleJugador(
                     DatoSiExiste("Posición secundaria", jugador.posicionSecundaria)
                     DatoSiExiste("Pie hábil", jugador.pieHabil)
                     DatoSiExiste("Dorsal", jugador.dorsal?.toString())
+                    if (jugador.excepcionCategoria) {
+                        DatoJugador("Categoría", "Excepción: fuera del rango de años")
+                    }
                 }
 
                 SeccionPlegable(

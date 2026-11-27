@@ -67,6 +67,10 @@ data class FormularioJugador(
     val fotoNueva: String? = null,
     /** US-006: cuenta de la app del propio jugador; vacía = sin enlazar. */
     val usuarioUid: String = "",
+    /** US-005: se muestra el diálogo "El jugador no cumple el rango de la categoría". */
+    val avisoFueraDeRango: Boolean = false,
+    /** US-005: el usuario eligió "Asignar de todas formas". */
+    val fueraDeRangoAceptado: Boolean = false,
 ) {
     val fotoVisible: String? get() = fotoNueva ?: fotoActual.takeIf { it.isNotBlank() }
 }
@@ -320,8 +324,24 @@ class JugadoresViewModel @Inject constructor(
 
     /** Aplica un cambio sobre los datos del formulario y limpia el error de [campo]. */
     fun onCampoChanged(campo: CampoJugador, cambio: DatosJugador.() -> DatosJugador) = setState {
-        copy(formulario = formulario.copy(datos = formulario.datos.cambio(), errores = formulario.errores - campo))
+        copy(
+            formulario = formulario.copy(
+                datos = formulario.datos.cambio(),
+                errores = formulario.errores - campo,
+                // Si cambia el equipo o la fecha, hay que volver a confirmar la excepción.
+                fueraDeRangoAceptado = false,
+            ),
+        )
     }
+
+    /** US-005: "Asignar de todas formas" — guarda y registra la excepción en `excepcionCategoria`. */
+    fun asignarFueraDeRango() {
+        setState { copy(formulario = formulario.copy(avisoFueraDeRango = false, fueraDeRangoAceptado = true)) }
+        guardar()
+    }
+
+    /** US-005: "Cancelar" — vuelve al formulario para elegir otro equipo. */
+    fun cancelarFueraDeRango() = setState { copy(formulario = formulario.copy(avisoFueraDeRango = false)) }
 
     fun guardar() {
         val estado = currentState
@@ -340,6 +360,13 @@ class JugadoresViewModel @Inject constructor(
         }
 
         val equipo = estado.equipos.firstOrNull { it.id == formulario.datos.equipoId }
+        // US-005: si el año de nacimiento está fuera del rango del equipo, se pide confirmación.
+        val anioNacimiento = com.esan.sportpro.domain.jugadores.FechasJugador.parsear(formulario.datos.fechaNacimiento)?.year
+        val fueraDeRango = equipo != null && anioNacimiento != null && !equipo.admiteAnio(anioNacimiento)
+        if (fueraDeRango && !formulario.fueraDeRangoAceptado) {
+            setState { copy(formulario = formulario.copy(avisoFueraDeRango = true)) }
+            return
+        }
         val original = formulario.id?.let { estado.jugador(it) }
         // US-007: todo jugador tiene un código único de 6 caracteres para la vinculación.
         val codigo = original?.codigoVinculacion?.takeIf { it.isNotBlank() }
@@ -356,6 +383,7 @@ class JugadoresViewModel @Inject constructor(
             activo = original?.activo ?: true,
             fotoUrl = original?.fotoUrl.orEmpty(),
             usuarioUid = formulario.usuarioUid,
+            excepcionCategoria = fueraDeRango,
         )
         // Regla del apoderado: un menor no queda registrado hasta tener un apoderado vinculado.
         val estadoRegistro = ReglasApoderado.estadoPara(jugador, estado.apoderadosDe(jugador.id).size)

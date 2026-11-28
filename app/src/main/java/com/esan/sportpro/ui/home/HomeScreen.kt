@@ -118,6 +118,9 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSoli
     // Módulo abierto desde "Más" (null = se ve la lista de accesos).
     var moduloEnMas by rememberSaveable { mutableStateOf<String?>(null) }
 
+    var abrirPartidosFinalizados by rememberSaveable {
+        mutableStateOf(false)
+    }
     // US-003: ruta no permitida para el rol (p. ej. un deep link a Mensualidades siendo jugador).
     var sinPermiso by rememberSaveable { mutableStateOf(false) }
 
@@ -125,18 +128,32 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSoli
     val pestana = pestanas.firstOrNull { it.id == pestanaId } ?: pestanas.first()
 
     fun abrirModulo(modulo: HomeModule) {
+        abrirPartidosFinalizados = false
+
         val destino = MenuPrincipal.pestanaDe(perfil.rol, modulo)
+
         if (destino == null) {
             sinPermiso = true
             return
         }
+
         sinPermiso = false
         pestanaId = destino.id
+
         when (destino.tipo) {
-            TipoPestana.SECCION -> moduloPorSeccion = moduloPorSeccion + (destino.id to modulo.name)
-            TipoPestana.MAS -> moduloEnMas = modulo.name
+            TipoPestana.SECCION ->
+                moduloPorSeccion = moduloPorSeccion + (destino.id to modulo.name)
+
+            TipoPestana.MAS ->
+                moduloEnMas = modulo.name
+
             TipoPestana.INICIO -> Unit
         }
+    }
+
+    fun abrirFinalizadosDesdeInicio() {
+        abrirModulo(HomeModule.PARTIDO)
+        abrirPartidosFinalizados = true
     }
 
     // US-003: un deep link abre el módulo pedido, o la pantalla "No tienes permiso…".
@@ -199,6 +216,7 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSoli
                 perfil = perfil,
                 modulos = pestanas.flatMap { it.modulos },
                 onAbrirModulo = ::abrirModulo,
+                onAbrirPartidosFinalizados = ::abrirFinalizadosDesdeInicio,
                 modifier = contenido,
             )
 
@@ -207,6 +225,7 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSoli
                 perfil = perfil,
                 moduloElegido = moduloPorSeccion[pestana.id],
                 onElegir = { modulo -> moduloPorSeccion = moduloPorSeccion + (pestana.id to modulo.name) },
+                abrirPartidosFinalizados = abrirPartidosFinalizados,
                 modifier = contenido,
             )
 
@@ -246,12 +265,18 @@ private fun Seccion(
     perfil: PerfilActual,
     moduloElegido: String?,
     onElegir: (HomeModule) -> Unit,
+    abrirPartidosFinalizados: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val modulos = pestana.modulos
     val actual = modulos.firstOrNull { it.name == moduloElegido } ?: modulos.first()
     if (modulos.size == 1) {
-        ContenidoModulo(actual, perfil, modifier)
+        ContenidoModulo(
+            modulo = actual,
+            perfil = perfil,
+            modifier = modifier,
+            abrirPartidosFinalizados = abrirPartidosFinalizados
+        )
         return
     }
     Column(modifier = modifier.fillMaxSize()) {
@@ -272,21 +297,53 @@ private fun Seccion(
                 )
             }
         }
-        ContenidoModulo(actual, perfil, Modifier.weight(1f))
+        ContenidoModulo(
+            modulo = actual,
+            perfil = perfil,
+            modifier = Modifier.weight(1f),
+            abrirPartidosFinalizados = abrirPartidosFinalizados
+        )
     }
 }
 
 @Composable
-private fun ContenidoModulo(modulo: HomeModule, perfil: PerfilActual, modifier: Modifier) {
+private fun ContenidoModulo(
+    modulo: HomeModule,
+    perfil: PerfilActual,
+    modifier: Modifier,
+    abrirPartidosFinalizados: Boolean = false,
+) {
     when (modulo) {
-        HomeModule.ACADEMIA -> AcademiaScreen(modifier)
-        HomeModule.JUGADORES -> JugadoresScreen(modifier)
-        HomeModule.ENTRENAMIENTOS -> EntrenamientosScreen(modifier)
-        HomeModule.PARTIDO -> PartidoScreen(modifier)
-        HomeModule.MENSUALIDADES -> MensualidadesEntryScreen(modifier = modifier, rolActual = perfil.rol)
-        HomeModule.ESTADISTICAS -> EstadisticasComunicacionEntryScreen(modifier = modifier)
-        HomeModule.COMUNIDAD -> ComunidadScreen(modifier)
-        HomeModule.IA -> IaScreen(modifier)
+
+        HomeModule.ACADEMIA ->
+            AcademiaScreen(modifier)
+
+        HomeModule.JUGADORES ->
+            JugadoresScreen(modifier)
+
+        HomeModule.ENTRENAMIENTOS ->
+            EntrenamientosScreen(modifier)
+
+        HomeModule.PARTIDO ->
+            PartidoScreen(
+                modifier = modifier,
+                abrirEnFinalizados = abrirPartidosFinalizados
+            )
+
+        HomeModule.MENSUALIDADES ->
+            MensualidadesEntryScreen(
+                modifier = modifier,
+                rolActual = perfil.rol
+            )
+
+        HomeModule.ESTADISTICAS ->
+            EstadisticasComunicacionEntryScreen(modifier = modifier)
+
+        HomeModule.COMUNIDAD ->
+            ComunidadScreen(modifier)
+
+        HomeModule.IA ->
+            IaScreen(modifier)
     }
 }
 

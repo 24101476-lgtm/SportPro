@@ -219,7 +219,8 @@ private fun rutaAlineacionDirecta(
 
 @Composable
 fun PartidoScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    abrirEnFinalizados: Boolean = false,
 ) {
 
     val navController =
@@ -242,6 +243,7 @@ fun PartidoScreen(
         ) {
 
             PartidosListaScreen(
+                abrirEnFinalizados = abrirEnFinalizados,
 
                 onAbrirPartido = { partidoId ->
 

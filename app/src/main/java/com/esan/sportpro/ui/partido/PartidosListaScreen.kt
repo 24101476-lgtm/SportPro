@@ -93,13 +93,28 @@ fun PartidosListaScreen(
     /** US-021: jugador y padre abren el seguimiento en vivo en lugar del registro. */
     onSeguirPartido: ((String) -> Unit)? = null,
     viewModel: PartidosViewModel = hiltViewModel(),
+    abrirEnFinalizados: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsState()
     val puedeGestionarPartidos =
         state.rolActual == "ADMINISTRADOR" ||
                 state.rolActual == "ENTRENADOR"
     val snackbar = remember { SnackbarHostState() }
-    var filtro by rememberSaveable { mutableStateOf(FiltroPartidos.TODOS) }
+    var filtro by rememberSaveable(abrirEnFinalizados) {
+        mutableStateOf(
+            if (abrirEnFinalizados) {
+                FiltroPartidos.FINALIZADOS
+            } else {
+                FiltroPartidos.TODOS
+            }
+        )
+    }
+
+    LaunchedEffect(abrirEnFinalizados) {
+        if (abrirEnFinalizados) {
+            filtro = FiltroPartidos.FINALIZADOS
+        }
+    }
 
     /*
      * Solo se activa cuando el usuario abre el formulario integrado

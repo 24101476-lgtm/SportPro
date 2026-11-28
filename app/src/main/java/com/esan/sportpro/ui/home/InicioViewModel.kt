@@ -34,6 +34,9 @@ data class InicioUiState(
     val proximosEntrenamientos: List<Entrenamiento> = emptyList(),
     val proximoPartido: Partido? = null,
     /** Solo para administrador y entrenador (los demás roles no leen el plantel). */
+    val ultimoPartidoFinalizado: Partido? = null,
+
+
     val equiposActivos: Int? = null,
     val jugadoresActivos: Int? = null,
     /** Menores registrados que todavía esperan un apoderado vinculado. */
@@ -94,7 +97,20 @@ class InicioViewModel @Inject constructor(
         viewModelScope.launch {
             partidoRepository.observarPartidos()
                 .catch { }
-                .collect { lista -> setState { copy(proximoPartido = proximoPartido(lista, perfil.academiaId)) } }
+                .collect { lista ->
+                    setState {
+                        copy(
+                            proximoPartido = proximoPartido(
+                                lista,
+                                perfil.academiaId
+                            ),
+                            ultimoPartidoFinalizado = ultimoPartidoFinalizado(
+                                lista,
+                                perfil.academiaId
+                            )
+                        )
+                    }
+                }
         }
         if (perfil.esStaff) {
             viewModelScope.launch {
@@ -188,6 +204,27 @@ class InicioViewModel @Inject constructor(
             .filter { it.estado == EstadoPartido.PROGRAMADO || it.estado == EstadoPartido.EN_CURSO }
             .filter { (it.fechaMs ?: Long.MAX_VALUE) >= inicioDeHoy }
             .minByOrNull { it.fechaMs ?: Long.MAX_VALUE }
+    }
+
+    private fun ultimoPartidoFinalizado(
+        lista: List<Partido>,
+        academiaId: String
+    ): Partido? {
+        return lista
+            .filter {
+                it.academiaId == null ||
+                        it.academiaId == academiaId
+            }
+            .filter {
+                it.estado == EstadoPartido.FINALIZADO ||
+                        it.estado == EstadoPartido.ACTA_CERRADA
+            }
+            .maxByOrNull {
+                it.inicioSegundoTiempoMs
+                    ?: it.inicioPrimerTiempoMs
+                    ?: it.fechaMs
+                    ?: 0L
+            }
     }
 
     private fun activos(lista: List<Jugador>) = lista.count { it.activo && !ReglasApoderado.pendiente(it) }

@@ -349,7 +349,7 @@ private fun CromoJugador(jugador: EstadisticaJugador, equipo: com.esan.sportpro.
         }
         equipo?.let {
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                EscudoEquipo(nombre = it.nombre, tamano = 36.dp, url = it.escudoUrl.ifBlank { null })
+                EscudoEquipo(nombre = it.nombre, tamano = 36.dp, url = it.escudoUrl.ifBlank { null }, color = it.colorUniforme)
             }
         }
         // Franja inferior con el nombre.

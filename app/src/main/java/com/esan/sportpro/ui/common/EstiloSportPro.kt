@@ -703,8 +703,12 @@ fun EscudoEquipo(
     modifier: Modifier = Modifier,
     tamano: Dp = 48.dp,
     url: String? = null,
+    /** Color del uniforme en hexadecimal: si viene, el escudo generado se pinta con ese color. */
+    color: String? = null,
 ) {
     // 1) El escudo subido (el que se pasa o el de la academia), 2) el de demo, 3) el generado.
+    val colorElegido = color?.takeIf { it.isNotBlank() }
+        ?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
     val subido = url?.takeIf { it.isNotBlank() } ?: LocalEscudosEquipos.current[normalizarNombreEquipo(nombre)]
     if (subido != null) {
         // Supabase guarda JPEG (sin transparencia): se muestra dentro de un círculo blanco.
@@ -723,7 +727,8 @@ fun EscudoEquipo(
         }
         return
     }
-    val demo = escudoDemo(nombre)
+    // Si se eligió un color, manda el color: el escudo de demo solo se usa sin color.
+    val demo = if (colorElegido == null) escudoDemo(nombre) else null
     if (demo != null) {
         Image(
             painter = painterResource(demo),
@@ -734,7 +739,12 @@ fun EscudoEquipo(
         return
     }
     val semilla = nombre.trim().lowercase().hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) }
-    val (fondo, franja) = KitsEscudo[semilla % KitsEscudo.size]
+    val (fondo, franja) = if (colorElegido != null) {
+        // Franja que contrasta con el color elegido: musgo sobre colores claros, blanco sobre oscuros.
+        colorElegido to (if (colorElegido.luminancia() > 0.72f) PaletaSportPro.Musgo else Color(0xFFF2F3EC))
+    } else {
+        KitsEscudo[semilla % KitsEscudo.size]
+    }
     val diseno = (semilla / KitsEscudo.size) % 4
     val iniciales = inicialesEscudo(nombre)
     val textoClaro = fondo.luminancia() < 0.45f

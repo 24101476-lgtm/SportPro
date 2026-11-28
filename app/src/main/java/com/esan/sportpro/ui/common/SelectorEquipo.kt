@@ -73,7 +73,7 @@ fun SelectorEquipo(
                 modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             ) {
                 if (actual != null) {
-                    EscudoEquipo(nombre = actual.nombre, tamano = 24.dp, url = actual.escudoUrl.ifBlank { null })
+                    EscudoEquipo(nombre = actual.nombre, tamano = 24.dp, url = actual.escudoUrl.ifBlank { null }, color = actual.colorUniforme)
                 } else {
                     Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(20.dp))
                 }
@@ -106,7 +106,7 @@ fun SelectorEquipo(
                 OpcionEquipo(
                     texto = equipo.texto(),
                     elegida = seleccionadoId == equipo.id,
-                    icono = { EscudoEquipo(nombre = equipo.nombre, tamano = 24.dp, url = equipo.escudoUrl.ifBlank { null }) },
+                    icono = { EscudoEquipo(nombre = equipo.nombre, tamano = 24.dp, url = equipo.escudoUrl.ifBlank { null }, color = equipo.colorUniforme) },
                 ) {
                     abierto = false
                     onSeleccionar(equipo.id)

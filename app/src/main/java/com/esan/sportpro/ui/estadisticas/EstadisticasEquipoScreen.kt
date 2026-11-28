@@ -201,7 +201,12 @@ private fun CabeceraEquipo(state: EstadisticasUiState, onAbrirFiltros: () -> Uni
     ) {
         Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                EscudoEquipo(nombre = equipo?.nombre ?: "Equipo", tamano = 56.dp, url = equipo?.escudoUrl?.ifBlank { null })
+                EscudoEquipo(
+                    nombre = equipo?.nombre ?: "Equipo",
+                    tamano = 56.dp,
+                    url = equipo?.escudoUrl?.ifBlank { null },
+                    color = equipo?.colorUniforme,
+                )
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(
                         equipo?.nombre ?: "Mi equipo",

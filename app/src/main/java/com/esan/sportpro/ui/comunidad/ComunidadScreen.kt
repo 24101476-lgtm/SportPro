@@ -84,28 +84,16 @@ fun ComunidadScreen(modifier: Modifier = Modifier, moderacionViewModel: Moderaci
         )
         moderacionState.suspensionActual?.let { UsuarioSuspendidoBanner(suspension = it) }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TabRow(
-                selectedTabIndex = seccion,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp, bottom = 4.dp),
+        ) {
+            SelectorSeccionComunidad(
+                titulos = titulos,
+                seleccion = seccion.coerceIn(0, titulos.lastIndex),
+                onSeleccion = { seccion = it },
                 modifier = Modifier.weight(1f),
-                containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                contentColor = ColoresPartido.Verde,
-            ) {
-                titulos.forEachIndexed { index, titulo ->
-                    Tab(
-                        selected = seccion == index,
-                        onClick = { seccion = index },
-                        selectedContentColor = ColoresPartido.Verde,
-                        unselectedContentColor = androidx.compose.ui.graphics.Color.Gray,
-                        text = {
-                            Text(
-                                titulo,
-                                fontWeight = if (seccion == index) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
-                            )
-                        },
-                    )
-                }
-            }
+            )
             IconButton(onClick = { mostrarBloqueados = true }) {
                 Icon(Icons.Default.PersonOff, contentDescription = "Usuarios bloqueados")
             }

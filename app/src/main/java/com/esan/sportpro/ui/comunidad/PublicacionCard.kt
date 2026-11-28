@@ -65,6 +65,8 @@ fun PublicacionCard(
     onBloquear: (() -> Unit)? = null,
     /** US-028: el personal aprueba (`true`) o rechaza (`false`) una publicación en revisión. */
     onRevisar: ((Boolean) -> Unit)? = null,
+    /** En el detalle se muestra la cronología completa de un resumen de partido. */
+    completo: Boolean = false,
 ) {
     var menuAbierto by remember { mutableStateOf(false) }
     var confirmarBloqueo by remember { mutableStateOf(false) }
@@ -73,20 +75,7 @@ fun PublicacionCard(
     TarjetaSportPro(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.layout.Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(Brush.linearGradient(listOf(PaletaSportPro.MusgoMedio, PaletaSportPro.Verde))),
-                ) {
-                    Text(
-                        publicacion.autorNombre.trim().take(1).uppercase(),
-                        color = androidx.compose.ui.graphics.Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
+                AvatarAutor(publicacion.autorNombre)
                 Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(publicacion.autorNombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
@@ -166,7 +155,18 @@ fun PublicacionCard(
                 )
             }
 
-            Text(publicacion.texto, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))
+            // Los resúmenes de partido que publica el entrenador se ven como marcador + cronología.
+            val resumenPartido = remember(publicacion.texto) { resumenPartidoDesde(publicacion.texto) }
+            if (resumenPartido != null) {
+                TarjetaResumenPartido(
+                    resumen = resumenPartido,
+                    completo = completo,
+                    onVerTodo = onAbrir,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            } else {
+                Text(publicacion.texto, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))
+            }
 
             if (publicacion.imagenesUrls.size == 1) {
                 AsyncImage(
@@ -235,10 +235,27 @@ fun PublicacionCard(
                     }
                 }
                 Row(modifier = Modifier.weight(1f)) {}
-                IconButton(onClick = onAbrir) {
-                    Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Comentarios")
+                Surface(
+                    onClick = onAbrir,
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.ChatBubbleOutline,
+                            contentDescription = "Comentarios",
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            " ${publicacion.comentariosCount}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
-                Text("${publicacion.comentariosCount}", style = MaterialTheme.typography.labelMedium)
             }
         }
     }

@@ -63,26 +63,42 @@ fun PublicacionDetalleScreen(
             )
         },
         bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = textoComentario,
-                    onValueChange = { textoComentario = it.take(300) },
-                    label = { Text("Escribe un comentario") },
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(
-                    onClick = {
-                        if (textoComentario.isNotBlank()) {
-                            viewModel.comentar(textoComentario)
-                            textoComentario = ""
-                        }
-                    },
-                ) { Icon(Icons.Default.Send, contentDescription = "Enviar comentario") }
+            // Barra de comentario tipo chat: tu inicial, el campo en píldora y el botón lima.
+            androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AvatarAutor(state.autorNombre, tamano = 36.dp)
+                    OutlinedTextField(
+                        value = textoComentario,
+                        onValueChange = { textoComentario = it.take(300) },
+                        placeholder = { Text("Escribe un comentario…") },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                        maxLines = 4,
+                        supportingText = if (textoComentario.length > 250) {
+                            { Text("${textoComentario.length}/300") }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    )
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = {
+                            if (textoComentario.isNotBlank()) {
+                                viewModel.comentar(textoComentario)
+                                textoComentario = ""
+                            }
+                        },
+                        enabled = textoComentario.isNotBlank(),
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                            contentColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                        ),
+                    ) { Icon(Icons.Default.Send, contentDescription = "Enviar comentario") }
+                }
             }
         },
     ) { padding ->
@@ -105,9 +121,27 @@ fun PublicacionDetalleScreen(
                     onBloquear = { viewModel.bloquearAutor(publicacion.autorUid); onVolver() },
                     onRevisar = if (state.puedeRevisar) ({ aprobar -> viewModel.revisarPublicacion(publicacion.id, aprobar) }) else null,
                     modifier = Modifier.padding(vertical = 8.dp),
+                    completo = true,
                 )
             }
-            item { Text("Comentarios", style = MaterialTheme.typography.titleSmall) }
+            item {
+                Text(
+                    "Comentarios · ${state.comentarios.size}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                )
+            }
+            if (state.comentarios.isEmpty()) {
+                item {
+                    Text(
+                        "Aún no hay comentarios. ¡Escribe el primero!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
             items(state.comentarios, key = { it.id }) { comentario ->
                 ComentarioItem(
                     comentario = comentario,

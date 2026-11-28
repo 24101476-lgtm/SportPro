@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +24,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups2
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -49,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.esan.sportpro.domain.academia.CampoEquipo
 import com.esan.sportpro.domain.academia.CategoriasEquipo
@@ -83,6 +93,35 @@ fun AcademiaScreen(
         }
     }
 
+    // "Datos de la academia" y "Códigos de invitación" se abren como pantallas propias.
+    var verCodigos by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val formularioDatos = state.editandoConfiguracion
+    if (formularioDatos != null) {
+        androidx.activity.compose.BackHandler(enabled = !formularioDatos.guardando) { viewModel.cerrarConfiguracion() }
+        PantallaDatosAcademia(
+            formulario = formularioDatos,
+            snackbarHostState = snackbarHostState,
+            onCampo = viewModel::onCampoAcademia,
+            onEscudo = viewModel::onEscudoAcademia,
+            onGuardar = viewModel::guardarConfiguracion,
+            onVolver = viewModel::cerrarConfiguracion,
+            modifier = modifier,
+        )
+        return
+    }
+    if (verCodigos && state.puedeEditar) {
+        androidx.activity.compose.BackHandler { verCodigos = false }
+        PantallaCodigos(
+            state = state,
+            snackbarHostState = snackbarHostState,
+            onGenerar = viewModel::generarCodigo,
+            onRevocar = viewModel::revocarCodigo,
+            onVolver = { verCodigos = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     Scaffold(
         modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -106,98 +145,104 @@ fun AcademiaScreen(
                 modifier = Modifier.padding(padding),
             )
 
-            else -> Column(modifier = Modifier.padding(padding)) {
-                val activos = state.equipos.count { it.activo }
-                EncabezadoModulo(
-                    titulo = "Academia",
-                    subtitulo = "$activos ${if (activos == 1) "equipo activo" else "equipos activos"}",
-                    icono = Icons.Default.School,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-                )
-                if (state.puedeEditar) {
-                    ConfiguracionYCodigos(
-                        state = state,
-                        onEditar = viewModel::editarConfiguracion,
-                        onGenerar = viewModel::generarCodigo,
-                        onRevocar = viewModel::revocarCodigo,
-                    )
-                }
-                state.editandoConfiguracion?.let { formulario ->
-                    DialogoConfiguracion(
-                        formulario = formulario,
-                        onCampo = viewModel::onCampoAcademia,
-                        onEscudo = viewModel::onEscudoAcademia,
-                        onGuardar = viewModel::guardarConfiguracion,
-                        onCancelar = viewModel::cerrarConfiguracion,
-                    )
-                }
-                // Cuentas de entrenador que esperan aprobación: hasta aprobarlas no son personal.
-                if (state.puedeEditar && state.entrenadoresPendientes.isNotEmpty()) {
-                    EntrenadoresPendientes(
-                        pendientes = state.entrenadoresPendientes,
-                        onResolver = viewModel::resolverEntrenador,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+            else -> {
+                // Toda la pantalla es una sola lista: antes los equipos solo tenían el espacio que
+                // sobraba abajo y en un celular se veía un solo equipo.
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Equipos por categoría", style = MaterialTheme.typography.titleMedium)
+                    item(key = "cabecera") {
+                        CabeceraAcademia(state = state, onEditar = viewModel::editarConfiguracion)
+                    }
                     if (state.puedeEditar) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Inactivos", style = MaterialTheme.typography.labelMedium)
-                            Switch(
-                                checked = state.mostrarInactivos,
-                                onCheckedChange = viewModel::onMostrarInactivos,
-                                modifier = Modifier.padding(start = 8.dp),
+                        item(key = "tarjetas") {
+                            TarjetasAcademia(
+                                state = state,
+                                onEditar = viewModel::editarConfiguracion,
+                                onVerCodigos = { verCodigos = true },
                             )
                         }
                     }
-                }
-                // US-005: filtro por categoría.
-                if (state.categoriasConEquipos.size > 1) {
-                    androidx.compose.foundation.lazy.LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = state.filtroCategoria == null,
-                                onClick = { viewModel.onFiltroCategoria(null) },
-                                label = { Text("Todas") },
-                                colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                    // Cuentas de entrenador que esperan aprobación: hasta aprobarlas no son personal.
+                    if (state.puedeEditar && state.entrenadoresPendientes.isNotEmpty()) {
+                        item(key = "pendientes") {
+                            EntrenadoresPendientes(
+                                pendientes = state.entrenadoresPendientes,
+                                onResolver = viewModel::resolverEntrenador,
                             )
                         }
-                        items(state.categoriasConEquipos) { categoria ->
-                            FilterChip(
-                                selected = state.filtroCategoria == categoria,
-                                onClick = {
-                                    viewModel.onFiltroCategoria(if (state.filtroCategoria == categoria) null else categoria)
+                    }
+                    item(key = "titulo-equipos") {
+                        val activos = state.equipos.count { it.activo }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Equipos",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                )
+                                Text(
+                                    "$activos ${if (activos == 1) "activo" else "activos"} · por categoría",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (state.puedeEditar) {
+                                Text("Inactivos", style = MaterialTheme.typography.labelMedium)
+                                Switch(
+                                    checked = state.mostrarInactivos,
+                                    onCheckedChange = viewModel::onMostrarInactivos,
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                    // US-005: filtro por categoría.
+                    if (state.categoriasConEquipos.size > 1) {
+                        item(key = "filtros") {
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                item {
+                                    FilterChip(
+                                        selected = state.filtroCategoria == null,
+                                        onClick = { viewModel.onFiltroCategoria(null) },
+                                        label = { Text("Todas") },
+                                        colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                                    )
+                                }
+                                items(state.categoriasConEquipos) { categoria ->
+                                    FilterChip(
+                                        selected = state.filtroCategoria == categoria,
+                                        onClick = {
+                                            viewModel.onFiltroCategoria(if (state.filtroCategoria == categoria) null else categoria)
+                                        },
+                                        label = { Text(categoria) },
+                                        colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (state.equiposVisibles.isEmpty()) {
+                        item(key = "vacio") {
+                            EmptyStateMessage(
+                                mensaje = if (state.filtroCategoria != null) {
+                                    "No hay equipos en la categoría ${state.filtroCategoria}."
+                                } else if (state.puedeEditar) {
+                                    "Aún no hay equipos. Crea el primero con \"Nuevo equipo\"."
+                                } else {
+                                    "Tu academia todavía no tiene equipos registrados."
                                 },
-                                label = { Text(categoria) },
-                                colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
+                                icono = Icons.Default.Groups2,
                             )
                         }
-                    }
-                }
-                if (state.equiposVisibles.isEmpty()) {
-                    EmptyStateMessage(
-                        mensaje = if (state.filtroCategoria != null) {
-                            "No hay equipos en la categoría ${state.filtroCategoria}."
-                        } else if (state.puedeEditar) {
-                            "Aún no hay equipos. Crea el primero con el botón +."
-                        } else {
-                            "Tu academia todavía no tiene equipos registrados."
-                        },
-                        icono = Icons.Default.Groups2,
-                    )
-                } else {
-                    LazyColumn(
-                        // Espacio abajo para que el botón "Nuevo equipo" no tape el último equipo.
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
+                    } else {
                         items(state.equiposVisibles, key = { it.id }) { equipo ->
                             EquipoCard(
                                 equipo = equipo,
@@ -294,71 +339,111 @@ private fun EquipoCard(
     onCambiarEstado: () -> Unit,
     onEliminar: () -> Unit,
 ) {
-    TarjetaSportPro {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+    var menu by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val colorUniforme = runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(equipo.colorUniforme)) }
+        .getOrNull()
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            // Franja con el color del uniforme: cada equipo se reconoce de un vistazo.
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .width(6.dp)
+                    .fillMaxHeight()
+                    .background(colorUniforme ?: com.esan.sportpro.core.theme.PaletaSportPro.MusgoClaro),
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f).padding(start = 12.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
             ) {
-                // Rediseño: el escudo del equipo (subido o generado) en lugar del ícono genérico.
                 EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(equipo.nombre, style = MaterialTheme.typography.titleMedium)
+                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            equipo.nombre,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        ChipEstado(
+                            if (equipo.activo) "Activo" else "Inactivo",
+                            if (equipo.activo) TonoEstado.EXITO else TonoEstado.ERROR,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                     Text(
                         buildString {
                             append("Categoría ${equipo.categoria}")
-                            if (equipo.rangoAnios.isNotBlank()) append(" (${equipo.rangoAnios})")
+                            if (equipo.rangoAnios.isNotBlank()) append(" · ${equipo.rangoAnios}")
                         },
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        if (equipo.entrenadorNombre.isNotBlank()) "DT: ${equipo.entrenadorNombre}" else "Sin entrenador asignado",
+                        buildString {
+                            append("$jugadores ${if (jugadores == 1) "jugador" else "jugadores"} · ")
+                            append(if (equipo.entrenadorNombre.isNotBlank()) "DT ${equipo.entrenadorNombre}" else "Sin entrenador")
+                        },
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         color = if (equipo.sinEntrenador()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$jugadores", style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano)
-                    Text(
-                        if (jugadores == 1) "jugador" else "jugadores",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            ) {
-                if (equipo.colorUniforme.isNotBlank()) {
-                    PuntoColor(equipo.colorUniforme, tamano = 14)
-                    Text(
-                        "Uniforme ${ColoresUniforme.nombreDe(equipo.colorUniforme).lowercase()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
-                }
-                if (!equipo.activo) {
-                    ChipEstado("Inactivo", TonoEstado.ERROR, modifier = Modifier.padding(start = 8.dp))
-                }
-                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                if (puedeEditar) {
-                    IconButton(onClick = onEditar) {
-                        Icon(Icons.Default.Edit, contentDescription = "Editar equipo")
+                    if (equipo.colorUniforme.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            PuntoColor(equipo.colorUniforme, tamano = 12)
+                            Text(
+                                "Uniforme ${ColoresUniforme.nombreDe(equipo.colorUniforme).lowercase()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
+                        }
                     }
                 }
-                if (esAdmin) {
-                    TextButton(onClick = onCambiarEstado) {
-                        Text(if (equipo.activo) "Desactivar" else "Activar")
-                    }
-                    IconButton(onClick = onEliminar) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Eliminar equipo",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
+                // Acciones en un menú: la tarjeta queda limpia y no se toca "Eliminar" por error.
+                if (puedeEditar || esAdmin) {
+                    androidx.compose.foundation.layout.Box {
+                        IconButton(onClick = { menu = true }) {
+                            Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "Opciones de ${equipo.nombre}")
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (puedeEditar) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Editar equipo") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = { menu = false; onEditar() },
+                                )
+                            }
+                            if (esAdmin) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(if (equipo.activo) "Desactivar" else "Activar") },
+                                    leadingIcon = {
+                                        Icon(
+                                            if (equipo.activo) {
+                                                androidx.compose.material.icons.Icons.Default.PauseCircle
+                                            } else {
+                                                androidx.compose.material.icons.Icons.Default.PlayCircle
+                                            },
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = { menu = false; onCambiarEstado() },
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Eliminar", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick = { menu = false; onEliminar() },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -622,7 +707,7 @@ private fun EntrenadoresPendientes(
     androidx.compose.material3.Surface(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
@@ -645,247 +730,185 @@ private fun EntrenadoresPendientes(
 }
 
 /**
- * US-004: datos de la academia (escudo, nombre, ubicación, contacto, fundación) y los códigos de
- * invitación con su rol, estado (vigente, usado, expirado o revocado) y fecha de expiración.
+ * Cabecera compacta de la academia: escudo, nombre, temporada y tres cifras (equipos, jugadores y
+ * entrenadores). Reemplaza la tarjeta alta que solo decía "Academia · 5 equipos activos".
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConfiguracionYCodigos(
-    state: AcademiaUiState,
-    onEditar: () -> Unit,
-    onGenerar: (com.esan.sportpro.navigation.UserRole) -> Unit,
-    onRevocar: (String) -> Unit,
-) {
-    val portapapeles = androidx.compose.ui.platform.LocalClipboardManager.current
-    var verCodigos by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-    var rolCodigo by androidx.compose.runtime.saveable.rememberSaveable {
-        androidx.compose.runtime.mutableStateOf(com.esan.sportpro.navigation.UserRole.ADMINISTRADOR)
-    }
+private fun CabeceraAcademia(state: AcademiaUiState, onEditar: () -> Unit) {
     val c = state.configuracion
-    val vigentes = state.codigos.count { it.vigente() }
-    val formato = remember { com.esan.sportpro.core.fecha.FechasSportPro.formatoFecha() }
-    androidx.compose.material3.Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    val activos = state.equipos.filter { it.activo }
+    val jugadores = activos.sumOf { state.jugadoresDe(it) }
+    val entrenadores = activos.map { it.entrenadorNombre.trim() }.filter { it.isNotEmpty() }.distinct().size
+    val temporada = com.esan.sportpro.core.fecha.FechasSportPro.hoy().year
+    val ubicacion = listOf(c.distrito, c.ciudad).filter { it.isNotBlank() }.joinToString(", ")
+    com.esan.sportpro.ui.common.FondoFotoSportPro(
+        foto = com.esan.sportpro.ui.common.FotoSportPro.ESTADIO,
+        forma = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        velo = androidx.compose.ui.graphics.Brush.verticalGradient(
+            0f to com.esan.sportpro.core.theme.PaletaSportPro.Musgo.copy(alpha = 0.80f),
+            1f to com.esan.sportpro.core.theme.PaletaSportPro.Musgo.copy(alpha = 0.95f),
+        ),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                EscudoEquipo(nombre = c.nombre.ifBlank { "Academia" }, tamano = 48.dp, url = c.escudoUrl.ifBlank { null })
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        c.nombre.ifBlank { "Academia sin registrar" },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    )
-                    val ubicacion = listOf(c.distrito, c.ciudad).filter { it.isNotBlank() }.joinToString(", ")
-                    if (ubicacion.isNotBlank()) {
-                        Text(ubicacion, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(
-                        buildString {
-                            c.anioFundacion?.let { append("Fundada en $it. ") }
-                            append("Las mensualidades vencen el día ${c.diaCorte}.")
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(onClick = onEditar) { Text(if (c.nombre.isBlank()) "Registrar" else "Editar") }
-            }
-            androidx.compose.material3.HorizontalDivider()
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Códigos de invitación: $vigentes " + if (vigentes == 1) "vigente" else "vigentes",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { verCodigos = !verCodigos }) { Text(if (verCodigos) "Ocultar" else "Ver") }
+                EscudoEquipo(nombre = c.nombre.ifBlank { "Academia" }, tamano = 56.dp, url = c.escudoUrl.ifBlank { null })
+                Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+                    Text(
+                        "Temporada $temporada" + if (ubicacion.isNotBlank()) " · $ubicacion" else "",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                    )
+                    Text(
+                        c.nombre.ifBlank { "Mi academia" },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                if (state.puedeEditar) {
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = onEditar,
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.16f),
+                            contentColor = androidx.compose.ui.graphics.Color.White,
+                        ),
+                    ) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Settings, contentDescription = "Datos de la academia")
+                    }
+                }
             }
-            if (verCodigos) {
-                Text("Rol del nuevo código", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    com.esan.sportpro.navigation.UserRole.entries.forEach { rol ->
-                        FilterChip(
-                            selected = rolCodigo == rol,
-                            onClick = { rolCodigo = rol },
-                            label = { Text(etiquetaRol(rol)) },
-                            colors = com.esan.sportpro.ui.common.coloresChipSportPro(),
-                        )
-                    }
-                }
-                androidx.compose.material3.OutlinedButton(
-                    onClick = { onGenerar(rolCodigo) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Generar código de ${etiquetaRol(rolCodigo).lowercase()}") }
-                if (state.codigos.isEmpty()) {
-                    Text("Todavía no generaste códigos.", style = MaterialTheme.typography.bodySmall)
-                }
-                state.codigos.forEach { codigo ->
-                    val estado = codigo.estado()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                codigo.codigo,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                ChipEstado(estado.etiqueta, tonoDe(estado))
-                                Text(
-                                    "  ${etiquetaRol(codigo.rol)} · vence el " +
-                                        (codigo.expiraEn?.let { formato.format(it) } ?: "—"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                        if (estado == com.esan.sportpro.domain.academia.EstadoCodigo.VIGENTE) {
-                            TextButton(onClick = { portapapeles.setText(androidx.compose.ui.text.AnnotatedString(codigo.codigo)) }) {
-                                Text("Copiar")
-                            }
-                            TextButton(onClick = { onRevocar(codigo.codigo) }) { Text("Revocar") }
-                        }
-                    }
-                }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            ) {
+                CifraAcademia(activos.size, if (activos.size == 1) "Equipo" else "Equipos", Modifier.weight(1f))
+                CifraAcademia(jugadores, if (jugadores == 1) "Jugador" else "Jugadores", Modifier.weight(1f))
+                CifraAcademia(entrenadores, if (entrenadores == 1) "Entrenador" else "Entrenadores", Modifier.weight(1f))
             }
         }
     }
 }
 
-private fun etiquetaRol(rol: com.esan.sportpro.navigation.UserRole): String = when (rol) {
+@Composable
+private fun CifraAcademia(valor: Int, etiqueta: String, modifier: Modifier) {
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.13f),
+        modifier = modifier,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                valor.toString(),
+                style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano,
+                color = androidx.compose.ui.graphics.Color.White,
+            )
+            Text(
+                etiqueta,
+                style = MaterialTheme.typography.labelSmall,
+                color = com.esan.sportpro.core.theme.PaletaSportPro.MusgoClaro,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * US-004: dos tarjetas con su propia acción — Mensualidades (día de vencimiento → editar datos) e
+ * Invitaciones (códigos vigentes → gestionar). Antes compartían una sola tarjeta gris.
+ */
+@Composable
+private fun TarjetasAcademia(
+    state: AcademiaUiState,
+    onEditar: () -> Unit,
+    onVerCodigos: () -> Unit,
+) {
+    val vigentes = state.codigos.count { it.vigente() }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        TarjetaAccion(
+            icono = androidx.compose.material.icons.Icons.Default.Payments,
+            titulo = "Mensualidades",
+            valor = "Día ${state.configuracion.diaCorte}",
+            detalle = "de cada mes vencen",
+            accion = if (state.configuracion.nombre.isBlank()) "Registrar datos" else "Editar datos",
+            onClick = onEditar,
+            modifier = Modifier.weight(1f),
+        )
+        TarjetaAccion(
+            icono = androidx.compose.material.icons.Icons.Default.Key,
+            titulo = "Invitaciones",
+            valor = vigentes.toString(),
+            detalle = if (vigentes == 1) "código vigente" else "códigos vigentes",
+            accion = "Gestionar códigos",
+            onClick = onVerCodigos,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun TarjetaAccion(
+    icono: androidx.compose.ui.graphics.vector.ImageVector,
+    titulo: String,
+    valor: String,
+    detalle: String,
+    accion: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier,
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(com.esan.sportpro.core.theme.PaletaSportPro.LimaSuave),
+                ) {
+                    Icon(icono, contentDescription = null, tint = com.esan.sportpro.core.theme.PaletaSportPro.Musgo, modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    titulo,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            Text(
+                valor,
+                style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "$accion →",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = com.esan.sportpro.core.theme.SportProTema.colores.textoAcento,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+    }
+}
+
+internal fun etiquetaRol(rol: com.esan.sportpro.navigation.UserRole): String = when (rol) {
     com.esan.sportpro.navigation.UserRole.ADMINISTRADOR -> "Administrador"
     com.esan.sportpro.navigation.UserRole.ENTRENADOR -> "Entrenador"
     com.esan.sportpro.navigation.UserRole.JUGADOR -> "Jugador"
     com.esan.sportpro.navigation.UserRole.PADRE_DE_FAMILIA -> "Padre"
 }
 
-private fun tonoDe(estado: com.esan.sportpro.domain.academia.EstadoCodigo): TonoEstado = when (estado) {
+internal fun tonoDe(estado: com.esan.sportpro.domain.academia.EstadoCodigo): TonoEstado = when (estado) {
     com.esan.sportpro.domain.academia.EstadoCodigo.VIGENTE -> TonoEstado.EXITO
     com.esan.sportpro.domain.academia.EstadoCodigo.USADO -> TonoEstado.NEUTRO
     com.esan.sportpro.domain.academia.EstadoCodigo.EXPIRADO -> TonoEstado.ADVERTENCIA
     com.esan.sportpro.domain.academia.EstadoCodigo.REVOCADO -> TonoEstado.ERROR
-}
-
-/** US-004: registro y edición de los datos de la academia, con el escudo recortado 1:1. */
-@Composable
-private fun DialogoConfiguracion(
-    formulario: FormularioConfiguracion,
-    onCampo: (com.esan.sportpro.domain.academia.CampoAcademia, String) -> Unit,
-    onEscudo: (String?) -> Unit,
-    onGuardar: () -> Unit,
-    onCancelar: () -> Unit,
-) {
-    val selector = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-    ) { uri -> uri?.let { onEscudo(it.toString()) } }
-    val d = formulario.datos
-    AlertDialog(
-        onDismissRequest = { if (!formulario.guardando) onCancelar() },
-        title = { Text(if (formulario.esRegistro) "Registrar academia" else "Datos de la academia") },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    val visible = formulario.escudoVisible
-                    if (visible != null) {
-                        androidx.compose.material3.Surface(
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = androidx.compose.ui.graphics.Color.White,
-                            modifier = Modifier.size(64.dp),
-                        ) {
-                            coil.compose.AsyncImage(
-                                model = visible,
-                                contentDescription = "Escudo de la academia",
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            )
-                        }
-                    } else {
-                        EscudoEquipo(nombre = d.nombre.ifBlank { "Academia" }, tamano = 64.dp)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Escudo o logotipo", style = MaterialTheme.typography.labelLarge)
-                        TextButton(
-                            onClick = {
-                                selector.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(
-                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
-                                    ),
-                                )
-                            },
-                            enabled = !formulario.guardando,
-                        ) { Text(if (visible == null) "Elegir imagen" else "Cambiar imagen") }
-                        Text(
-                            formulario.errores[com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO]
-                                ?: "Máximo 2 MB. Se recorta en cuadrado (1:1).",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (com.esan.sportpro.domain.academia.CampoAcademia.ESCUDO in formulario.errores) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                }
-                CampoTextoAcademia("Nombre de la academia", d.nombre, com.esan.sportpro.domain.academia.CampoAcademia.NOMBRE, formulario, onCampo)
-                CampoTextoAcademia("Ciudad", d.ciudad, com.esan.sportpro.domain.academia.CampoAcademia.CIUDAD, formulario, onCampo)
-                CampoTextoAcademia("Distrito", d.distrito, com.esan.sportpro.domain.academia.CampoAcademia.DISTRITO, formulario, onCampo)
-                CampoTextoAcademia("Dirección", d.direccion, com.esan.sportpro.domain.academia.CampoAcademia.DIRECCION, formulario, onCampo)
-                CampoTextoAcademia(
-                    "Teléfono de contacto", d.telefono, com.esan.sportpro.domain.academia.CampoAcademia.TELEFONO, formulario, onCampo,
-                    teclado = androidx.compose.ui.text.input.KeyboardType.Phone,
-                )
-                CampoTextoAcademia(
-                    "Correo de contacto", d.correo, com.esan.sportpro.domain.academia.CampoAcademia.CORREO, formulario, onCampo,
-                    teclado = androidx.compose.ui.text.input.KeyboardType.Email,
-                )
-                CampoTextoAcademia(
-                    "Año de fundación", formulario.anioFundacionTexto,
-                    com.esan.sportpro.domain.academia.CampoAcademia.ANIO_FUNDACION, formulario, onCampo,
-                    teclado = androidx.compose.ui.text.input.KeyboardType.Number,
-                )
-                CampoTextoAcademia(
-                    "Día de corte de las mensualidades", formulario.diaCorteTexto,
-                    com.esan.sportpro.domain.academia.CampoAcademia.DIA_CORTE, formulario, onCampo,
-                    teclado = androidx.compose.ui.text.input.KeyboardType.Number,
-                    ayuda = "Entre 1 y 28. Después de ese día, lo no pagado figura como vencido.",
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onGuardar, enabled = !formulario.guardando) {
-                Text(if (formulario.guardando) "Guardando…" else "Guardar")
-            }
-        },
-        dismissButton = { TextButton(onClick = onCancelar, enabled = !formulario.guardando) { Text("Cancelar") } },
-    )
-}
-
-@Composable
-private fun CampoTextoAcademia(
-    etiqueta: String,
-    valor: String,
-    campo: com.esan.sportpro.domain.academia.CampoAcademia,
-    formulario: FormularioConfiguracion,
-    onCampo: (com.esan.sportpro.domain.academia.CampoAcademia, String) -> Unit,
-    teclado: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
-    ayuda: String? = null,
-) {
-    val error = formulario.errores[campo]
-    OutlinedTextField(
-        value = valor,
-        onValueChange = { onCampo(campo, it) },
-        label = { Text(etiqueta) },
-        singleLine = true,
-        enabled = !formulario.guardando,
-        isError = error != null,
-        supportingText = if (error != null || ayuda != null) {
-            { Text(error ?: ayuda.orEmpty()) }
-        } else {
-            null
-        },
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = teclado),
-        modifier = Modifier.fillMaxWidth(),
-    )
 }

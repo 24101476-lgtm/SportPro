@@ -60,6 +60,10 @@ fun EstadisticasSeccionScreen(modifier: Modifier = Modifier) {
                         .destacado(state.jugadores)?.jugadorId == jugador.jugadorId,
                     onVolver = { destino = EstadisticasDestino.Jugadores },
                     modifier = modifier,
+                    equipo = state.equipoSeleccionado,
+                    plantel = state.jugadores,
+                    partidos = state.resumenPartidos.partidosPorJugador[jugador.jugadorId].orEmpty(),
+                    onSeleccionarJugador = { otro -> destino = EstadisticasDestino.JugadorDetalle(otro.jugadorId) },
                 )
             } else {
                 // Puede ocurrir justo después de recargar datos (p. ej. al cambiar filtros);

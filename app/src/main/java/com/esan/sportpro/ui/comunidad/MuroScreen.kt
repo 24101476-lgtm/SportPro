@@ -66,13 +66,13 @@ fun MuroScreen(
     Scaffold(
         modifier = modifier,
         floatingActionButton = {
-            FloatingActionButton(
+            androidx.compose.material3.ExtendedFloatingActionButton(
                 onClick = onNuevaPublicacion,
-                containerColor = ColoresPartido.Verde,
-                contentColor = androidx.compose.ui.graphics.Color.White,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nueva publicación")
-            }
+                containerColor = PaletaSportPro.Lima,
+                contentColor = PaletaSportPro.Carbon,
+                icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                text = { Text("Publicar", fontWeight = FontWeight.Bold) },
+            )
         },
     ) { padding ->
         PullToRefreshBox(
@@ -90,7 +90,7 @@ fun MuroScreen(
                 )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
@@ -151,9 +151,9 @@ private fun CompositorMuro(onClick: () -> Unit, orden: OrdenMuro, onOrden: (Orde
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(PaletaSportPro.MusgoMedio, PaletaSportPro.Verde))),
+                            .background(PaletaSportPro.Lima),
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = PaletaSportPro.Carbon)
                     }
                     Text(
                         "¿Qué quieres compartir con tu academia?",

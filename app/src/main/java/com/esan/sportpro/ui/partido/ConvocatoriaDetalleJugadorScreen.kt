@@ -166,7 +166,7 @@ fun ConvocatoriaDetalleJugadorScreen(
 
                 Text(
                     text =
-                        "US-015 · MI CONVOCATORIA",
+                        "Mi convocatoria",
                     style =
                         MaterialTheme
                             .typography

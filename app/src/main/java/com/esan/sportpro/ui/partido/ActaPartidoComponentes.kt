@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.esan.sportpro.domain.partido.ActaPartido
 import com.esan.sportpro.domain.partido.ReglasActa
 
@@ -46,32 +47,37 @@ fun ActaResumenContenido(
     ) {
         // Resultado.
         item {
+            // Marcador en la tarjeta oliva de la marca, con números grandes.
             androidx.compose.material3.Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                color = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                contentColor = androidx.compose.ui.graphics.Color.White,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 16.dp),
                 ) {
                     Text(
                         acta.equipo,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.End,
                         maxLines = 2,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         "${acta.marcadorPropio} – ${acta.marcadorRival}",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontFamily = com.esan.sportpro.core.theme.FuenteNumeros,
+                            fontSize = 36.sp,
+                            lineHeight = 38.sp,
+                        ),
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                     Text(
                         acta.rival,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         modifier = Modifier.weight(1f),
                     )
@@ -108,20 +114,27 @@ fun ActaResumenContenido(
         }
         // Datos del registro.
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Datos del registro en fichas de 2 × 2: la hora se lee sin que se parta la fecha.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilaActa("Operador", acta.operadores.joinToString(", ").ifEmpty { "No identificado" })
-                FilaActa("Inicio real", acta.inicioRealMs?.let(::formatearFechaHora) ?: "Sin registro")
-                FilaActa("Fin real", acta.finRealMs?.let(::formatearFechaHora) ?: "Sin registro")
                 val duracion = if (acta.inicioRealMs != null && acta.finRealMs != null) {
                     ((acta.finRealMs - acta.inicioRealMs) / 60_000L).takeIf { it >= 0 }
                 } else {
                     null
                 }
-                duracion?.let { FilaActa("Duración real", "$it min") }
-                FilaActa(
-                    "Catálogo de eventos",
-                    acta.versionesCatalogo.joinToString(", ") { "v$it" }.ifEmpty { "Sin registro" },
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FichaActa("Inicio real", horaCorta(acta.inicioRealMs), fechaCorta(acta.inicioRealMs), Modifier.weight(1f))
+                    FichaActa("Fin real", horaCorta(acta.finRealMs), fechaCorta(acta.finRealMs), Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FichaActa("Duración real", duracion?.let { "$it min" } ?: "—", null, Modifier.weight(1f))
+                    FichaActa(
+                        "Catálogo",
+                        acta.versionesCatalogo.joinToString(", ") { "v$it" }.ifEmpty { "—" },
+                        null,
+                        Modifier.weight(1f),
+                    )
+                }
             }
         }
         item {
@@ -210,6 +223,36 @@ private fun MinutosFila(jugador: com.esan.sportpro.domain.partido.MinutosJugador
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** "17:07" de "27/11/2026 17:07:33"; "—" si no hay registro. */
+private fun horaCorta(ms: Long?): String =
+    ms?.let { formatearFechaHora(it).split(" ").getOrNull(1)?.take(5) } ?: "—"
+
+private fun fechaCorta(ms: Long?): String? = ms?.let { formatearFechaHora(it).split(" ").firstOrNull() }
+
+@Composable
+private fun FichaActa(titulo: String, valor: String, detalle: String?, modifier: Modifier) {
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        modifier = modifier,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(titulo, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                valor,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = com.esan.sportpro.core.theme.FuenteNumeros,
+                    fontSize = 20.sp,
+                    lineHeight = 22.sp,
+                ),
+            )
+            detalle?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

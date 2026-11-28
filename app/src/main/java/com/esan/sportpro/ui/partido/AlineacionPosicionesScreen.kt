@@ -149,7 +149,7 @@ fun AlineacionPosicionesScreen(
 
                 Text(
                     text =
-                        "US-016 · POSICIONES",
+                        "Posiciones",
                     style =
                         MaterialTheme
                             .typography

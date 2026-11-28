@@ -237,7 +237,7 @@ fun ConvocatoriaSeleccionScreen(
 
                             Text(
                                 text =
-                                    "US-014 · CONVOCATORIA",
+                                    "Convocatoria",
                                 style =
                                     MaterialTheme
                                         .typography

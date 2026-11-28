@@ -27,9 +27,10 @@ fun AvatarEstadistica(jugador: EstadisticaJugador, tamano: Dp = 44.dp, modifier:
             .background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        if (jugador.fotoUrl.isNotBlank()) {
+        val modelo = com.esan.sportpro.ui.common.FotosDemoJugadores.modelo(jugador.fotoUrl, jugador.jugadorNombre)
+        if (modelo != null) {
             AsyncImage(
-                model = jugador.fotoUrl,
+                model = modelo,
                 contentDescription = "Foto de ${jugador.jugadorNombre}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

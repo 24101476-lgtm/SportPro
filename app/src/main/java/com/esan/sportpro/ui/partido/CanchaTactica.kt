@@ -682,10 +682,12 @@ private fun TarjetaInsignia(color: Color) {
 
 @Composable
 private fun FotoFicha(jugador: JugadorCanchaUi, modifier: Modifier) {
+    // Foto subida o, si no hay, la de demostración del plantel de prueba.
+    val modelo = com.esan.sportpro.ui.common.FotosDemoJugadores.modelo(jugador.fotoUrl, jugador.nombre)
     Box(modifier = modifier, contentAlignment = Alignment.BottomCenter) {
-        if (jugador.fotoUrl.isNotBlank()) {
+        if (modelo != null) {
             AsyncImage(
-                model = jugador.fotoUrl,
+                model = modelo,
                 contentDescription = "Foto de ${jugador.nombre}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

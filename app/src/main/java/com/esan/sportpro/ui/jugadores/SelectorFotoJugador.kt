@@ -82,14 +82,16 @@ internal fun SelectorFotoJugador(
 
 /** Foto del jugador, o sus iniciales si no tiene. */
 @Composable
-internal fun FotoJugador(url: String?, iniciales: String, tamano: Dp = 72.dp) {
+internal fun FotoJugador(url: String?, iniciales: String, tamano: Dp = 72.dp, nombre: String? = null) {
+    // Foto subida; si no hay, la de demostración del plantel de prueba; si tampoco, iniciales.
+    val modelo = com.esan.sportpro.ui.common.FotosDemoJugadores.modelo(url, nombre)
     Box(
         modifier = Modifier.size(tamano).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        if (!url.isNullOrBlank()) {
+        if (modelo != null) {
             AsyncImage(
-                model = url,
+                model = modelo,
                 contentDescription = "Foto del jugador",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

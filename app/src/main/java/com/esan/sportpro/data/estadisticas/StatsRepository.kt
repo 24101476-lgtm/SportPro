@@ -5,6 +5,8 @@ import com.esan.sportpro.domain.estadisticas.EstadisticaEquipo
 import com.esan.sportpro.domain.estadisticas.EstadisticaJugador
 import com.esan.sportpro.domain.estadisticas.FiltroEstadisticas
 import com.esan.sportpro.domain.estadisticas.GolesPorPartidoPunto
+import com.esan.sportpro.domain.estadisticas.PartidoDeJugador
+import com.esan.sportpro.domain.estadisticas.ResumenPartidos
 import com.esan.sportpro.domain.estadisticas.TipoPartido
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -54,6 +56,8 @@ class StatsRepository @Inject constructor(
         val jugadorId: String?,
         val tipo: String,
         val minutosJugados: Int,
+        /** Minuto del partido en que ocurrió (solo se usa en los goles). */
+        val minuto: Int = 0,
     )
 
     suspend fun obtenerTemporadasDisponibles(equipoId: String): List<String> = runCatching {
@@ -141,7 +145,20 @@ class StatsRepository @Inject constructor(
                 eventos = eventosPorJugador[jugadorId].orEmpty(),
                 partidosDelJugador = eventosPorJugador[jugadorId].orEmpty().map { it.partidoId }.distinct().size,
                 porcentajeAsistencia = asistenciaPorJugador[jugadorId] ?: 0.0,
-            ).copy(fotoUrl = fotosPorJugador[jugadorId].orEmpty())
+            ).let { fila ->
+                val ficha = fichasPlantel[jugadorId]
+                val convocado = convocadosPorJugador[jugadorId]
+                fila.copy(
+                    fotoUrl = fotosPorJugador[jugadorId].orEmpty(),
+                    // runCatching: si un campo antiguo tiene otro tipo, se deja vacío en vez de fallar.
+                    posicion = runCatching { ficha?.getString("posicion") }.getOrNull()?.ifBlank { null }
+                        ?: runCatching { convocado?.getString("posicion") }.getOrNull().orEmpty(),
+                    dorsal = runCatching { ficha?.getLong("dorsal")?.toInt() }.getOrNull()
+                        ?: runCatching { convocado?.getLong("dorsal")?.toInt() }.getOrNull(),
+                    fechaNacimiento = runCatching { ficha?.getString("fechaNacimiento") }.getOrNull().orEmpty(),
+                    pieHabil = runCatching { ficha?.getString("pieHabil") }.getOrNull().orEmpty(),
+                )
+            }
         }
 
         val sinAsignar = eventosPorJugador[null].orEmpty()
@@ -243,6 +260,7 @@ class StatsRepository @Inject constructor(
     private suspend fun eventosVigentesDe(partidoIds: List<String>): List<EventoPartido> {
         val resultados = mutableListOf<EventoPartido>()
         nombresConvocados = emptyMap()
+        convocadosPorJugador = emptyMap()
         partidoIds.forEach { partidoId ->
             val ref = firestore.collection("partidos").document(partidoId)
             val partido = runCatching { ref.get().await() }.getOrNull() ?: return@forEach
@@ -254,6 +272,8 @@ class StatsRepository @Inject constructor(
             nombresConvocados = nombresConvocados + convocados.associate {
                 it.id to (it.getString("nombre") ?: "Jugador sin nombre")
             }
+            // Respaldo para la cabecera del detalle si no se puede leer la ficha del jugador.
+            convocadosPorJugador = convocadosPorJugador + convocados.associateBy { it.id }
 
             fun jugador(id: String?): String? = id?.takeUnless { it == "NO_IDENTIFICADO" || it == "RIVAL" }
 
@@ -262,7 +282,9 @@ class StatsRepository @Inject constructor(
                 val principal = jugador(doc.getString("jugadorId"))
                 when (tipo) {
                     "gol" -> {
-                        resultados += EventoPartido(partidoId, principal, "GOL", 0)
+                        resultados += EventoPartido(
+                            partidoId, principal, "GOL", 0, minuto = (doc.getLong("minuto") ?: 0L).toInt(),
+                        )
                         jugador(doc.getString("jugadorSecundarioId"))?.let {
                             resultados += EventoPartido(partidoId, it, "ASISTENCIA", 0)
                         }
@@ -303,20 +325,71 @@ class StatsRepository @Inject constructor(
      * para jugadores y padres se usan los nombres copiados en los convocados de cada partido.
      */
     private suspend fun datosDePlantel(equipoId: String): Pair<Map<String, String>, Map<String, String>> {
-        val docs = runCatching {
+        val delEquipo = runCatching {
             firestore.collection("jugadores")
                 .whereEqualTo("equipoId", equipoId)
                 .get()
                 .await()
                 .documents
         }.getOrDefault(emptyList())
+        // Jugadores que aparecen en los partidos pero hoy están en otro equipo (o se cambiaron):
+        // se leen por id para no perder su foto, dorsal y posición. Firestore admite 10 ids por consulta.
+        val faltantes = (nombresConvocados.keys - delEquipo.map { it.id }.toSet()).toList()
+        val otros = faltantes.chunked(10).flatMap { ids ->
+            runCatching {
+                firestore.collection("jugadores")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), ids)
+                    .get()
+                    .await()
+                    .documents
+            }.getOrDefault(emptyList())
+        }
+        val docs = delEquipo + otros
         val nombres = docs.associate { doc ->
             val nombre = doc.getString("nombre")
                 ?: "${doc.getString("nombres").orEmpty()} ${doc.getString("apellidos").orEmpty()}".trim()
             doc.id to nombre.ifBlank { "Jugador sin nombre" }
         }
         val fotos = docs.mapNotNull { doc -> doc.getString("fotoUrl")?.takeIf { it.isNotBlank() }?.let { doc.id to it } }.toMap()
+        fichasPlantel = docs.associateBy { it.id }
         return (nombresConvocados + nombres) to fotos
+    }
+
+    /** Convocados de los partidos leídos (nombre, dorsal, posición): respaldo de la ficha. */
+    private var convocadosPorJugador: Map<String, com.google.firebase.firestore.DocumentSnapshot> = emptyMap()
+
+    /** Fichas del plantel leídas en la última consulta (posición, dorsal, nacimiento, pie). */
+    private var fichasPlantel: Map<String, com.google.firebase.firestore.DocumentSnapshot> = emptyMap()
+
+    /**
+     * Minuto de cada gol del equipo y partidos de cada jugador en el periodo. Usa los mismos
+     * partidos y eventos vigentes que la tabla, así que los números coinciden con ella.
+     */
+    suspend fun obtenerResumenPartidos(equipoId: String, filtro: FiltroEstadisticas): ResumenPartidos {
+        val partidos = partidosFinalizados(equipoId, filtro)
+        if (partidos.isEmpty()) return ResumenPartidos()
+        val eventos = eventosVigentesDe(partidos.map { it.id })
+        val minutosDeGol = eventos.filter { it.tipo == "GOL" }.map { it.minuto }
+        val porJugador = eventos.filter { it.jugadorId != null }.groupBy { it.jugadorId!! }
+            .mapValues { (_, delJugador) ->
+                val porPartido = delJugador.groupBy { it.partidoId }
+                partidos.filter { it.id in porPartido }
+                    .sortedByDescending { it.fecha }
+                    .map { partido ->
+                        val suyos = porPartido[partido.id].orEmpty()
+                        PartidoDeJugador(
+                            partidoId = partido.id,
+                            fecha = partido.fecha,
+                            rivalNombre = partido.rivalNombre,
+                            golesEquipo = partido.golesEquipo,
+                            golesRival = partido.golesRival,
+                            goles = suyos.count { it.tipo == "GOL" },
+                            asistencias = suyos.count { it.tipo == "ASISTENCIA" },
+                            minutos = suyos.sumOf { it.minutosJugados },
+                        )
+                    }
+            }
+        return ResumenPartidos(minutosDeGol, porJugador)
     }
 
     /** Nombres leídos de `partidos/{id}/convocados` en la última consulta de eventos. */

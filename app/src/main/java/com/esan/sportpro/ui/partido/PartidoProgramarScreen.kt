@@ -146,7 +146,7 @@ fun PartidoProgramarScreen(
 
             item {
                 Text(
-                    text = "US-014 · NUEVO PARTIDO",
+                    text = "Nuevo partido",
                     style =
                         MaterialTheme
                             .typography
@@ -233,189 +233,31 @@ fun PartidoProgramarScreen(
                 )
             }
 
+            // Calendario y reloj propios de la app (en español, con atajos), igual que en Entrenamientos.
             item {
-
-                OutlinedTextField(
-                    value =
-                        fechaMs?.let {
-                            formatoFecha.format(
-                                Date(it)
-                            )
-                        }.orEmpty(),
-
-                    onValueChange = { },
-
-                    readOnly = true,
-
-                    label = {
-                        Text(
-                            "Fecha del partido"
-                        )
+                com.esan.sportpro.ui.common.CampoFecha(
+                    valorIso = fechaMs?.let {
+                        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                    }.orEmpty(),
+                    onCambio = { iso ->
+                        fechaMs = java.time.LocalDate.parse(iso)
+                            .atStartOfDay(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        errorFormulario = null
                     },
-
-                    placeholder = {
-                        Text(
-                            "Seleccionar fecha"
-                        )
-                    },
-
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-
-                                val calendario =
-                                    Calendar
-                                        .getInstance()
-
-                                DatePickerDialog(
-                                    context,
-                                    {
-                                            _,
-                                            year,
-                                            month,
-                                            day ->
-
-                                        val seleccionado =
-                                            Calendar
-                                                .getInstance()
-                                                .apply {
-                                                    set(
-                                                        Calendar.YEAR,
-                                                        year
-                                                    )
-
-                                                    set(
-                                                        Calendar.MONTH,
-                                                        month
-                                                    )
-
-                                                    set(
-                                                        Calendar.DAY_OF_MONTH,
-                                                        day
-                                                    )
-
-                                                    set(
-                                                        Calendar.HOUR_OF_DAY,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.MINUTE,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.SECOND,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.MILLISECOND,
-                                                        0
-                                                    )
-                                                }
-
-                                        fechaMs =
-                                            seleccionado
-                                                .timeInMillis
-
-                                        errorFormulario =
-                                            null
-                                    },
-                                    calendario.get(
-                                        Calendar.YEAR
-                                    ),
-                                    calendario.get(
-                                        Calendar.MONTH
-                                    ),
-                                    calendario.get(
-                                        Calendar.DAY_OF_MONTH
-                                    )
-                                ).show()
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.CalendarMonth,
-                                contentDescription =
-                                    "Seleccionar fecha"
-                            )
-                        }
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth()
+                    etiqueta = "Fecha del partido",
                 )
             }
 
             item {
-
-                OutlinedTextField(
-                    value = hora,
-                    onValueChange = { },
-                    readOnly = true,
-
-                    label = {
-                        Text(
-                            "Hora"
-                        )
+                com.esan.sportpro.ui.common.CampoHora(
+                    valor = hora,
+                    onCambio = {
+                        hora = it
+                        errorFormulario = null
                     },
-
-                    placeholder = {
-                        Text(
-                            "Seleccionar hora"
-                        )
-                    },
-
-                    trailingIcon = {
-
-                        IconButton(
-                            onClick = {
-
-                                val calendario =
-                                    Calendar
-                                        .getInstance()
-
-                                TimePickerDialog(
-                                    context,
-                                    {
-                                            _,
-                                            horaSeleccionada,
-                                            minutoSeleccionado ->
-
-                                        hora =
-                                            String.format(
-                                                Locale.getDefault(),
-                                                "%02d:%02d",
-                                                horaSeleccionada,
-                                                minutoSeleccionado
-                                            )
-
-                                        errorFormulario =
-                                            null
-                                    },
-
-                                    calendario.get(
-                                        Calendar.HOUR_OF_DAY
-                                    ),
-
-                                    calendario.get(
-                                        Calendar.MINUTE
-                                    ),
-
-                                    true
-                                ).show()
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Schedule,
-                                contentDescription =
-                                    "Seleccionar hora"
-                            )
-                        }
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth()
+                    etiqueta = "Hora",
                 )
             }
 
@@ -568,121 +410,18 @@ fun PartidoProgramarScreen(
             }
 
             item {
-
-                OutlinedTextField(
-                    value =
-                        fechaLimiteMs?.let {
-                            formatoFecha.format(
-                                Date(it)
-                            )
-                        }.orEmpty(),
-
-                    onValueChange = { },
-
-                    readOnly = true,
-
-                    label = {
-                        Text(
-                            "Fecha límite de respuesta"
-                        )
+                com.esan.sportpro.ui.common.CampoFecha(
+                    valorIso = fechaLimiteMs?.let {
+                        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                    }.orEmpty(),
+                    onCambio = { iso ->
+                        fechaLimiteMs = java.time.LocalDate.parse(iso)
+                            .atStartOfDay(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        errorFormulario = null
                     },
-
-                    placeholder = {
-                        Text(
-                            "Seleccionar fecha"
-                        )
-                    },
-
-                    trailingIcon = {
-
-                        IconButton(
-                            onClick = {
-
-                                val calendario =
-                                    Calendar
-                                        .getInstance()
-
-                                DatePickerDialog(
-                                    context,
-                                    {
-                                            _,
-                                            year,
-                                            month,
-                                            day ->
-
-                                        val seleccionado =
-                                            Calendar
-                                                .getInstance()
-                                                .apply {
-                                                    set(
-                                                        Calendar.YEAR,
-                                                        year
-                                                    )
-
-                                                    set(
-                                                        Calendar.MONTH,
-                                                        month
-                                                    )
-
-                                                    set(
-                                                        Calendar.DAY_OF_MONTH,
-                                                        day
-                                                    )
-
-                                                    set(
-                                                        Calendar.HOUR_OF_DAY,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.MINUTE,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.SECOND,
-                                                        0
-                                                    )
-
-                                                    set(
-                                                        Calendar.MILLISECOND,
-                                                        0
-                                                    )
-                                                }
-
-                                        fechaLimiteMs =
-                                            seleccionado
-                                                .timeInMillis
-
-                                        errorFormulario =
-                                            null
-                                    },
-
-                                    calendario.get(
-                                        Calendar.YEAR
-                                    ),
-
-                                    calendario.get(
-                                        Calendar.MONTH
-                                    ),
-
-                                    calendario.get(
-                                        Calendar.DAY_OF_MONTH
-                                    )
-                                ).show()
-                            }
-                        ) {
-
-                            Icon(
-                                Icons.Default.CalendarMonth,
-                                contentDescription =
-                                    "Seleccionar fecha límite"
-                            )
-                        }
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth()
+                    etiqueta = "Fecha límite de respuesta",
                 )
             }
 

@@ -88,9 +88,13 @@ fun AcademiaScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (state.puedeEditar) {
-                FloatingActionButton(onClick = viewModel::nuevoEquipo) {
-                    Icon(Icons.Default.Add, contentDescription = "Nuevo equipo")
-                }
+                androidx.compose.material3.ExtendedFloatingActionButton(
+                    onClick = viewModel::nuevoEquipo,
+                    containerColor = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                    contentColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Nuevo equipo", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                )
             }
         },
     ) { padding ->
@@ -190,7 +194,8 @@ fun AcademiaScreen(
                     )
                 } else {
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        // Espacio abajo para que el botón "Nuevo equipo" no tape el último equipo.
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(state.equiposVisibles, key = { it.id }) { equipo ->
@@ -660,15 +665,19 @@ private fun ConfiguracionYCodigos(
     val vigentes = state.codigos.count { it.vigente() }
     val formato = remember { com.esan.sportpro.core.fecha.FechasSportPro.formatoFecha() }
     androidx.compose.material3.Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 EscudoEquipo(nombre = c.nombre.ifBlank { "Academia" }, tamano = 48.dp, url = c.escudoUrl.ifBlank { null })
                 Column(Modifier.weight(1f)) {
-                    Text(c.nombre.ifBlank { "Academia sin registrar" }, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        c.nombre.ifBlank { "Academia sin registrar" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    )
                     val ubicacion = listOf(c.distrito, c.ciudad).filter { it.isNotBlank() }.joinToString(", ")
                     if (ubicacion.isNotBlank()) {
                         Text(ubicacion, style = MaterialTheme.typography.bodySmall)

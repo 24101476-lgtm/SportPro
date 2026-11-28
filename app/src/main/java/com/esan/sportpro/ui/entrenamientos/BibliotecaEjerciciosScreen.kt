@@ -223,8 +223,8 @@ private fun ListaBiblioteca(
                         borderColor = color.copy(alpha = 0.6f),
                     ),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
-                        selectedLabelColor = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                        selectedContainerColor = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                        selectedLabelColor = androidx.compose.ui.graphics.Color.White,
                     ),
                 )
             }

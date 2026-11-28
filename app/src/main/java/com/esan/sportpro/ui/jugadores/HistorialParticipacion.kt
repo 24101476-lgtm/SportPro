@@ -236,8 +236,9 @@ private enum class Periodo { TEMPORADA, MES, TRIMESTRE, PROPIO }
 private fun TarjetaResumen(resumen: ResumenHistorial, tipo: TipoActividad?) {
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = PaletaSportPro.Carbon,
-        contentColor = PaletaSportPro.Tiza,
+        // Oliva de la marca: con peso, pero sin el negro duro.
+        color = PaletaSportPro.Musgo,
+        contentColor = Color.White,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -251,7 +252,7 @@ private fun TarjetaResumen(resumen: ResumenHistorial, tipo: TipoActividad?) {
                             null -> "Asistencia del periodo"
                         },
                         style = MaterialTheme.typography.labelLarge,
-                        color = PaletaSportPro.Niebla,
+                        color = PaletaSportPro.MusgoClaro,
                     )
                     Text(
                         if (resumen.convocadas == 0) "Sin sesiones convocadas" else "${resumen.participaciones} de ${resumen.convocadas} sesiones",
@@ -262,7 +263,7 @@ private fun TarjetaResumen(resumen: ResumenHistorial, tipo: TipoActividad?) {
                     Text(
                         "Cuentan las asistencias y las tardanzas",
                         style = MaterialTheme.typography.bodySmall,
-                        color = PaletaSportPro.Niebla,
+                        color = PaletaSportPro.MusgoClaro,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
@@ -282,7 +283,7 @@ private fun TarjetaResumen(resumen: ResumenHistorial, tipo: TipoActividad?) {
 
 @Composable
 private fun AnilloAsistencia(porcentaje: Float, sinDatos: Boolean) {
-    val pista = PaletaSportPro.CarbonLinea
+    val pista = Color.White.copy(alpha = 0.18f)
     val lima = PaletaSportPro.Lima
     Box(
         contentAlignment = Alignment.Center,
@@ -311,7 +312,7 @@ private fun AnilloAsistencia(porcentaje: Float, sinDatos: Boolean) {
             Text(
                 if (sinDatos) "—" else porcentaje.roundToInt().toString(),
                 style = TextStyle(fontFamily = FuenteNumeros, fontSize = 34.sp, lineHeight = 34.sp),
-                color = PaletaSportPro.Tiza,
+                color = Color.White,
             )
             if (!sinDatos) {
                 Text(
@@ -327,13 +328,26 @@ private fun AnilloAsistencia(porcentaje: Float, sinDatos: Boolean) {
 
 @Composable
 private fun Contador(etiqueta: String, valor: Int, color: Color, modifier: Modifier) {
-    Surface(shape = RoundedCornerShape(16.dp), color = PaletaSportPro.CarbonAlto, modifier = modifier) {
+    Surface(shape = RoundedCornerShape(16.dp), color = Color.White.copy(alpha = 0.12f), modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(vertical = 10.dp),
         ) {
-            Text(valor.toString(), style = TextStyle(fontFamily = FuenteNumeros, fontSize = 24.sp, lineHeight = 26.sp), color = color)
-            Text(etiqueta, style = MaterialTheme.typography.labelSmall, color = PaletaSportPro.Niebla, maxLines = 1)
+            Text(
+                valor.toString(),
+                style = TextStyle(fontFamily = FuenteNumeros, fontSize = 24.sp, lineHeight = 26.sp),
+                color = Color.White,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+                Text(
+                    etiqueta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PaletaSportPro.MusgoClaro,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
     }
 }
@@ -360,8 +374,8 @@ private fun Segmentado(
                 Surface(
                     onClick = { onElegir(valor) },
                     shape = CircleShape,
-                    color = if (activa) PaletaSportPro.Carbon else Color.Transparent,
-                    contentColor = if (activa) PaletaSportPro.Lima else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (activa) PaletaSportPro.Musgo else Color.Transparent,
+                    contentColor = if (activa) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
@@ -423,6 +437,15 @@ private fun GraficoMensual(meses: List<AsistenciaMensual>, hoy: LocalDate) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (meses.all { it.convocadas == 0 }) {
+                // Sin sesiones en seis meses: un mensaje vale más que seis rayitas vacías.
+                Text(
+                    "Todavía no hay sesiones registradas en estos meses. Las barras aparecen cuando se toma asistencia.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            } else {
             Row(
                 modifier = Modifier.fillMaxWidth().height(150.dp).padding(top = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -471,6 +494,7 @@ private fun GraficoMensual(meses: List<AsistenciaMensual>, hoy: LocalDate) {
                         )
                     }
                 }
+            }
             }
         }
     }

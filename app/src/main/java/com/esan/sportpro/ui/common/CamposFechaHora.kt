@@ -341,8 +341,8 @@ private fun BotonAceptar(habilitado: Boolean, onClick: () -> Unit) {
         enabled = habilitado,
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = PaletaSportPro.Carbon,
-            contentColor = PaletaSportPro.Lima,
+            containerColor = PaletaSportPro.Musgo,
+            contentColor = Color.White,
         ),
     ) { Text("Aceptar", fontWeight = FontWeight.Bold) }
 }

@@ -149,8 +149,12 @@ fun DialogosPartido(state: RegistroUiState, viewModel: RegistroPartidoViewModel)
             confirmButton = {
                 androidx.compose.material3.Button(
                     onClick = viewModel::confirmarCierreActa,
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = ColoresPartido.VerdeOscuro),
-                ) { Text("Cerrar acta") }
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                        contentColor = androidx.compose.ui.graphics.Color.White,
+                    ),
+                ) { Text("Cerrar acta", fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = viewModel::cerrarDialogo) { Text("Volver") } },
         )

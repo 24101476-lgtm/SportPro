@@ -212,17 +212,19 @@ private fun EventoCatalogoCard(
     Surface(
         onClick = onClick,
         enabled = puedeEditar,
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Ícono de color del evento (el mismo de la cronología del partido); gris si está inactivo.
+            IconoEvento(evento.id, 40.dp, apagado = !evento.activo)
 
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).padding(start = 12.dp)
             ) {
                 Text(
                     text = evento.nombre,

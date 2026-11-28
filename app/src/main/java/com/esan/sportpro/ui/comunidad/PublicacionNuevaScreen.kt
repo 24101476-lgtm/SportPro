@@ -200,8 +200,8 @@ fun PublicacionNuevaScreen(
                         Surface(
                             onClick = { visibilidad = opcion },
                             shape = RoundedCornerShape(18.dp),
-                            color = if (activa) PaletaSportPro.Carbon else MaterialTheme.colorScheme.surface,
-                            contentColor = if (activa) PaletaSportPro.Lima else MaterialTheme.colorScheme.onSurface,
+                            color = if (activa) PaletaSportPro.Musgo else MaterialTheme.colorScheme.surface,
+                            contentColor = if (activa) Color.White else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                         ) {
                             Row(

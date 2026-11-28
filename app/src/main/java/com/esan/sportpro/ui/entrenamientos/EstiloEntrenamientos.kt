@@ -156,10 +156,10 @@ internal fun TiraSemana(entrenamientos: List<Entrenamiento>, modifier: Modifier 
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (esHoy) PaletaSportPro.Carbon else MaterialTheme.colorScheme.surface)
+                    .background(if (esHoy) PaletaSportPro.Musgo else MaterialTheme.colorScheme.surface)
                     .border(
                         1.dp,
-                        if (esHoy) PaletaSportPro.Carbon else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        if (esHoy) PaletaSportPro.Musgo else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                         RoundedCornerShape(14.dp),
                     )
                     .padding(vertical = 8.dp)

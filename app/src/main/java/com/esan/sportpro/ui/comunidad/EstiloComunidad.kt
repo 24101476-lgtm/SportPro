@@ -93,8 +93,8 @@ fun SelectorSeccionComunidad(
                 Surface(
                     onClick = { onSeleccion(indice) },
                     shape = CircleShape,
-                    color = if (activa) PaletaSportPro.Carbon else Color.Transparent,
-                    contentColor = if (activa) PaletaSportPro.Lima else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (activa) PaletaSportPro.Musgo else Color.Transparent,
+                    contentColor = if (activa) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(
@@ -208,8 +208,9 @@ internal fun TarjetaResumenPartido(
             foto = FotoSportPro.ESTADIO,
             forma = RoundedCornerShape(22.dp),
             velo = Brush.verticalGradient(
-                0f to PaletaSportPro.Carbon.copy(alpha = 0.72f),
-                1f to PaletaSportPro.Carbon.copy(alpha = 0.94f),
+                // Velo oliva (no negro): el marcador se lee y la tarjeta no apaga el muro.
+                0f to PaletaSportPro.Musgo.copy(alpha = 0.78f),
+                1f to PaletaSportPro.Musgo.copy(alpha = 0.92f),
             ),
             modifier = Modifier.fillMaxWidth(),
         ) {

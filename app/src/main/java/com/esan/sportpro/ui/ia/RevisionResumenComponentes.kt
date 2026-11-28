@@ -14,6 +14,10 @@ import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Verified
@@ -645,123 +649,223 @@ internal fun FormularioEvaluacionResumen(state: ResumenIaUiState, viewModel: Res
     val datos = formulario.datos
     val errores = formulario.errores
     val resumen = state.resumenes.firstOrNull { it.id == formulario.resumenId }
+    val utilidad = datos.utilidad.trim().toIntOrNull()
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Evalúa el resumen",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            resumen?.let {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(
+                        "Versión ${it.version}",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                }
+            }
+        }
         Text(
-            "Evalúa el resumen" + (resumen?.let { " (versión ${it.version})" } ?: ""),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Tu evaluación documenta la utilidad del resumen y lo que la IA omitió, erró o inventó. " +
-                "Solo la ven el administrador y tú.",
+            "Documenta qué tan útil fue y lo que la IA omitió, erró o inventó. Solo la ven el administrador y tú.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        Text("Utilidad percibida", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            (ReglasEvaluacion.UTILIDAD_MIN..ReglasEvaluacion.UTILIDAD_MAX).forEach { valor ->
-                val elegido = datos.utilidad.trim() == valor.toString()
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = if (elegido) ColoresPartido.Verde else MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clickable { viewModel.onEvaluacionChanged(CampoEvaluacion.UTILIDAD) { copy(utilidad = valor.toString()) } },
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Text(
-                            valor.toString(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (elegido) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 9.dp),
-                        )
+        // 1. Utilidad: cinco estrellas grandes con su significado debajo.
+        BloqueEvaluacion(titulo = "¿Qué tan útil fue?") {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                (ReglasEvaluacion.UTILIDAD_MIN..ReglasEvaluacion.UTILIDAD_MAX).forEach { valor ->
+                    val encendida = utilidad != null && valor <= utilidad
+                    Surface(
+                        onClick = { viewModel.onEvaluacionChanged(CampoEvaluacion.UTILIDAD) { copy(utilidad = valor.toString()) } },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (encendida) com.esan.sportpro.core.theme.PaletaSportPro.Lima else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (encendida) androidx.compose.material.icons.Icons.Default.Star else androidx.compose.material.icons.Icons.Default.StarBorder,
+                                contentDescription = "$valor de ${ReglasEvaluacion.UTILIDAD_MAX}",
+                                tint = if (encendida) com.esan.sportpro.core.theme.PaletaSportPro.Musgo else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
                     }
                 }
             }
-            Text("1 = nada útil · 5 = muy útil", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                when (utilidad) {
+                    1 -> "1 · Nada útil"
+                    2 -> "2 · Poco útil"
+                    3 -> "3 · Útil a medias"
+                    4 -> "4 · Útil"
+                    5 -> "5 · Muy útil"
+                    else -> "Toca una estrella: 1 = nada útil, 5 = muy útil"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (utilidad != null) FontWeight.Bold else FontWeight.Normal,
+                color = if (utilidad != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            errores[CampoEvaluacion.UTILIDAD]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
-        errores[CampoEvaluacion.UTILIDAD]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
-        CampoNumero("Cantidad de omisiones detectadas", datos.omisiones, errores[CampoEvaluacion.OMISIONES]) {
-            viewModel.onEvaluacionChanged(CampoEvaluacion.OMISIONES) { copy(omisiones = it) }
+        // 2. Fallos de la IA: contadores con − y + (más rápido que escribir un número).
+        BloqueEvaluacion(titulo = "¿En qué falló la IA?") {
+            Contador("Omisiones", "Hechos del partido que no mencionó", datos.omisiones, errores[CampoEvaluacion.OMISIONES]) {
+                viewModel.onEvaluacionChanged(CampoEvaluacion.OMISIONES) { copy(omisiones = it) }
+            }
+            HorizontalDividerSuave()
+            Contador("Errores", "Datos que dijo mal", datos.errores, errores[CampoEvaluacion.ERRORES]) {
+                viewModel.onEvaluacionChanged(CampoEvaluacion.ERRORES) { copy(errores = it) }
+            }
+            HorizontalDividerSuave()
+            Contador("Inventados", "Cosas que no pasaron", datos.inventados, errores[CampoEvaluacion.INVENTADOS]) {
+                viewModel.onEvaluacionChanged(CampoEvaluacion.INVENTADOS) { copy(inventados = it) }
+            }
         }
-        CampoNumero("Cantidad de errores factuales", datos.errores, errores[CampoEvaluacion.ERRORES]) {
-            viewModel.onEvaluacionChanged(CampoEvaluacion.ERRORES) { copy(errores = it) }
+
+        // 3. Comentario y correcciones.
+        BloqueEvaluacion(titulo = "Tu comentario") {
+            OutlinedTextField(
+                value = datos.comentario,
+                onValueChange = { viewModel.onEvaluacionChanged(CampoEvaluacion.COMENTARIO) { copy(comentario = it) } },
+                placeholder = { Text("Ej.: Resumió bien los goles, pero olvidó el cambio del minuto 60") },
+                isError = errores[CampoEvaluacion.COMENTARIO] != null,
+                supportingText = {
+                    Text(
+                        errores[CampoEvaluacion.COMENTARIO]
+                            ?: "${datos.comentario.trim().length} de ${ReglasEvaluacion.COMENTARIO_MIN} a ${ReglasEvaluacion.COMENTARIO_MAX} caracteres",
+                    )
+                },
+                shape = RoundedCornerShape(16.dp),
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = datos.correcciones,
+                onValueChange = { viewModel.onEvaluacionChanged(CampoEvaluacion.CORRECCIONES) { copy(correcciones = it) } },
+                label = { Text("Correcciones realizadas") },
+                isError = errores[CampoEvaluacion.CORRECCIONES] != null,
+                supportingText = {
+                    Text(errores[CampoEvaluacion.CORRECCIONES] ?: "Ya vienen con lo que cambiaste del texto de la IA. Puedes editarlas.")
+                },
+                shape = RoundedCornerShape(16.dp),
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            )
         }
-        CampoNumero("Cantidad de datos inventados", datos.inventados, errores[CampoEvaluacion.INVENTADOS]) {
-            viewModel.onEvaluacionChanged(CampoEvaluacion.INVENTADOS) { copy(inventados = it) }
-        }
 
-        OutlinedTextField(
-            value = datos.comentario,
-            onValueChange = { viewModel.onEvaluacionChanged(CampoEvaluacion.COMENTARIO) { copy(comentario = it) } },
-            label = { Text("Comentario") },
-            isError = errores[CampoEvaluacion.COMENTARIO] != null,
-            supportingText = {
-                Text(
-                    errores[CampoEvaluacion.COMENTARIO]
-                        ?: "${datos.comentario.trim().length} de ${ReglasEvaluacion.COMENTARIO_MIN} a ${ReglasEvaluacion.COMENTARIO_MAX} caracteres",
-                )
-            },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        OutlinedTextField(
-            value = datos.correcciones,
-            onValueChange = { viewModel.onEvaluacionChanged(CampoEvaluacion.CORRECCIONES) { copy(correcciones = it) } },
-            label = { Text("Correcciones realizadas") },
-            isError = errores[CampoEvaluacion.CORRECCIONES] != null,
-            supportingText = {
-                Text(errores[CampoEvaluacion.CORRECCIONES] ?: "Precargadas con las diferencias entre el texto de la IA y el aprobado. Puedes editarlas.")
-            },
-            minLines = 4,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             OutlinedButton(
                 onClick = viewModel::posponerEvaluacion,
                 enabled = !formulario.guardando,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = CircleShape,
+                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
             ) { Text("Más tarde") }
             Button(
                 onClick = viewModel::guardarEvaluacion,
                 enabled = !formulario.guardando,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = CircleShape,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                    contentColor = Color.White,
+                ),
+                modifier = Modifier.weight(1.4f).heightIn(min = 52.dp),
             ) {
                 if (formulario.guardando) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
                 } else {
-                    Text("Guardar evaluación", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Guardar evaluación", fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
     }
 }
 
+/** Bloque blanco con título: separa la evaluación en tres pasos claros. */
 @Composable
-private fun CampoNumero(etiqueta: String, valor: String, error: String?, onCambio: (String) -> Unit) {
-    OutlinedTextField(
-        value = valor,
-        onValueChange = { nuevo -> onCambio(nuevo.filter { it.isDigit() }.take(2)) },
-        label = { Text(etiqueta) },
-        isError = error != null,
-        supportingText = { error?.let { texto -> Text(texto) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+private fun BloqueEvaluacion(titulo: String, contenido: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                titulo,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            contenido()
+        }
+    }
+}
+
+@Composable
+private fun HorizontalDividerSuave() {
+    androidx.compose.material3.HorizontalDivider(
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        modifier = Modifier.padding(vertical = 6.dp),
     )
+}
+
+/** Fila "Omisiones · descripción   [−] 2 [+]". Guarda el valor como texto, igual que antes. */
+@Composable
+private fun Contador(etiqueta: String, ayuda: String, valor: String, error: String?, onCambio: (String) -> Unit) {
+    val numero = valor.trim().toIntOrNull() ?: 0
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(etiqueta, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(ayuda, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            BotonPaso(simbolo = "−", descripcion = "Restar $etiqueta", habilitado = numero > 0) {
+                onCambio((numero - 1).coerceAtLeast(0).toString())
+            }
+            Text(
+                if (valor.isBlank()) "0" else numero.toString(),
+                style = androidx.compose.ui.text.TextStyle(fontFamily = com.esan.sportpro.core.theme.FuenteNumeros, fontSize = 24.sp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.width(44.dp),
+            )
+            BotonPaso(simbolo = "+", descripcion = "Sumar $etiqueta", habilitado = numero < 99) {
+                onCambio((numero + 1).coerceAtMost(99).toString())
+            }
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+@Composable
+private fun BotonPaso(simbolo: String, descripcion: String, habilitado: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = habilitado,
+        shape = CircleShape,
+        color = if (habilitado) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.size(40.dp).semantics { contentDescription = descripcion },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                simbolo,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (habilitado) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

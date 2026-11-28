@@ -1,5 +1,6 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.height
@@ -249,6 +250,33 @@ private fun ListaBiblioteca(
             Switch(checked = state.mostrarDesactivados, onCheckedChange = viewModel::onMostrarDesactivados)
         }
 
+        // Ejercicios de ejemplo: uno por cada categoría que aún no tiene ninguno.
+        val faltantes = com.esan.sportpro.domain.entrenamientos.EjerciciosEjemplo.faltantes(state.ejercicios)
+        if (state.puedeGestionar && faltantes.isNotEmpty() && !state.mostrarDesactivados) {
+            androidx.compose.material3.Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = com.esan.sportpro.core.theme.PaletaSportPro.Lima.copy(alpha = 0.35f),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Completa tu biblioteca", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Faltan ejercicios de ${faltantes.size} " +
+                                (if (faltantes.size == 1) "categoría" else "categorías") +
+                                ". Agrega un ejemplo de cada una y edítalos a tu gusto.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Button(
+                        onClick = viewModel::cargarEjemplos,
+                        enabled = !state.procesando,
+                        modifier = Modifier.padding(start = 8.dp),
+                    ) { Text(if (state.procesando) "Agregando…" else "Agregar") }
+                }
+            }
+        }
+
         val visibles = state.visibles
         when {
             // Rediseño: cuadrícula de 2 columnas con foto, duración y categoría.
@@ -262,6 +290,37 @@ private fun ListaBiblioteca(
                     val ejercicio = visibles[i]
                     EjercicioBibliotecaCard(ejercicio, onClick = { viewModel.abrirDetalle(ejercicio.id) })
                 }
+            }
+
+            // Filtro por una categoría sin ejercicios: foto de la categoría y cómo llenarla.
+            filtro.categoria != null && filtro.texto.isBlank() -> Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+            ) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(fotoCategoria(filtro.categoria)),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                        androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) },
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(20.dp)),
+                )
+                Text(
+                    "Aún no hay ejercicios de ${filtro.categoria.etiqueta.lowercase()}" +
+                        if (filtro.duracion != null) " con esa duración." else ".",
+                    style = MaterialTheme.typography.titleSmall,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+                Text(
+                    if (state.puedeGestionar) "Créalo con el botón + o usa \"Agregar\" para cargar un ejemplo." else "Pídele al entrenador que agregue uno.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                TextButton(onClick = viewModel::limpiarFiltros) { Text("Ver todos los ejercicios") }
             }
 
             filtro.activo -> EmptyStateMessage(
@@ -385,6 +444,7 @@ private fun Miniatura(url: String, modifier: Modifier = Modifier) {
 
 // ---- Detalle ---------------------------------------------------------------------------------
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetalleBiblioteca(
     state: BibliotecaUiState,
@@ -392,19 +452,57 @@ private fun DetalleBiblioteca(
     viewModel: BibliotecaEjerciciosViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val categoria = ejercicio.categoriaTecnica
+    val color = colorCategoria(categoria)
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (ejercicio.imagenUrl.isNotBlank()) {
-            AsyncImage(
-                model = ejercicio.imagenUrl,
-                contentDescription = "Imagen del ejercicio",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)),
+        // Cabecera: imagen (o foto de la categoría) con el nombre y la categoría encima.
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f).clip(RoundedCornerShape(24.dp))) {
+            if (ejercicio.imagenUrl.isNotBlank()) {
+                AsyncImage(
+                    model = ejercicio.imagenUrl,
+                    contentDescription = "Imagen del ejercicio",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(fotoCategoria(categoria)),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                        androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) },
+                    ),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                Modifier.fillMaxSize().background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        0.35f to androidx.compose.ui.graphics.Color.Transparent,
+                        1f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.92f),
+                    ),
+                ),
             )
+            Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+                androidx.compose.material3.Surface(shape = RoundedCornerShape(50), color = color) {
+                    Text(
+                        categoria?.etiqueta ?: "Sin categoría",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    )
+                }
+                Text(
+                    ejercicio.nombre,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
-        Text(ejercicio.nombre, style = MaterialTheme.typography.titleLarge)
         if (!ejercicio.activo) {
             Text(
                 "Desactivado: no aparece en el buscador.",
@@ -413,23 +511,45 @@ private fun DetalleBiblioteca(
             )
         }
 
-        Dato("Categoría técnica", ejercicio.categoriaTecnica?.etiqueta ?: "Sin categoría")
-        Dato("Duración sugerida", "${ejercicio.duracionMin} minutos")
-        Dato("Mínimo de jugadores", ejercicio.minJugadores.takeIf { it > 0 }?.toString() ?: "—")
-        Dato("Objetivo", ejercicio.objetivo.ifBlank { "—" })
-        Dato("Materiales", ejercicio.materiales.ifBlank { "Ninguno" })
-        Dato("Descripción", ejercicio.descripcion.ifBlank { "—" })
+        // Cifras: duración y mínimo de jugadores en dos fichas.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FichaDato("${ejercicio.duracionMin}'", "Duración sugerida", Modifier.weight(1f))
+            FichaDato(
+                ejercicio.minJugadores.takeIf { it > 0 }?.toString() ?: "—",
+                "Mínimo de jugadores",
+                Modifier.weight(1f),
+            )
+        }
+
+        BloqueTexto("Objetivo", ejercicio.objetivo.ifBlank { "—" })
+        if (ejercicio.materiales.isNotBlank()) {
+            Column {
+                Text("Materiales", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 6.dp),
+                ) {
+                    ejercicio.materiales.split(",", ";").map { it.trim() }.filter { it.isNotBlank() }.forEach { material ->
+                        ChipInfo(material)
+                    }
+                }
+            }
+        } else {
+            BloqueTexto("Materiales", "Ninguno")
+        }
+        BloqueTexto("Cómo se hace", ejercicio.descripcion.ifBlank { "—" })
 
         if (state.puedeEditar(ejercicio)) {
             if (ejercicio.activo) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(onClick = { viewModel.solicitarDesactivar(ejercicio) }, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { viewModel.solicitarDesactivar(ejercicio) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                         Text("Desactivar")
                     }
-                    Button(onClick = { viewModel.editarEjercicio(ejercicio) }, modifier = Modifier.weight(1f)) {
+                    Button(onClick = { viewModel.editarEjercicio(ejercicio) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                         Text("Editar")
                     }
                 }
@@ -437,7 +557,7 @@ private fun DetalleBiblioteca(
                     Text("Eliminar", color = MaterialTheme.colorScheme.error)
                 }
             } else {
-                Button(onClick = { viewModel.reactivar(ejercicio) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                Button(onClick = { viewModel.reactivar(ejercicio) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Text("Reactivar")
                 }
             }
@@ -446,9 +566,32 @@ private fun DetalleBiblioteca(
                 "Solo el autor del ejercicio o el administrador del club pueden editarlo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun FichaDato(valor: String, etiqueta: String, modifier: Modifier = Modifier) {
+    androidx.compose.material3.Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(valor, style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano)
+            Text(etiqueta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun BloqueTexto(titulo: String, texto: String) {
+    Column {
+        Text(titulo, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

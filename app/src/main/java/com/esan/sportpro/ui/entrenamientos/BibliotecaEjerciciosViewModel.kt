@@ -269,6 +269,45 @@ class BibliotecaEjerciciosViewModel @Inject constructor(
         }
     }
 
+    // ---- Ejercicios de ejemplo ------------------------------------------------------------
+
+    /** Crea un ejercicio de ejemplo por cada categoría que todavía no tiene ninguno. */
+    fun cargarEjemplos() {
+        val estado = currentState
+        val perfil = estado.perfil ?: return
+        if (!estado.puedeGestionar || estado.procesando) return
+        val faltantes = com.esan.sportpro.domain.entrenamientos.EjerciciosEjemplo.faltantes(estado.ejercicios)
+        if (faltantes.isEmpty()) return
+        setState { copy(procesando = true) }
+        viewModelScope.launch {
+            var creados = 0
+            faltantes.forEach { plantilla ->
+                runCatching {
+                    entrenamientoRepository.guardarEnBiblioteca(
+                        EjercicioBiblioteca(
+                            academiaId = perfil.academiaId,
+                            nombre = plantilla.nombre,
+                            objetivo = plantilla.objetivo,
+                            categoria = plantilla.categoria.name,
+                            duracionMin = plantilla.duracionMin,
+                            minJugadores = plantilla.minJugadores,
+                            materiales = plantilla.materiales,
+                            descripcion = plantilla.descripcion,
+                            creadoPor = perfil.uid,
+                        ),
+                    )
+                }.onSuccess { creados++ }
+            }
+            setState { copy(procesando = false) }
+            sendEvent(
+                BibliotecaEvent.Mensaje(
+                    if (creados > 0) "Se agregaron $creados ejercicios de ejemplo. Puedes editarlos cuando quieras."
+                    else "No se pudieron agregar los ejemplos. Revisa tu conexión.",
+                ),
+            )
+        }
+    }
+
     // ---- Desactivar / eliminar -----------------------------------------------------------
 
     /** Si el ejercicio ya se usó en una sesión realizada no se puede borrar: se ofrece desactivarlo. */

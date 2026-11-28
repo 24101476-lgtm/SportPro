@@ -627,8 +627,10 @@ private fun FormularioEntrenamientoContenido(
 
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      // Rediseño: el formulario se ordena en tres bloques (cuándo y dónde, objetivo y plan).
+      SeccionFormulario("Cuándo y dónde", "1") {
         Text("Equipo", style = MaterialTheme.typography.labelLarge)
         if (state.equiposActivos.isEmpty()) {
             Text("No hay equipos activos. Crea uno en Academia.", style = MaterialTheme.typography.bodySmall)
@@ -671,6 +673,8 @@ private fun FormularioEntrenamientoContenido(
             etiqueta = "Lugar (opcional)",
             error = errores[CampoEntrenamiento.LUGAR],
         )
+      }
+      SeccionFormulario("Objetivo", "2") {
         CampoFormulario(
             valor = datos.objetivo,
             onCambio = { v -> viewModel.onCampoChanged(CampoEntrenamiento.OBJETIVO) { copy(objetivo = v) } },
@@ -679,9 +683,30 @@ private fun FormularioEntrenamientoContenido(
             ayuda = "${datos.objetivo.length}/200",
             minLineas = 2,
         )
-
+      }
+      SeccionFormulario("Plan de la sesión", "3") {
         val total = datos.ejercicios.sumOf { it.duracionMin }
-        Subtitulo("Ejercicios ($total min)")
+        val planificada = datos.duracion.trim().toIntOrNull() ?: 0
+        // Minutos con ejercicios frente a la duración de la sesión.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$total de $planificada min con ejercicios",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${datos.ejercicios.size} ${if (datos.ejercicios.size == 1) "ejercicio" else "ejercicios"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { if (planificada > 0) (total.toFloat() / planificada).coerceIn(0f, 1f) else 0f },
+            color = if (planificada in 1 until total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+            drawStopIndicator = {},
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)),
+        )
         if (datos.ejercicios.size > 1) {
             Text(
                 "Mantén presionado ⠿ y arrastra para cambiar el orden. La duración que ajustes aquí no cambia la biblioteca.",
@@ -701,29 +726,34 @@ private fun FormularioEntrenamientoContenido(
             Text(aviso, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = viewModel::abrirDialogoEjercicio, modifier = Modifier.weight(1f)) {
-                Text("Nuevo ejercicio")
+            OutlinedButton(onClick = viewModel::abrirDialogoEjercicio, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Nuevo", modifier = Modifier.padding(start = 6.dp))
             }
-            OutlinedButton(
+            Button(
                 onClick = viewModel::abrirBiblioteca,
                 enabled = state.biblioteca.any { it.activo },
-                modifier = Modifier.weight(1f),
-            ) { Text("Desde biblioteca") }
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            ) {
+                Icon(Icons.Default.FitnessCenter, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Biblioteca", modifier = Modifier.padding(start = 6.dp))
+            }
         }
+      }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedButton(
                 onClick = viewModel::cancelarFormulario,
                 enabled = !formulario.guardando,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) { Text("Cancelar") }
             Button(
                 onClick = { viewModel.guardar() },
                 enabled = !formulario.guardando,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) {
                 if (formulario.guardando) {
                     CircularProgressIndicator(modifier = Modifier.padding(2.dp), strokeWidth = 2.dp)
@@ -795,26 +825,93 @@ private fun FormularioEntrenamientoContenido(
                     }
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         items(disponibles, key = { it.id }) { item ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.agregarDeBiblioteca(item) }
-                                    .padding(vertical = 8.dp),
-                            ) {
-                                Text("${item.nombre} · ${item.duracionMin} min", style = MaterialTheme.typography.titleSmall)
-                                item.categoriaTecnica?.let {
-                                    Text(it.etiqueta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                                }
-                                if (item.objetivo.isNotBlank()) {
-                                    Text(item.objetivo, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                            HorizontalDivider()
+                            FilaBiblioteca(item, onAgregar = { viewModel.agregarDeBiblioteca(item) })
                         }
                     }
                 }
             },
             confirmButton = { TextButton(onClick = viewModel::cerrarBiblioteca) { Text("Cerrar") } },
+        )
+    }
+}
+
+/** Bloque blanco del formulario con número de paso y título. */
+@Composable
+private fun SeccionFormulario(titulo: String, paso: String, contenido: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(24.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(com.esan.sportpro.core.theme.PaletaSportPro.Lima),
+                ) {
+                    Text(paso, style = MaterialTheme.typography.labelMedium, color = com.esan.sportpro.core.theme.PaletaSportPro.Carbon)
+                }
+                Text(titulo, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 10.dp))
+            }
+            contenido()
+        }
+    }
+}
+
+/** Fila del selector de biblioteca: foto (o la de su categoría), nombre, categoría y minutos. */
+@Composable
+private fun FilaBiblioteca(item: com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca, onAgregar: () -> Unit) {
+    val categoria = item.categoriaTecnica
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .clickable(onClick = onAgregar)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
+        androidx.compose.foundation.layout.Box(Modifier.size(52.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))) {
+            if (item.imagenUrl.isNotBlank()) {
+                coil.compose.AsyncImage(
+                    model = item.imagenUrl,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(fotoCategoria(categoria)),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                        androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) },
+                    ),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(item.nombre, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colorCategoria(categoria)),
+                )
+                Text(
+                    categoria?.etiqueta ?: "Sin categoría",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 5.dp),
+                )
+            }
+        }
+        ChipInfo("${item.duracionMin}'")
+        Icon(
+            Icons.Default.Add,
+            contentDescription = "Agregar ${item.nombre}",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 8.dp),
         )
     }
 }

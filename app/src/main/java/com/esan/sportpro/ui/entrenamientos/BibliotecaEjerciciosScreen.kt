@@ -1,5 +1,9 @@
 package com.esan.sportpro.ui.entrenamientos
 
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -203,10 +207,24 @@ private fun ListaBiblioteca(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CategoriaTecnica.entries.forEach { categoria ->
+                // Cada categoría con su color (el mismo de la línea de tiempo de la sesión).
+                val color = colorCategoria(categoria)
                 FilterChip(
                     selected = filtro.categoria == categoria,
                     onClick = { viewModel.onFiltroCategoria(categoria) },
                     label = { Text(categoria.etiqueta) },
+                    leadingIcon = {
+                        Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+                    },
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = filtro.categoria == categoria,
+                        borderColor = color.copy(alpha = 0.6f),
+                    ),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                        selectedLabelColor = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                    ),
                 )
             }
         }
@@ -233,11 +251,15 @@ private fun ListaBiblioteca(
 
         val visibles = state.visibles
         when {
-            visibles.isNotEmpty() -> LazyColumn(
+            // Rediseño: cuadrícula de 2 columnas con foto, duración y categoría.
+            visibles.isNotEmpty() -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(visibles, key = { it.id }) { ejercicio ->
+                items(visibles.size, key = { visibles[it].id }) { i ->
+                    val ejercicio = visibles[i]
                     EjercicioBibliotecaCard(ejercicio, onClick = { viewModel.abrirDetalle(ejercicio.id) })
                 }
             }
@@ -262,21 +284,75 @@ private fun ListaBiblioteca(
 
 @Composable
 private fun EjercicioBibliotecaCard(ejercicio: EjercicioBiblioteca, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Miniatura(ejercicio.imagenUrl, Modifier.size(56.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(ejercicio.nombre, style = MaterialTheme.typography.titleSmall)
+    val categoria = ejercicio.categoriaTecnica
+    val color = colorCategoria(categoria)
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier.fillMaxWidth().alpha(if (ejercicio.activo) 1f else 0.55f),
+    ) {
+        Column {
+            Box(Modifier.fillMaxWidth().height(100.dp)) {
+                if (ejercicio.imagenUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = ejercicio.imagenUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    // Sin imagen: foto de su categoría en blanco y negro con un velo de su color.
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(fotoCategoria(categoria)),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                            androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) },
+                        ),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    Box(Modifier.fillMaxSize().background(color.copy(alpha = 0.35f)))
+                }
                 Text(
-                    listOfNotNull(
-                        ejercicio.categoriaTecnica?.etiqueta,
-                        "${ejercicio.duracionMin} min",
-                        ejercicio.minJugadores.takeIf { it > 0 }?.let { "mín. $it jugadores" },
-                    ).joinToString(" · "),
+                    "${ejercicio.duracionMin}'",
+                    style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        lineHeight = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                    color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(com.esan.sportpro.core.theme.PaletaSportPro.Carbon)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+                    Text(
+                        categoria?.etiqueta ?: "Sin categoría",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = color,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 5.dp),
+                    )
+                }
+                Text(
+                    ejercicio.nombre,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (ejercicio.minJugadores > 0) {
+                        "Mín. ${ejercicio.minJugadores} ${if (ejercicio.minJugadores == 1) "jugador" else "jugadores"}"
+                    } else {
+                        "Sin mínimo de jugadores"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -8,6 +8,15 @@ import com.esan.sportpro.ui.common.CampoFecha
 import com.esan.sportpro.ui.common.BarraSuperiorSportPro
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -148,6 +157,7 @@ fun EntrenamientosScreen(
                             onDuplicar = { viewModel.abrirDuplicar(entrenamiento) },
                             onCancelar = { viewModel.abrirCancelacion(entrenamiento) },
                             modifier = Modifier.padding(padding),
+                            biblioteca = state.biblioteca,
                         )
                     }
                 }
@@ -191,76 +201,154 @@ private fun ListaEntrenamientos(
     viewModel: EntrenamientosViewModel,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        val programadas = state.entrenamientos.count { it.estadoSesion == EstadoSesion.PROGRAMADA }
-        EncabezadoModulo(
-            foto = com.esan.sportpro.ui.common.FotoSportPro.CONOS,
-            titulo = "Entrenamientos",
-            subtitulo = "$programadas ${if (programadas == 1) "sesión programada" else "sesiones programadas"}",
-            icono = Icons.Default.FitnessCenter,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        )
-        if (state.puedeGestionar) {
-            OutlinedButton(
-                onClick = viewModel::abrirGestionBiblioteca,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
-            ) {
-                Icon(Icons.Default.FitnessCenter, contentDescription = null)
-                Text("  Biblioteca de ejercicios")
+    // Rediseño: mes y tira de la semana arriba, sesiones separadas en Próximas y Anteriores.
+    val hoy = java.time.LocalDate.now()
+    val visibles = state.entrenamientosVisibles
+    val (proximas, anteriores) = visibles.partition { (fechaDe(it.fecha) ?: hoy) >= hoy }
+    val programadas = visibles.count { it.estadoSesion == EstadoSesion.PROGRAMADA }
+    val canceladas = visibles.count { it.estadoSesion == EstadoSesion.CANCELADA }
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    MESES_LARGOS[hoy.monthValue - 1],
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    buildString {
+                        append("$programadas ${if (programadas == 1) "programada" else "programadas"}")
+                        if (canceladas > 0) append(" · $canceladas ${if (canceladas == 1) "cancelada" else "canceladas"}")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        com.esan.sportpro.ui.common.SelectorEquipo(
-            equipos = state.equiposActivos,
-            seleccionadoId = state.filtroEquipoId,
-            onSeleccionar = viewModel::onFiltroEquipo,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-
-        if (state.entrenamientosVisibles.isEmpty()) {
-            EmptyStateMessage(
-                mensaje = if (state.puedeGestionar) {
-                    "No hay entrenamientos planificados. Crea uno con el botón +."
-                } else {
-                    "Todavía no hay entrenamientos planificados."
-                },
-                icono = Icons.Default.Groups2,
-            )
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        item { TiraSemana(visibles, hoy = hoy) }
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             ) {
-                items(state.entrenamientosVisibles, key = { it.id }) { entrenamiento ->
-                    EntrenamientoCard(entrenamiento, onClick = { viewModel.abrirDetalle(entrenamiento.id) })
+                com.esan.sportpro.ui.common.SelectorEquipo(
+                    equipos = state.equiposActivos,
+                    seleccionadoId = state.filtroEquipoId,
+                    onSeleccionar = viewModel::onFiltroEquipo,
+                    modifier = Modifier.weight(1f),
+                )
+                if (state.puedeGestionar) {
+                    androidx.compose.material3.Surface(
+                        onClick = viewModel::abrirGestionBiblioteca,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                        color = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                        contentColor = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        ) {
+                            Icon(Icons.Default.FitnessCenter, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Ejercicios", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
                 }
+            }
+        }
+
+        if (visibles.isEmpty()) {
+            item {
+                EmptyStateMessage(
+                    mensaje = if (state.puedeGestionar) {
+                        "No hay entrenamientos planificados. Crea uno con el botón +."
+                    } else {
+                        "Todavía no hay entrenamientos planificados."
+                    },
+                    icono = Icons.Default.Groups2,
+                )
+            }
+        }
+        if (proximas.isNotEmpty()) {
+            item { TituloGrupo("Próximas") }
+            items(proximas.sortedBy { it.clave }, key = { it.id }) { entrenamiento ->
+                EntrenamientoCard(entrenamiento, hoy, onClick = { viewModel.abrirDetalle(entrenamiento.id) })
+            }
+        }
+        if (anteriores.isNotEmpty()) {
+            item { TituloGrupo("Anteriores") }
+            items(anteriores.sortedByDescending { it.clave }, key = { it.id }) { entrenamiento ->
+                EntrenamientoCard(entrenamiento, hoy, onClick = { viewModel.abrirDetalle(entrenamiento.id) })
             }
         }
     }
 }
 
 @Composable
-private fun EntrenamientoCard(entrenamiento: Entrenamiento, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${entrenamiento.fecha} · ${entrenamiento.hora}", style = MaterialTheme.typography.titleMedium)
-            Text(
-                entrenamiento.equipoNombre,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun TituloGrupo(texto: String) {
+    Text(
+        texto,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+    )
+}
+
+/** Tarjeta de sesión: bloque de fecha, objetivo, equipo y hora, y chips de estado y duración. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EntrenamientoCard(entrenamiento: Entrenamiento, hoy: java.time.LocalDate, onClick: () -> Unit) {
+    val cancelada = entrenamiento.estadoSesion == EstadoSesion.CANCELADA
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier.fillMaxWidth().alpha(if (cancelada) 0.6f else 1f),
+    ) {
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BloqueFecha(
+                entrenamiento.fecha,
+                fondo = if (cancelada) MaterialTheme.colorScheme.outline else com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
             )
-            Text(entrenamiento.objetivo, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                listOfNotNull(
-                    "${entrenamiento.ejercicios.size} ejercicios · ${entrenamiento.duracionSesionMin} min",
-                    entrenamiento.estadoSesion.etiqueta,
-                    entrenamiento.porcentajeAsistencia?.let { "Asistencia ${ReglasAsistencia.formatearPorcentaje(it)}" },
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
-            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    entrenamiento.objetivo.ifBlank { "Entrenamiento" },
+                    style = MaterialTheme.typography.titleSmall,
+                    textDecoration = if (cancelada) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    listOf(entrenamiento.equipoNombre, entrenamiento.hora, entrenamiento.lugar)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ChipEstadoSesion(entrenamiento, hoy)
+                    if (!cancelada) {
+                        ChipInfo("${entrenamiento.duracionSesionMin} min")
+                        if (entrenamiento.ejercicios.isNotEmpty()) {
+                            ChipInfo("${entrenamiento.ejercicios.size} ${if (entrenamiento.ejercicios.size == 1) "ejercicio" else "ejercicios"}")
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+/**
+ * Detalle de la sesión: cabecera con fecha y horario, plan con la barra de tiempos y la línea de
+ * tiempo (hora de inicio de cada ejercicio), asistencia y acciones.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetalleEntrenamiento(
     entrenamiento: Entrenamiento,
@@ -270,16 +358,66 @@ private fun DetalleEntrenamiento(
     onDuplicar: () -> Unit,
     onCancelar: () -> Unit,
     modifier: Modifier = Modifier,
+    biblioteca: List<com.esan.sportpro.domain.entrenamientos.EjercicioBiblioteca> = emptyList(),
 ) {
+    val categorias = remember(biblioteca) { biblioteca.associate { it.id to it.categoriaTecnica } }
+    fun categoriaDe(ejercicio: Ejercicio) = categorias[ejercicio.ejercicioId]
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(entrenamiento.equipoNombre, style = MaterialTheme.typography.titleLarge)
-        Text(
-            "${entrenamiento.fecha} a las ${entrenamiento.hora} · ${entrenamiento.duracionSesionMin} min",
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        // Cabecera oscura con la foto de conos.
+        com.esan.sportpro.ui.common.FondoFotoSportPro(
+            foto = com.esan.sportpro.ui.common.FotoSportPro.CONOS,
+            forma = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+            velo = androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.78f),
+                1f to com.esan.sportpro.core.theme.PaletaSportPro.Carbon.copy(alpha = 0.94f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BloqueFecha(
+                        entrenamiento.fecha,
+                        fondo = com.esan.sportpro.core.theme.PaletaSportPro.Lima,
+                        texto = com.esan.sportpro.core.theme.PaletaSportPro.Carbon,
+                        acento = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                        ancho = 62.dp,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            entrenamiento.objetivo.ifBlank { "Entrenamiento" },
+                            style = MaterialTheme.typography.titleLarge,
+                            color = androidx.compose.ui.graphics.Color.White,
+                        )
+                        Text(
+                            entrenamiento.equipoNombre,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 12.dp),
+                ) {
+                    val blanco = androidx.compose.ui.graphics.Color.White
+                    val fin = horaMas(entrenamiento.hora, entrenamiento.duracionSesionMin)
+                    ChipInfo(
+                        "🕓 ${entrenamiento.hora}" + (fin?.let { " – $it" } ?: ""),
+                        fondo = blanco.copy(alpha = 0.16f),
+                        color = blanco,
+                    )
+                    if (entrenamiento.lugar.isNotBlank()) {
+                        ChipInfo("📍 ${entrenamiento.lugar}", fondo = blanco.copy(alpha = 0.16f), color = blanco)
+                    }
+                    ChipEstadoSesion(entrenamiento)
+                }
+            }
+        }
+
         if (entrenamiento.estadoSesion == EstadoSesion.CANCELADA) {
             Text(
                 "Cancelada" + entrenamiento.canceladaPorNombre.takeIf { it.isNotBlank() }?.let { " por $it" }.orEmpty() +
@@ -288,42 +426,109 @@ private fun DetalleEntrenamiento(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        if (entrenamiento.lugar.isNotBlank()) Text("Lugar: ${entrenamiento.lugar}", style = MaterialTheme.typography.bodyMedium)
 
-        Subtitulo("Objetivo")
-        Text(entrenamiento.objetivo, style = MaterialTheme.typography.bodyMedium)
-
-        Subtitulo("Ejercicios (${entrenamiento.duracionTotalMin} min)")
-        entrenamiento.ejercicios.forEachIndexed { indice, ejercicio ->
-            EjercicioItem(numero = indice + 1, ejercicio = ejercicio)
-        }
-
-        Subtitulo("Asistencia · ${entrenamiento.estadoSesion.etiqueta}")
-        val estados = entrenamiento.asistencia.values.mapNotNull { EstadoAsistencia.desde(it) }
-        when {
-            entrenamiento.realizada -> {
-                val presentes = estados.count { it.participo }
-                Text("$presentes de ${estados.size} jugadores asistieron.", style = MaterialTheme.typography.bodyMedium)
-                entrenamiento.porcentajeAsistencia?.let {
-                    Text("Asistencia del equipo: ${ReglasAsistencia.formatearPorcentaje(it)}", style = MaterialTheme.typography.bodyMedium)
+        // Plan: barra proporcional al tiempo de cada ejercicio y línea de tiempo con su hora de inicio.
+        Subtitulo("Plan de la sesión · ${entrenamiento.duracionTotalMin} min")
+        if (entrenamiento.ejercicios.isEmpty()) {
+            Text("La sesión no tiene ejercicios cargados.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            Row(
+                Modifier.fillMaxWidth().height(14.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50)),
+            ) {
+                entrenamiento.ejercicios.forEach { ejercicio ->
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.weight(ejercicio.duracionMin.coerceAtLeast(1).toFloat()).fillMaxHeight()
+                            .background(colorCategoria(categoriaDe(ejercicio))),
+                    )
                 }
             }
-            estados.isNotEmpty() ->
-                Text("Asistencia en curso: ${estados.size} jugadores marcados.", style = MaterialTheme.typography.bodyMedium)
-            else -> Text("Todavía no se registró la asistencia.", style = MaterialTheme.typography.bodyMedium)
+            val presentes = entrenamiento.ejercicios.mapNotNull { categoriaDe(it) }.distinct()
+            if (presentes.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    presentes.forEach { categoria ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.size(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                    .background(colorCategoria(categoria)),
+                            )
+                            Text(categoria.etiqueta, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                        }
+                    }
+                }
+            }
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
+                    var acumulado = 0
+                    entrenamiento.ejercicios.forEachIndexed { i, ejercicio ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        FilaPlan(
+                            hora = horaMas(entrenamiento.hora, acumulado) ?: "${i + 1}.",
+                            ejercicio = ejercicio,
+                            color = colorCategoria(categoriaDe(ejercicio)),
+                        )
+                        acumulado += ejercicio.duracionMin
+                    }
+                }
+            }
+        }
+
+        Subtitulo("Asistencia")
+        val estados = entrenamiento.asistencia.values.mapNotNull { EstadoAsistencia.desde(it) }
+        val presentes = estados.count { it.participo }
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                AnilloAsistencia(
+                    when {
+                        entrenamiento.realizada && entrenamiento.porcentajeAsistencia != null ->
+                            (entrenamiento.porcentajeAsistencia / 100.0).toFloat()
+                        entrenamiento.realizada && estados.isNotEmpty() -> presentes.toFloat() / estados.size
+                        else -> null
+                    },
+                )
+                Column(Modifier.padding(start = 14.dp)) {
+                    Text(
+                        when {
+                            entrenamiento.realizada -> "$presentes de ${estados.size} asistieron"
+                            estados.isNotEmpty() -> "Asistencia en curso"
+                            else -> "Aún no se toma"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        when {
+                            entrenamiento.realizada -> "Sesión realizada"
+                            estados.isNotEmpty() -> "${estados.size} jugadores marcados"
+                            else -> "Se registra al empezar la sesión"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
 
         if (puedeGestionar) {
             val programada = entrenamiento.estadoSesion == EstadoSesion.PROGRAMADA
             if (entrenamiento.estadoSesion != EstadoSesion.CANCELADA) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (programada) {
-                        OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f)) { Text("Editar") }
+                        OutlinedButton(onClick = onEditar, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Editar") }
                     }
-                    Button(onClick = onAsistencia, modifier = Modifier.weight(1f)) {
+                    Button(onClick = onAsistencia, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                         Text(if (entrenamiento.realizada) "Ver asistencia" else "Tomar asistencia")
                     }
                 }
@@ -333,9 +538,13 @@ private fun DetalleEntrenamiento(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(onClick = onDuplicar, modifier = Modifier.weight(1f)) { Text("Duplicar") }
+                OutlinedButton(onClick = onDuplicar, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Duplicar") }
                 if (programada) {
-                    OutlinedButton(onClick = onCancelar, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = onCancelar,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    ) {
                         Text("Cancelar sesión", color = MaterialTheme.colorScheme.error)
                     }
                 }
@@ -344,12 +553,43 @@ private fun DetalleEntrenamiento(
     }
 }
 
+/** Fila de la línea de tiempo: hora de inicio, punto del color de la categoría, nombre y minutos. */
+@Composable
+private fun FilaPlan(hora: String, ejercicio: Ejercicio, color: androidx.compose.ui.graphics.Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
+        Text(
+            hora,
+            style = com.esan.sportpro.core.theme.EstilosSportPro.NumeroMediano.copy(fontSize = 15.sp, lineHeight = 18.sp),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(46.dp),
+        )
+        androidx.compose.foundation.layout.Box(
+            Modifier.padding(top = 4.dp).size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color),
+        )
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(ejercicio.nombre, style = MaterialTheme.typography.titleSmall)
+            if (ejercicio.descripcion.isNotBlank()) {
+                Text(
+                    ejercicio.descripcion,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+        }
+        ChipInfo("${ejercicio.duracionMin}'")
+    }
+}
+
 @Composable
 private fun Subtitulo(texto: String) {
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        Text(texto, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
-    }
+    Text(
+        texto,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
 }
 
 @Composable

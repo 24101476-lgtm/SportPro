@@ -77,6 +77,7 @@ fun InicioScreen(
     perfil: PerfilActual,
     modulos: List<HomeModule>,
     onAbrirModulo: (HomeModule) -> Unit,
+    onAbrirPartidosFinalizados: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: InicioViewModel = hiltViewModel(),
 ) {
@@ -141,29 +142,38 @@ fun InicioScreen(
         }
 
         // US-003: convocatorias pendientes de respuesta (jugador: las suyas; personal: su plantel).
-        val veConvocatorias = HomeModule.PARTIDO in modulos &&
-            perfil.rol != com.esan.sportpro.navigation.UserRole.PADRE_DE_FAMILIA
-        if (veConvocatorias) {
-            item { TituloSeccion("Convocatorias pendientes", modifier = margen) }
-            if (state.cargando) {
-                item { EsqueletoTarjeta(margen) }
-            } else if (state.convocatoriasPendientes.isEmpty()) {
-                item {
+        if (HomeModule.PARTIDO in modulos && perfil.esStaff) {
+
+            item {
+                TituloSeccion(
+                    "Actividad reciente",
+                    modifier = margen
+                )
+            }
+
+            item {
+                val ultimoPartido = state.ultimoPartidoFinalizado
+
+                if (state.cargando) {
+
+                    EsqueletoTarjeta(margen)
+
+                } else if (ultimoPartido == null) {
+
                     TextoVacio(
-                        if (perfil.esStaff) "Todas las convocatorias tienen respuesta." else "No tienes convocatorias por responder.",
-                        modifier = margen,
+                        "Aún no hay partidos finalizados.",
+                        modifier = margen
                     )
-                }
-            } else {
-                state.convocatoriasPendientes.forEach { pendiente ->
-                    item(key = "conv-${pendiente.partido.id}") {
-                        TarjetaConvocatoria(
-                            pendiente = pendiente,
-                            esStaff = perfil.esStaff,
-                            onClick = { onAbrirModulo(HomeModule.PARTIDO) },
-                            modifier = margen,
-                        )
-                    }
+
+                } else {
+
+                    TarjetaActividadReciente(
+                        partido = ultimoPartido,
+                        onClick = {
+                            onAbrirPartidosFinalizados()
+                        },
+                        modifier = margen
+                    )
                 }
             }
         }
@@ -604,6 +614,92 @@ private fun TarjetaConvocatoria(
 
 /** US-003: anuncio reciente del club con su prioridad y fecha. */
 @Composable
+private fun TarjetaActividadReciente(
+    partido: Partido,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TarjetaSportPro(
+        onClick = onClick,
+        modifier = modifier
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    "Último partido",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+
+                ChipEstado(
+                    "Finalizado",
+                    TonoEstado.EXITO
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+
+                EscudoEquipo(
+                    nombre = partido.nombreEquipo,
+                    tamano = 40.dp
+                )
+
+                Text(
+                    partido.nombreEquipo,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    "${partido.golesEquipo} - ${partido.golesRival}",
+                    style = EstilosSportPro.NumeroMediano,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    partido.nombreRival,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End
+                )
+
+                EscudoEquipo(
+                    nombre = partido.nombreRival,
+                    tamano = 40.dp
+                )
+            }
+
+            partido.fechaMs?.let { fecha ->
+                Text(
+                    FechasSportPro.fecha(fecha),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
 private fun TarjetaAnuncio(
     anuncio: com.esan.sportpro.domain.anuncios.Anuncio,
     onClick: (() -> Unit)?,
@@ -637,7 +733,12 @@ private fun TarjetaAnuncio(
             )
         }
     }
-    TarjetaSportPro(onClick = onClick, modifier = modifier) { contenido() }
+    TarjetaSportPro(
+        onClick = { onClick?.invoke() },
+        modifier = modifier
+    ) {
+        contenido()
+    }
 }
 
 /** US-003: estado de carga (esqueleto) mientras llegan los datos, en lugar de un "vacío" falso. */

@@ -315,36 +315,69 @@ fun RegistroUsuarioScreen(
 
     if (datePickerAbierto) {
         // Solo fechas entre hace 100 años y hoy: no se puede elegir un año imposible.
-        val hoyUtc = java.time.LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        val datePickerState = androidx.compose.material3.rememberDatePickerState(
-            initialSelectedDateMillis = state.fechaNacimiento
-                ?.atStartOfDay(ZoneOffset.UTC)
-                ?.toInstant()
-                ?.toEpochMilli(),
-            yearRange = ValidacionRegistro.anioMinimoNacimiento()..java.time.LocalDate.now().year,
-            selectableDates = object : androidx.compose.material3.SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= hoyUtc
-            },
-        )
-        DatePickerDialog(
-            onDismissRequest = { datePickerAbierto = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // DatePicker trabaja en UTC: se convierte en esa zona antes de leer el día.
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val fecha = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                            viewModel.onFechaNacimientoChanged(fecha)
-                        }
-                        datePickerAbierto = false
+        // Mismo calendario que el resto de la app: en español, con la fecha en grande y sin el lápiz
+        // que lo cambiaba al modo de escribir la fecha. Abre en el año de hace 18 años.
+        com.esan.sportpro.ui.common.EnEspanol {
+            val hoyUtc = java.time.LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            val inicioUtc = (state.fechaNacimiento ?: java.time.LocalDate.now().minusYears(18))
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+            val datePickerState = androidx.compose.material3.rememberDatePickerState(
+                initialSelectedDateMillis = state.fechaNacimiento
+                    ?.atStartOfDay(ZoneOffset.UTC)
+                    ?.toInstant()
+                    ?.toEpochMilli(),
+                initialDisplayedMonthMillis = inicioUtc,
+                yearRange = ValidacionRegistro.anioMinimoNacimiento()..java.time.LocalDate.now().year,
+                selectableDates = object : androidx.compose.material3.SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= hoyUtc
+                },
+            )
+            val colores = com.esan.sportpro.ui.common.coloresCalendario()
+            val elegida = datePickerState.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+            DatePickerDialog(
+                onDismissRequest = { datePickerAbierto = false },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+                colors = colores,
+                confirmButton = {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            // DatePicker trabaja en UTC: se convierte en esa zona antes de leer el día.
+                            elegida?.let { viewModel.onFechaNacimientoChanged(it) }
+                            datePickerAbierto = false
+                        },
+                        enabled = elegida != null,
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = com.esan.sportpro.core.theme.PaletaSportPro.Musgo,
+                            contentColor = androidx.compose.ui.graphics.Color.White,
+                        ),
+                    ) { Text("Aceptar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { datePickerAbierto = false }) { Text("Cancelar") }
+                },
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    colors = colores,
+                    showModeToggle = false,
+                    title = {
+                        Text(
+                            "Fecha de nacimiento",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 20.dp),
+                        )
                     },
-                ) { Text("Aceptar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { datePickerAbierto = false }) { Text("Cancelar") }
-            },
-        ) {
-            DatePicker(state = datePickerState)
+                    headline = {
+                        androidx.compose.foundation.layout.Box(Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp)) {
+                            com.esan.sportpro.ui.common.FechaEnGrande(elegida)
+                        }
+                    },
+                )
+            }
         }
     }
 }

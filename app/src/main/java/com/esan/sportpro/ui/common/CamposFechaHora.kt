@@ -178,7 +178,7 @@ fun CampoFecha(
 
 /** "28" en grande y, al lado, "Sábado" / "noviembre 2026". */
 @Composable
-private fun FechaEnGrande(fecha: LocalDate?) {
+fun FechaEnGrande(fecha: LocalDate?) {
     if (fecha == null) {
         Text("Elige un día", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         return
@@ -350,7 +350,7 @@ private fun BotonAceptar(habilitado: Boolean, onClick: () -> Unit) {
 /** Día elegido en lima con número oscuro; hoy con borde musgo; los días fuera de rango bien apagados. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun coloresCalendario(): DatePickerColors {
+fun coloresCalendario(): DatePickerColors {
     val tema = SportProTema.colores
     val superficie = MaterialTheme.colorScheme.surface
     val texto = MaterialTheme.colorScheme.onSurface
@@ -397,7 +397,7 @@ private fun coloresReloj(): TimePickerColors {
  * calendario se ve en español aunque el teléfono o el emulador esté en inglés.
  */
 @Composable
-private fun EnEspanol(contenido: @Composable () -> Unit) {
+fun EnEspanol(contenido: @Composable () -> Unit) {
     val actual = LocalConfiguration.current
     val enEspanol = remember(actual) { Configuration(actual).apply { setLocale(FechasSportPro.LOCALE) } }
     CompositionLocalProvider(LocalConfiguration provides enEspanol, content = contenido)

@@ -359,7 +359,7 @@ private fun EquipoCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f).padding(start = 12.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
             ) {
-                EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl)
+                EscudoEquipo(nombre = equipo.nombre, tamano = 52.dp, url = equipo.escudoUrl, color = equipo.colorUniforme)
                 Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -520,7 +520,11 @@ private fun FormularioEquipoDialog(
                             )
                         }
                     } else {
-                        EscudoEquipo(nombre = formulario.nombre.ifBlank { "Equipo" }, tamano = 64.dp)
+                        EscudoEquipo(
+                            nombre = formulario.nombre.ifBlank { "Equipo" },
+                            tamano = 64.dp,
+                            color = formulario.colorUniforme,
+                        )
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Escudo", style = MaterialTheme.typography.labelLarge)
@@ -541,7 +545,7 @@ private fun FormularioEquipoDialog(
                         }
                         if (visible == null) {
                             Text(
-                                "Si no eliges uno, se genera con las iniciales y colores del equipo.",
+                                "Si no eliges uno, se genera con las iniciales y el color de uniforme.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

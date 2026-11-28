@@ -4,6 +4,7 @@ import com.esan.sportpro.core.theme.SportProTema
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -108,6 +109,7 @@ fun HomeScreen(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSolicitado: String? = null) {
     PedirPermisoNotificaciones()
@@ -200,7 +202,10 @@ private fun HomeConPerfil(perfil: PerfilActual, onLogout: () -> Unit, moduloSoli
             }
         },
     ) { padding ->
-        val contenido = Modifier.padding(padding)
+        // consumeWindowInsets: el espacio de la barra de estado y de navegación ya lo pone este
+        // Scaffold. Sin esto, cada pantalla interna (Datos de la academia, Historial, Comunidad…)
+        // lo volvía a sumar y quedaba un hueco grande arriba y abajo.
+        val contenido = Modifier.padding(padding).consumeWindowInsets(padding)
         if (sinPermiso) {
             com.esan.sportpro.ui.common.SinPermisoScreen(
                 onVolverAlInicio = {
